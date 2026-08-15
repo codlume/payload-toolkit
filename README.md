@@ -49,3 +49,8 @@ intentionally project-free workspace succeeds without placeholder tests.
 
 Future TypeScript projects should extend the strict root
 `tsconfig.base.json` baseline.
+
+Installing dependencies configures a pre-commit hook that runs the shared
+formatter on supported staged files and stages its updates automatically. The
+hook does not run the slower linting, type-checking, or test commands. Run
+`pnpm fmt` directly whenever you want to format the whole workspace.
