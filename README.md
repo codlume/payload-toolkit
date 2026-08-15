@@ -30,3 +30,13 @@ pnpm install --frozen-lockfile
   demonstrate plugins or exercise integration and end-to-end behavior.
 
 Only direct child projects of these two containers join the pnpm workspace.
+
+## Static validation
+
+- `pnpm fmt` formats supported files and sorts package manifests.
+- `pnpm fmt:check` checks formatting without changing files.
+- `pnpm lint` runs the shared type-aware Vite+ lint policy.
+- `pnpm typecheck` runs Vite+'s integrated TypeScript checker.
+
+Future TypeScript projects should extend the strict root
+`tsconfig.base.json` baseline.
