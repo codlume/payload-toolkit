@@ -32,5 +32,20 @@ jobs:
             args:
               - --frozen-lockfile
 
-      - name: Validate readiness
-        run: pnpm ready
+      - name: Check formatting
+        run: pnpm fmt:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Run integration tests
+        run: pnpm test:integration
+
+      - name: Run end-to-end tests
+        run: pnpm test:e2e
