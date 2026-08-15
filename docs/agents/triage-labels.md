@@ -18,6 +18,6 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 
 Beyond the canonical triage roles, this repo uses:
 
-| Label  | Meaning                                                                                                      |
-| ------ | ------------------------------------------------------------------------------------------------------------ |
+| Label  | Meaning                                                                                                                                                                                              |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `spec` | Marks an issue that is a full spec published by `/to-spec`. Apply it alongside the `ready-for-agent` label that `/to-spec` sets, so spec issues are distinguishable from other ready-for-agent work. |
