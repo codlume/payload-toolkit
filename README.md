@@ -31,12 +31,21 @@ pnpm install --frozen-lockfile
 
 Only direct child projects of these two containers join the pnpm workspace.
 
-## Static validation
+## Validation
 
 - `pnpm fmt` formats supported files and sorts package manifests.
 - `pnpm fmt:check` checks formatting without changing files.
 - `pnpm lint` runs the shared type-aware Vite+ lint policy.
 - `pnpm typecheck` runs Vite+'s integrated TypeScript checker.
+- `pnpm test:unit` runs unit-test scripts across the workspace.
+- `pnpm test:integration` runs integration-test scripts across the workspace.
+- `pnpm test:e2e` runs end-to-end-test scripts across the workspace.
+- `pnpm ready` runs every non-mutating validation command above and is the
+  authoritative local readiness check.
+
+The test commands discover participating projects by their corresponding
+`package.json` script. Projects without that script are skipped, so the
+intentionally project-free workspace succeeds without placeholder tests.
 
 Future TypeScript projects should extend the strict root
 `tsconfig.base.json` baseline.
