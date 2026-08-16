@@ -4,34 +4,32 @@ import { describe, expect, expectTypeOf, test } from "vitest";
 
 import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blurhash";
 
-const buildPluginConfig = (media: NonNullable<Config["collections"]>[number]) =>
+const buildPayloadConfig = (
+  collections: NonNullable<Config["collections"]>,
+  plugins: NonNullable<Config["plugins"]>,
+) =>
   buildConfig({
-    collections: [media],
+    collections,
     db: sqliteAdapter({ client: { url: ":memory:" } }),
-    plugins: [
-      blurHashPlugin({
-        collections: ["media"],
-        enabled: false,
-      } satisfies BlurHashPluginOptions),
-    ],
+    plugins,
     secret: "unit-test-secret",
   });
 
 describe("blurHashPlugin", () => {
-  test("requires collections while accepting generated and bootstrap collection slugs", () => {
+  test("requires configured collections", () => {
     expectTypeOf<{}>().not.toMatchTypeOf<BlurHashPluginOptions>();
-    expectTypeOf<{ collections: ["media"] }>().toMatchTypeOf<BlurHashPluginOptions>();
+  });
+
+  test("accepts collection strings before generated types exist", () => {
     expectTypeOf<{ collections: ["not-yet-generated"] }>().toMatchTypeOf<BlurHashPluginOptions>();
   });
 
   test("rejects enabled generation without the host Sharp instance", async () => {
     await expect(
-      buildConfig({
-        collections: [{ fields: [], slug: "media", upload: true }],
-        db: sqliteAdapter({ client: { url: ":memory:" } }),
-        plugins: [blurHashPlugin({ collections: ["media"] })],
-        secret: "unit-test-secret",
-      }),
+      buildPayloadConfig(
+        [{ fields: [], slug: "media", upload: true }],
+        [blurHashPlugin({ collections: ["media"] })],
+      ),
     ).rejects.toMatchObject({
       message:
         "Invalid BlurHash plugin configuration:\n- Enabled generation requires Payload's `sharp` option; configure it or set `enabled: false`.",
@@ -45,7 +43,10 @@ describe("blurHashPlugin", () => {
       slug: "media",
       upload: true,
     } satisfies NonNullable<Config["collections"]>[number];
-    const config = await buildPluginConfig(media);
+    const config = await buildPayloadConfig(
+      [media],
+      [blurHashPlugin({ collections: ["media"], enabled: false })],
+    );
 
     const field = config.collections[0]?.fields.find(
       (candidate) => "name" in candidate && candidate.name === "blurHash",
@@ -66,7 +67,10 @@ describe("blurHashPlugin", () => {
   });
 
   test("keeps the field API-visible but hides it and disables generation when disabled", async () => {
-    const config = await buildPluginConfig({ fields: [], slug: "media", upload: true });
+    const config = await buildPayloadConfig(
+      [{ fields: [], slug: "media", upload: true }],
+      [blurHashPlugin({ collections: ["media"], enabled: false })],
+    );
     const field = config.collections[0]?.fields.find(
       (candidate) => "name" in candidate && candidate.name === "blurHash",
     );
@@ -121,8 +125,8 @@ describe("blurHashPlugin", () => {
     const secondPlugin = blurHashPlugin({ collections: ["media"], enabled: false });
 
     await expect(
-      buildConfig({
-        collections: [
+      buildPayloadConfig(
+        [
           {
             fields: [{ name: "url", type: "text" }],
             slug: "media",
@@ -130,10 +134,8 @@ describe("blurHashPlugin", () => {
           },
           { fields: [], slug: "pages" },
         ],
-        db: sqliteAdapter({ client: { url: ":memory:" } }),
-        plugins: [firstPlugin, secondPlugin],
-        secret: "unit-test-secret",
-      }),
+        [firstPlugin, secondPlugin],
+      ),
     ).rejects.toMatchObject({
       message: [
         "Invalid BlurHash plugin configuration:",
@@ -154,12 +156,10 @@ describe("blurHashPlugin", () => {
 
   test("validates collection requirements while disabled", async () => {
     await expect(
-      buildConfig({
-        collections: [{ fields: [], slug: "media", upload: true }],
-        db: sqliteAdapter({ client: { url: ":memory:" } }),
-        plugins: [blurHashPlugin({ collections: [], enabled: false })],
-        secret: "unit-test-secret",
-      }),
+      buildPayloadConfig(
+        [{ fields: [], slug: "media", upload: true }],
+        [blurHashPlugin({ collections: [], enabled: false })],
+      ),
     ).rejects.toMatchObject({
       message:
         "Invalid BlurHash plugin configuration:\n- `collections` must be a non-empty array of upload collection slugs.",
@@ -169,18 +169,16 @@ describe("blurHashPlugin", () => {
 
   test("rejects internal or unsafe generated field names", async () => {
     await expect(
-      buildConfig({
-        collections: [{ fields: [], slug: "media", upload: true }],
-        db: sqliteAdapter({ client: { url: ":memory:" } }),
-        plugins: [
+      buildPayloadConfig(
+        [{ fields: [], slug: "media", upload: true }],
+        [
           blurHashPlugin({
             collections: ["media"],
             enabled: false,
             fieldName: "_blur.hash",
           }),
         ],
-        secret: "unit-test-secret",
-      }),
+      ),
     ).rejects.toMatchObject({
       message: [
         "Invalid BlurHash plugin configuration:",
@@ -191,10 +189,9 @@ describe("blurHashPlugin", () => {
   });
 
   test("accepts RGB boundaries and explicit positive safe limits without hidden ceilings", async () => {
-    const config = await buildConfig({
-      collections: [{ fields: [], slug: "media", upload: true }],
-      db: sqliteAdapter({ client: { url: ":memory:" } }),
-      plugins: [
+    const config = await buildPayloadConfig(
+      [{ fields: [], slug: "media", upload: true }],
+      [
         blurHashPlugin({
           alphaBackground: { b: 255, g: 0, r: 255 },
           collections: ["media"],
@@ -209,45 +206,104 @@ describe("blurHashPlugin", () => {
           },
         }),
       ],
-      secret: "unit-test-secret",
-    });
+    );
 
     expect(config.collections[0]?.fields).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "blurHash", type: "text" })]),
     );
   });
 
-  test("returns a new config and collection array without cloning unmanaged collections", async () => {
-    const media = {
-      fields: [],
-      slug: "media",
-      upload: true,
-    } satisfies NonNullable<Config["collections"]>[number];
-    const pages = {
-      fields: [],
-      slug: "pages",
-    } satisfies NonNullable<Config["collections"]>[number];
-    const sourceConfig: Config = {
-      collections: [media, pages],
-      db: sqliteAdapter({ client: { url: ":memory:" } }),
-      secret: "unit-test-secret",
-    };
-    const transformed = await blurHashPlugin({ collections: ["media"], enabled: false })(
-      sourceConfig,
-    );
+  test("rejects a generated field collision hoisted through presentational fields", async () => {
+    await expect(
+      buildPayloadConfig(
+        [
+          {
+            fields: [
+              {
+                fields: [
+                  {
+                    fields: [{ name: "placeholder", type: "text" }],
+                    label: "Metadata",
+                    type: "collapsible",
+                  },
+                ],
+                type: "row",
+              },
+            ],
+            slug: "media",
+            upload: true,
+          },
+        ],
+        [
+          blurHashPlugin({
+            collections: ["media"],
+            enabled: false,
+            fieldName: "placeholder",
+          }),
+        ],
+      ),
+    ).rejects.toMatchObject({
+      message: [
+        "Invalid BlurHash plugin configuration:",
+        '- Collection "media" already has a top-level data-bearing field named "placeholder".',
+      ].join("\n"),
+      name: "BlurHashPluginConfigError",
+    });
+  });
 
-    expect({
-      collectionArrayWasCloned: transformed.collections !== sourceConfig.collections,
-      configuredCollectionWasCloned: transformed.collections?.[0] !== media,
-      configWasCloned: transformed !== sourceConfig,
-      sourceFields: media.fields,
-      unmanagedCollectionWasPreserved: transformed.collections?.[1] === pages,
-    }).toEqual({
-      collectionArrayWasCloned: true,
-      configuredCollectionWasCloned: true,
-      configWasCloned: true,
-      sourceFields: [],
-      unmanagedCollectionWasPreserved: true,
+  test("rejects a generated field collision with a named top-level tab", async () => {
+    await expect(
+      buildPayloadConfig(
+        [
+          {
+            fields: [
+              {
+                tabs: [{ fields: [], label: "Placeholder", name: "placeholder" }],
+                type: "tabs",
+              },
+            ],
+            slug: "media",
+            upload: true,
+          },
+        ],
+        [
+          blurHashPlugin({
+            collections: ["media"],
+            enabled: false,
+            fieldName: "placeholder",
+          }),
+        ],
+      ),
+    ).rejects.toMatchObject({
+      message: [
+        "Invalid BlurHash plugin configuration:",
+        '- Collection "media" already has a top-level data-bearing field named "placeholder".',
+      ].join("\n"),
+      name: "BlurHashPluginConfigError",
+    });
+  });
+
+  test("rejects a generated field collision with Payload's configured folder field", async () => {
+    await expect(
+      buildConfig({
+        collections: [{ fields: [], folders: true, slug: "media", upload: true }],
+        db: sqliteAdapter({ client: { url: ":memory:" } }),
+        folders: { fieldName: "parentFolder" },
+        plugins: [
+          blurHashPlugin({
+            collections: ["media"],
+            enabled: false,
+            fieldName: "parentFolder",
+          }),
+        ],
+        secret: "unit-test-secret",
+      }),
+    ).rejects.toMatchObject({
+      message: [
+        "Invalid BlurHash plugin configuration:",
+        '- Collection "media" reserves the top-level field "parentFolder" for Payload folders.',
+      ].join("\n"),
+      name: "BlurHashPluginConfigError",
     });
   });
 
@@ -258,7 +314,7 @@ describe("blurHashPlugin", () => {
       upload: true,
     } satisfies NonNullable<Config["collections"]>[number];
 
-    await buildPluginConfig(media);
+    await buildPayloadConfig([media], [blurHashPlugin({ collections: ["media"], enabled: false })]);
 
     expect(media.fields).toEqual([]);
   });

@@ -1,14 +1,19 @@
 import { availableParallelism } from "node:os";
 
-import type { CollectionConfig, Config, Plugin, TextField, UploadCollectionSlug } from "payload";
+import type {
+  CollectionConfig,
+  Config,
+  Field,
+  Plugin,
+  TextField,
+  UploadCollectionSlug,
+} from "payload";
 
 import { generateBlurHash } from "./generate-blur-hash.ts";
 
-type ConfiguredCollectionSlug = UploadCollectionSlug | (string & Record<never, never>);
-
 export type BlurHashPluginOptions = {
   alphaBackground?: { b: number; g: number; r: number };
-  collections: ConfiguredCollectionSlug[];
+  collections: UploadCollectionSlug[];
   debug?: boolean;
   enabled?: boolean;
   fieldName?: string;
@@ -222,6 +227,25 @@ const resolveLimits = (value: unknown, problems: string[]) => {
   return limits;
 };
 
+const hasTopLevelDataField = (fields: Field[], fieldName: string): boolean =>
+  fields.some((field) => {
+    if ("name" in field && typeof field.name === "string") {
+      return field.name === fieldName;
+    }
+
+    if (field.type === "tabs") {
+      return field.tabs.some((tab) => {
+        if ("name" in tab && typeof tab.name === "string") {
+          return tab.name === fieldName;
+        }
+
+        return hasTopLevelDataField(tab.fields, fieldName);
+      });
+    }
+
+    return "fields" in field && hasTopLevelDataField(field.fields, fieldName);
+  });
+
 const findConfigurationProblems = (
   config: Config,
   options: BlurHashPluginOptions,
@@ -245,6 +269,8 @@ const findConfigurationProblems = (
   const availableCollections = new Map(
     config.collections?.map((collection) => [collection.slug, collection]),
   );
+  const folderFieldName =
+    config.folders === false ? undefined : (config.folders?.fieldName ?? "folder");
 
   for (const slug of collections) {
     const collection = availableCollections.get(slug);
@@ -259,7 +285,13 @@ const findConfigurationProblems = (
       continue;
     }
 
-    if (collection.fields.some((field) => "name" in field && field.name === fieldName)) {
+    if (collection.folders && folderFieldName === fieldName) {
+      problems.push(
+        `Collection "${slug}" reserves the top-level field "${fieldName}" for Payload folders.`,
+      );
+    }
+
+    if (hasTopLevelDataField(collection.fields, fieldName)) {
       problems.push(
         `Collection "${slug}" already has a top-level data-bearing field named "${fieldName}".`,
       );

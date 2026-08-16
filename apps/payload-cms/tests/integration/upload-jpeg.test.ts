@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import type { BlurHashPluginOptions } from "@codlume/payload-blurhash";
 import { GRAPHQL_POST } from "@payloadcms/next/routes";
 import { isBlurhashValid } from "blurhash";
 import { getPayload, handleEndpoints, type Payload } from "payload";
@@ -61,6 +62,14 @@ describe("JPEG uploads", () => {
 
   test("the generated collection type exposes a nullable BlurHash string", () => {
     expectTypeOf<Exclude<Media["blurHash"], undefined>>().toEqualTypeOf<string | null>();
+  });
+
+  test("generated upload collection slugs configure the plugin", () => {
+    expectTypeOf<{ collections: ["media"] }>().toMatchTypeOf<BlurHashPluginOptions>();
+  });
+
+  test("generated non-upload collection slugs do not configure the plugin", () => {
+    expectTypeOf<{ collections: ["users"] }>().not.toMatchTypeOf<BlurHashPluginOptions>();
   });
 
   test("an in-memory JPEG receives a readable BlurHash through the Local API", async () => {
