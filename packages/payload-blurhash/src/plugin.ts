@@ -6,11 +6,12 @@ import type {
   Field,
   FieldHook,
   Plugin,
+  SharpDependency,
   TextField,
   UploadCollectionSlug,
 } from "payload";
 
-import { generateBlurHash } from "./generate-blur-hash.ts";
+import { createBlurHashGenerator } from "./generate-blur-hash.ts";
 
 export type BlurHashPluginOptions = {
   alphaBackground?: { b: number; g: number; r: number };
@@ -323,7 +324,11 @@ const denyCallerWrite = () => false;
 const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
 
 const createBlurHashLifecycleHook =
-  (options: ResolvedOptions): FieldHook =>
+  (
+    options: ResolvedOptions,
+    generator: ReturnType<typeof createBlurHashGenerator> | undefined,
+    configuredSharp: SharpDependency | undefined,
+  ): FieldHook =>
   async (args) => {
     if (isFileRemoval(args.data)) {
       return null;
@@ -333,18 +338,25 @@ const createBlurHashLifecycleHook =
       return args.previousValue ?? null;
     }
 
-    if (!options.enabled) {
+    const sharp = args.req.payload.config.sharp ?? configuredSharp;
+
+    if (!options.enabled || !generator || !sharp || !args.req.file.data) {
       return null;
     }
 
     try {
-      return await generateBlurHash(args, { alphaBackground: options.alphaBackground });
+      const outcome = await generator.generate({
+        input: args.req.file.data,
+        mimeType: args.data?.mimeType,
+        sharp,
+      });
+      return outcome.status === "generated" ? outcome.value : null;
     } catch {
       return null;
     }
   };
 
-const createBlurHashField = (options: ResolvedOptions) =>
+const createBlurHashField = (options: ResolvedOptions, lifecycleHook: FieldHook) =>
   ({
     access: {
       create: denyCallerWrite,
@@ -354,7 +366,7 @@ const createBlurHashField = (options: ResolvedOptions) =>
       ...(options.enabled ? {} : { hidden: true }),
       readOnly: true,
     },
-    hooks: { beforeChange: [createBlurHashLifecycleHook(options)] },
+    hooks: { beforeChange: [lifecycleHook] },
     localized: false,
     name: options.fieldName,
     required: false,
@@ -365,9 +377,10 @@ const createBlurHashField = (options: ResolvedOptions) =>
 const addBlurHashField = (
   collection: CollectionConfig,
   options: ResolvedOptions,
+  lifecycleHook: FieldHook,
 ): CollectionConfig => ({
   ...collection,
-  fields: [...collection.fields, createBlurHashField(options)],
+  fields: [...collection.fields, createBlurHashField(options, lifecycleHook)],
 });
 
 export const blurHashPlugin = (options: BlurHashPluginOptions): Plugin => {
@@ -379,12 +392,20 @@ export const blurHashPlugin = (options: BlurHashPluginOptions): Plugin => {
     }
 
     const configuredCollections = new Set(resolvedOptions.collections);
+    const generator =
+      resolvedOptions.enabled && config.sharp
+        ? createBlurHashGenerator({
+            alphaBackground: resolvedOptions.alphaBackground,
+            limits: resolvedOptions.limits,
+          })
+        : undefined;
+    const lifecycleHook = createBlurHashLifecycleHook(resolvedOptions, generator, config.sharp);
 
     return {
       ...config,
       collections: (config.collections ?? []).map((collection) =>
         configuredCollections.has(collection.slug)
-          ? addBlurHashField(collection, resolvedOptions)
+          ? addBlurHashField(collection, resolvedOptions, lifecycleHook)
           : collection,
       ),
     };

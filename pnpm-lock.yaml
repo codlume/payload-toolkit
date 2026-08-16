@@ -64,6 +64,9 @@ importers:
       payload:
         specifier: 3.88.0
         version: 3.88.0(graphql@16.14.2)
+      sharp:
+        specifier: 0.35.3
+        version: 0.35.3(@types/node@26.2.0)
       vitest:
         specifier: 4.1.9
         version: 4.1.9(@types/node@26.2.0)(@vitest/browser-preview@4.1.9)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(sass@1.77.4)(tsx@4.22.4))

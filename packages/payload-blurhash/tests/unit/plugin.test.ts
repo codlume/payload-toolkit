@@ -1,8 +1,51 @@
+import { readFile } from "node:fs/promises";
+import { availableParallelism } from "node:os";
+
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
-import { buildConfig, type Config } from "payload";
-import { describe, expect, expectTypeOf, test } from "vitest";
+import { buildConfig, type Config, type FieldHook, type SharpDependency } from "payload";
+import hostSharp from "sharp";
+import { describe, expect, expectTypeOf, test, vi } from "vitest";
 
 import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blurhash";
+import { createConcurrencySharp, createHangingSharp } from "./sharp-test-helpers.ts";
+
+const fixtureDirectory = new URL(
+  "../../../../apps/payload-cms/tests/fixtures/images/",
+  import.meta.url,
+);
+
+const createMetadataProbeSharp = (
+  width: number,
+  height: number,
+  recordNormalization: () => void,
+): SharpDependency =>
+  ((input, options) => {
+    const pipeline = hostSharp(input, options);
+
+    if (options?.animated) {
+      Object.defineProperty(pipeline, "metadata", {
+        value: async () => ({ format: "jpeg", height, pages: 1, width }),
+      });
+    } else {
+      recordNormalization();
+    }
+
+    return pipeline;
+  }) satisfies SharpDependency;
+
+const getBlurHashHook = (config: Config, collectionSlug: string): FieldHook => {
+  const collection = config.collections?.find(({ slug }) => slug === collectionSlug);
+  const field = collection?.fields.find(
+    (candidate) => "name" in candidate && candidate.name === "blurHash",
+  );
+  const hook = field && "hooks" in field ? field.hooks?.beforeChange?.[0] : undefined;
+
+  if (!hook) {
+    throw new TypeError(`Expected ${collectionSlug} to have a BlurHash lifecycle hook`);
+  }
+
+  return hook;
+};
 
 const buildPayloadConfig = (
   collections: NonNullable<Config["collections"]>,
@@ -139,6 +182,147 @@ describe("blurHashPlugin", () => {
       { fields: ["placeholder"], slug: "assets" },
       { fields: [], slug: "pages" },
     ]);
+  });
+
+  test("shares one generation queue across configured collections", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    let maximumActive = 0;
+    const sharp = createConcurrencySharp((active) => {
+      maximumActive = Math.max(maximumActive, active);
+    });
+    const sourceConfig = {
+      collections: [
+        { fields: [], slug: "media", upload: true },
+        { fields: [], slug: "assets", upload: true },
+      ],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      secret: "unit-test-secret",
+      sharp,
+    } satisfies Config;
+    const transformed = await blurHashPlugin({
+      collections: ["media", "assets"],
+      limits: { concurrency: 1 },
+    })(sourceConfig);
+    const hooks = [getBlurHashHook(transformed, "media"), getBlurHashHook(transformed, "assets")];
+    const args = {
+      data: { mimeType: "image/jpeg" },
+      req: { file: { data: input }, payload: { config: { sharp } } },
+    };
+
+    await Promise.all(hooks.map((hook) => Reflect.apply(hook, undefined, [args])));
+
+    expect(maximumActive).toBe(1);
+  });
+
+  test("defaults queue concurrency from the available processor count", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    const expectedConcurrency = availableParallelism() === 1 ? 1 : 2;
+    let maximumActive = 0;
+    const sharp = createConcurrencySharp((active) => {
+      maximumActive = Math.max(maximumActive, active);
+    });
+    const sourceConfig = {
+      collections: [{ fields: [], slug: "media", upload: true }],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      secret: "unit-test-secret",
+      sharp,
+    } satisfies Config;
+    const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
+    const hook = getBlurHashHook(transformed, "media");
+    const args = {
+      data: { mimeType: "image/jpeg" },
+      req: { file: { data: input }, payload: { config: { sharp } } },
+    };
+
+    await Promise.all(
+      Array.from({ length: expectedConcurrency + 1 }, () => Reflect.apply(hook, undefined, [args])),
+    );
+
+    expect(maximumActive).toBe(expectedConcurrency);
+  });
+
+  test("enforces the default compressed-input limit before decode", async () => {
+    let sharpCalls = 0;
+    const controlledSharp = ((input, options) => {
+      sharpCalls += 1;
+      return hostSharp(input, options);
+    }) satisfies SharpDependency;
+    const sourceConfig = {
+      collections: [{ fields: [], slug: "media", upload: true }],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      secret: "unit-test-secret",
+      sharp: controlledSharp,
+    } satisfies Config;
+    const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
+    const outcome = await Reflect.apply(getBlurHashHook(transformed, "media"), undefined, [
+      {
+        data: { mimeType: "image/jpeg" },
+        req: {
+          file: { data: Buffer.alloc(25 * 1024 * 1024 + 1) },
+          payload: { config: { sharp: controlledSharp } },
+        },
+      },
+    ]);
+
+    expect({ outcome, sharpCalls }).toEqual({ outcome: null, sharpCalls: 0 });
+  });
+
+  test.each([
+    [16_385, 1],
+    [10_001, 4_000],
+  ])("enforces default decoded limits before normalization for %s × %s", async (width, height) => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    let normalizationCalls = 0;
+    const sharp = createMetadataProbeSharp(width, height, () => {
+      normalizationCalls += 1;
+    });
+    const sourceConfig = {
+      collections: [{ fields: [], slug: "media", upload: true }],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      secret: "unit-test-secret",
+      sharp,
+    } satisfies Config;
+    const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
+    const outcome = await Reflect.apply(getBlurHashHook(transformed, "media"), undefined, [
+      {
+        data: { mimeType: "image/jpeg" },
+        req: { file: { data: input }, payload: { config: { sharp } } },
+      },
+    ]);
+
+    expect({ normalizationCalls, outcome }).toEqual({ normalizationCalls: 0, outcome: null });
+  });
+
+  test("uses the default ten-second generation timeout", async () => {
+    vi.useFakeTimers();
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    const sharp = createHangingSharp();
+    const sourceConfig = {
+      collections: [{ fields: [], slug: "media", upload: true }],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      secret: "unit-test-secret",
+      sharp,
+    } satisfies Config;
+    const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
+    let observed: unknown;
+
+    void Reflect.apply(getBlurHashHook(transformed, "media"), undefined, [
+      {
+        data: { mimeType: "image/jpeg" },
+        req: { file: { data: input }, payload: { config: { sharp } } },
+      },
+    ]).then((outcome: unknown) => {
+      observed = outcome;
+    });
+    await vi.advanceTimersByTimeAsync(9_999);
+    const beforeTimeout = observed;
+    await vi.advanceTimersByTimeAsync(1);
+    vi.useRealTimers();
+
+    expect({ afterTimeout: observed, beforeTimeout }).toEqual({
+      afterTimeout: null,
+      beforeTimeout: undefined,
+    });
   });
 
   test("reports deterministic configuration problems together", async () => {
