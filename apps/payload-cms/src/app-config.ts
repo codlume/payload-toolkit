@@ -1,5 +1,3 @@
-import { fileURLToPath } from "node:url";
-
 import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blurhash";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { buildConfig, type CollectionBeforeChangeHook } from "payload";
@@ -15,15 +13,15 @@ type AppConfigOptions = {
     enabled: boolean;
   };
   databaseURL: string;
+  generatedTypesFile: string;
   mediaBeforeChangeHooks: CollectionBeforeChangeHook[];
   uploadDirectory: string;
 };
 
-const generatedTypesFile = fileURLToPath(new URL("./payload-types.generated.ts", import.meta.url));
-
 export const createAppConfig = ({
   blurHash,
   databaseURL,
+  generatedTypesFile,
   mediaBeforeChangeHooks,
   uploadDirectory,
 }: AppConfigOptions) =>

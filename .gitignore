@@ -1,2 +1,6 @@
 node_modules/
 apps/payload-cms/.payload/
+apps/payload-cms/.next*/
+apps/payload-cms/playwright-report/
+apps/payload-cms/test-results/
+apps/payload-cms/tsconfig-e2e-*.json

@@ -17,6 +17,7 @@ const startPayload = async (blurHashEnabled: boolean, testDirectory: string, key
       enabled: blurHashEnabled,
     },
     databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
+    generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
     mediaBeforeChangeHooks: [],
     uploadDirectory: path.join(testDirectory, "media"),
   });

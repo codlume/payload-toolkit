@@ -384,10 +384,18 @@ const createBlurHashField = (options: ResolvedOptions, lifecycleHook: FieldHook)
       update: denyCallerWrite,
     },
     admin: {
-      ...(options.enabled ? {} : { hidden: true }),
+      ...(options.enabled
+        ? {
+            components: {
+              Field: "@codlume/payload-blurhash/client#BlurHashPreview",
+            },
+            width: "100%",
+          }
+        : { hidden: true }),
       readOnly: true,
     },
     hooks: { beforeChange: [lifecycleHook] },
+    label: "BlurHash",
     localized: false,
     name: options.fieldName,
     required: false,

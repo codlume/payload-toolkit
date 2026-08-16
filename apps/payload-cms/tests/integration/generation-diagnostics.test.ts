@@ -31,6 +31,7 @@ describe("generation diagnostics", () => {
     const config = await createAppConfig({
       blurHash: { alphaBackground: "default", debug: true, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
+      generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
       mediaBeforeChangeHooks: [failBlurHashGeneration],
       uploadDirectory: path.join(testDirectory, "private-uploads"),
     });

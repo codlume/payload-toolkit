@@ -37,6 +37,7 @@ describe("BlurHash upload lifecycle", () => {
     const config = await createAppConfig({
       blurHash: { alphaBackground: "default", debug: false, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
+      generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
       mediaBeforeChangeHooks: [failBlurHashGeneration],
       uploadDirectory: path.join(testDirectory, "media"),
     });

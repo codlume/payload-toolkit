@@ -127,6 +127,30 @@ describe("blurHashPlugin", () => {
     });
   });
 
+  test("renders the preview component at the enabled generated field", async () => {
+    const config = await buildConfig({
+      collections: [{ fields: [], slug: "media", upload: true }],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      plugins: [blurHashPlugin({ collections: ["media"] })],
+      secret: "unit-test-secret",
+      sharp: hostSharp,
+    });
+    const field = config.collections[0]?.fields.find(
+      (candidate) => "name" in candidate && candidate.name === "blurHash",
+    );
+
+    expect(field).toMatchObject({
+      admin: {
+        components: {
+          Field: "@codlume/payload-blurhash/client#BlurHashPreview",
+        },
+        readOnly: true,
+        width: "100%",
+      },
+      label: "BlurHash",
+    });
+  });
+
   test("makes the generated field read-only in Admin", async () => {
     const config = await buildPayloadConfig(
       [{ fields: [], slug: "media", upload: true }],

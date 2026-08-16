@@ -105,6 +105,7 @@ describe("WebP and AVIF inputs", () => {
     const config = await createAppConfig({
       blurHash: { alphaBackground: "default", debug: false, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
+      generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
       mediaBeforeChangeHooks: [],
       uploadDirectory: path.join(testDirectory, "media"),
     });
