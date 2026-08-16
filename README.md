@@ -5,9 +5,9 @@ Payload Toolkit is a collection of independently released plugins for
 workspace where those plugins and the applications that exercise them will be
 developed.
 
-The workspace is intentionally project-free while its foundation is being
-established. It does not yet contain a runnable application or a publishable
-package.
+The workspace currently contains the first private plugin slice and the private
+Payload application that exercises it. Both remain unreleased while the full
+BlurHash contract and distribution checks are completed.
 
 ## Prerequisites
 
@@ -24,10 +24,12 @@ pnpm install --frozen-lockfile
 
 ## Workspace layout
 
-- `packages/` is reserved for independently released Payload plugins and for
-  internal libraries only after multiple plugins need shared implementation.
-- `apps/` is reserved for non-published Payload CMS applications that
-  demonstrate plugins or exercise integration and end-to-end behavior.
+- `packages/payload-blurhash/` contains the private
+  `@codlume/payload-blurhash` plugin.
+- `apps/payload-cms/` contains the private SQLite-backed Payload application
+  used to exercise the plugin through real Payload APIs.
+- Additional projects may join `packages/` or `apps/`; internal libraries are
+  introduced only after multiple plugins need shared implementation.
 
 Only direct child projects of these two containers join the pnpm workspace.
 
@@ -44,8 +46,7 @@ Only direct child projects of these two containers join the pnpm workspace.
   authoritative local readiness check.
 
 The test commands discover participating projects by their corresponding
-`package.json` script. Projects without that script are skipped, so the
-intentionally project-free workspace succeeds without placeholder tests.
+`package.json` script. Projects without that script are skipped.
 
 Future TypeScript projects should extend the strict root
 `tsconfig.base.json` baseline.
