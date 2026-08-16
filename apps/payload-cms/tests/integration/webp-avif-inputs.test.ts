@@ -103,7 +103,7 @@ describe("WebP and AVIF inputs", () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-webp-avif-"));
     payloadInputFallback = await readImageFixture("avif-8-bit.avif");
     const config = await createAppConfig({
-      blurHash: { alphaBackground: "default", enabled: true },
+      blurHash: { alphaBackground: "default", debug: false, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
       mediaBeforeChangeHooks: [],
       uploadDirectory: path.join(testDirectory, "media"),

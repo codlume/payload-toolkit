@@ -11,6 +11,7 @@ import { Users } from "./collections/users.ts";
 type AppConfigOptions = {
   blurHash: {
     alphaBackground: "default" | NonNullable<BlurHashPluginOptions["alphaBackground"]>;
+    debug: boolean;
     enabled: boolean;
   };
   databaseURL: string;
@@ -32,6 +33,7 @@ export const createAppConfig = ({
     plugins: [
       blurHashPlugin({
         collections: ["media"],
+        debug: blurHash.debug,
         enabled: blurHash.enabled,
         ...(blurHash.alphaBackground === "default"
           ? {}

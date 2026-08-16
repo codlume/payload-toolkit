@@ -28,7 +28,7 @@ type GenerationInput = {
   sharp: SharpDependency;
 };
 
-type GenerationOutcome =
+export type GenerationOutcome =
   | { code: "animated_input" | "not_eligible"; status: "skipped" }
   | {
       code:

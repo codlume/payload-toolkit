@@ -57,7 +57,7 @@ describe("JPEG and PNG inputs", () => {
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-jpeg-png-"));
     const config = await createAppConfig({
-      blurHash: { alphaBackground: "default", enabled: true },
+      blurHash: { alphaBackground: "default", debug: false, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
       mediaBeforeChangeHooks: [],
       uploadDirectory: path.join(testDirectory, "media"),

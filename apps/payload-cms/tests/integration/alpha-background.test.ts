@@ -30,7 +30,7 @@ describe("configured alpha background", () => {
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-alpha-background-"));
     const config = await createAppConfig({
-      blurHash: { alphaBackground: { b: 0, g: 0, r: 0 }, enabled: true },
+      blurHash: { alphaBackground: { b: 0, g: 0, r: 0 }, debug: false, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
       mediaBeforeChangeHooks: [],
       uploadDirectory: path.join(testDirectory, "media"),

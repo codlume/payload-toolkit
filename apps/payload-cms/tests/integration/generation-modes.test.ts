@@ -13,6 +13,7 @@ const startPayload = async (blurHashEnabled: boolean, testDirectory: string, key
   const config = await createAppConfig({
     blurHash: {
       alphaBackground: "default",
+      debug: false,
       enabled: blurHashEnabled,
     },
     databaseURL: `file:${path.join(testDirectory, "payload.db")}`,

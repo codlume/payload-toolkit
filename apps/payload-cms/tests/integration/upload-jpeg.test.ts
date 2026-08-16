@@ -35,7 +35,7 @@ describe("BlurHash upload lifecycle", () => {
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-"));
     const config = await createAppConfig({
-      blurHash: { alphaBackground: "default", enabled: true },
+      blurHash: { alphaBackground: "default", debug: false, enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
       mediaBeforeChangeHooks: [failBlurHashGeneration],
       uploadDirectory: path.join(testDirectory, "media"),

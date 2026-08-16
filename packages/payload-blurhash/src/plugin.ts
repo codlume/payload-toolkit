@@ -12,6 +12,7 @@ import type {
 } from "payload";
 
 import { createBlurHashGenerator } from "./generate-blur-hash.ts";
+import { createGenerationDiagnostics } from "./generation-diagnostics.ts";
 
 export type BlurHashPluginOptions = {
   alphaBackground?: { b: number; g: number; r: number };
@@ -41,6 +42,13 @@ type ResolvedOptions = {
     maxInputSide: number;
     timeoutSeconds: number;
   };
+};
+
+type GenerationRuntime = {
+  diagnostics: ReturnType<typeof createGenerationDiagnostics>;
+  enabled: boolean;
+  generator: ReturnType<typeof createBlurHashGenerator> | undefined;
+  sharp: SharpDependency | undefined;
 };
 
 const PLUGIN_SLUG = "@codlume/payload-blurhash";
@@ -324,11 +332,7 @@ const denyCallerWrite = () => false;
 const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
 
 const createBlurHashLifecycleHook =
-  (
-    options: ResolvedOptions,
-    generator: ReturnType<typeof createBlurHashGenerator> | undefined,
-    configuredSharp: SharpDependency | undefined,
-  ): FieldHook =>
+  (runtime: GenerationRuntime, collectionSlug: string): FieldHook =>
   async (args) => {
     if (isFileRemoval(args.data)) {
       return null;
@@ -338,20 +342,37 @@ const createBlurHashLifecycleHook =
       return args.previousValue ?? null;
     }
 
-    const sharp = args.req.payload.config.sharp ?? configuredSharp;
+    const sharp = args.req.payload.config.sharp ?? runtime.sharp;
 
-    if (!options.enabled || !generator || !sharp || !args.req.file.data) {
+    if (!runtime.enabled || !runtime.generator || !sharp || !args.req.file.data) {
       return null;
     }
 
+    const finishDiagnostics = runtime.diagnostics.start({
+      collection: collectionSlug,
+      height: args.data?.height,
+      inputBytes: args.req.file.data.length,
+      logger: args.req.payload.logger,
+      mimeType: args.data?.mimeType,
+      width: args.data?.width,
+    });
+
     try {
-      const outcome = await generator.generate({
+      const outcome = await runtime.generator.generate({
         input: args.req.file.data,
         mimeType: args.data?.mimeType,
         sharp,
       });
-      return outcome.status === "generated" ? outcome.value : null;
+
+      if (outcome.status === "generated") {
+        finishDiagnostics({ status: "generated" });
+        return outcome.value;
+      }
+
+      finishDiagnostics(outcome);
+      return null;
     } catch {
+      finishDiagnostics({ code: "decode_failed", status: "failed" });
       return null;
     }
   };
@@ -399,13 +420,22 @@ export const blurHashPlugin = (options: BlurHashPluginOptions): Plugin => {
             limits: resolvedOptions.limits,
           })
         : undefined;
-    const lifecycleHook = createBlurHashLifecycleHook(resolvedOptions, generator, config.sharp);
+    const runtime: GenerationRuntime = {
+      diagnostics: createGenerationDiagnostics(resolvedOptions.debug),
+      enabled: resolvedOptions.enabled,
+      generator,
+      sharp: config.sharp,
+    };
 
     return {
       ...config,
       collections: (config.collections ?? []).map((collection) =>
         configuredCollections.has(collection.slug)
-          ? addBlurHashField(collection, resolvedOptions, lifecycleHook)
+          ? addBlurHashField(
+              collection,
+              resolvedOptions,
+              createBlurHashLifecycleHook(runtime, collection.slug),
+            )
           : collection,
       ),
     };
