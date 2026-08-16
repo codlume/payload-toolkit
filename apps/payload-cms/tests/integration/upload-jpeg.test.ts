@@ -5,14 +5,28 @@ import path from "node:path";
 import type { BlurHashPluginOptions } from "@codlume/payload-blurhash";
 import { GRAPHQL_POST } from "@payloadcms/next/routes";
 import { isBlurhashValid } from "blurhash";
-import { getPayload, handleEndpoints, type Payload } from "payload";
-import sharp from "sharp";
+import {
+  type CollectionBeforeChangeHook,
+  getPayload,
+  handleEndpoints,
+  type Payload,
+} from "payload";
 import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from "vitest";
 
 import { createAppConfig } from "../../src/app-config.ts";
 import type { Media } from "../../src/payload-types.generated.ts";
+import { createJpegFixture } from "./image-fixtures.ts";
 
-describe("JPEG uploads", () => {
+const CALLER_SUPPLIED_HASH = "caller-supplied";
+const failBlurHashGeneration: CollectionBeforeChangeHook = ({ context, data, req }) => {
+  if (context.failBlurHashGeneration && req.file) {
+    req.file.data = Buffer.from("invalid image data");
+  }
+
+  return data;
+};
+
+describe("BlurHash upload lifecycle", () => {
   let blurHash: string;
   let mediaID: number | string;
   let payload: Payload;
@@ -21,24 +35,17 @@ describe("JPEG uploads", () => {
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-"));
     const config = await createAppConfig({
+      blurHashEnabled: true,
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
+      mediaBeforeChangeHooks: [failBlurHashGeneration],
       uploadDirectory: path.join(testDirectory, "media"),
     });
     payload = await getPayload({ config });
-    const jpeg = await sharp({
-      create: {
-        background: { b: 80, g: 40, r: 200 },
-        channels: 3,
-        height: 12,
-        width: 16,
-      },
-    })
-      .jpeg()
-      .toBuffer();
+    const jpeg = await createJpegFixture({ b: 80, g: 40, r: 200 });
 
     const created = await payload.create({
       collection: "media",
-      data: {},
+      data: { blurHash: CALLER_SUPPLIED_HASH },
       file: {
         data: jpeg,
         mimetype: "image/jpeg",
@@ -89,6 +96,31 @@ describe("JPEG uploads", () => {
     });
   });
 
+  test("a caller-supplied value cannot replace generation on create", () => {
+    expect(blurHash).not.toBe(CALLER_SUPPLIED_HASH);
+  });
+
+  test("a metadata-only Local API update cannot replace the generated BlurHash", async () => {
+    await payload.update({
+      collection: "media",
+      data: { blurHash: "caller-supplied" },
+      id: mediaID,
+    });
+
+    const media = await payload.findByID({ collection: "media", id: mediaID });
+
+    expect(media.blurHash).toBe(blurHash);
+  });
+
+  test("non-persisted file metadata cannot clear the generated BlurHash", async () => {
+    const callerData = { blurHash: CALLER_SUPPLIED_HASH, file: null };
+    await payload.update({ collection: "media", data: callerData, id: mediaID });
+
+    const media = await payload.findByID({ collection: "media", id: mediaID });
+
+    expect(media.blurHash).toBe(blurHash);
+  });
+
   test("the generated field is readable through the REST API", async () => {
     const response = await handleEndpoints({
       config: payload.config,
@@ -116,5 +148,108 @@ describe("JPEG uploads", () => {
       body: { data: { Media: { blurHash } } },
       status: 200,
     });
+  });
+
+  test("an eligible replacement stores a new generated BlurHash", async () => {
+    const jpeg = await createJpegFixture({ b: 200, g: 160, r: 20 });
+    const updated = await payload.update({
+      collection: "media",
+      data: {},
+      file: {
+        data: jpeg,
+        mimetype: "image/jpeg",
+        name: "replacement.jpg",
+        size: jpeg.length,
+      },
+      id: mediaID,
+    });
+
+    expect({
+      changed: updated.blurHash !== blurHash,
+      validation: isBlurhashValid(updated.blurHash ?? ""),
+    }).toEqual({ changed: true, validation: { result: true } });
+  });
+
+  test("an unsupported replacement clears the previous BlurHash", async () => {
+    const text = Buffer.from("not an eligible image");
+    const updated = await payload.update({
+      collection: "media",
+      data: {},
+      file: {
+        data: text,
+        mimetype: "text/plain",
+        name: "replacement.txt",
+        size: text.length,
+      },
+      id: mediaID,
+    });
+
+    expect(updated.blurHash).toBeNull();
+  });
+
+  test("a generation failure clears the BlurHash without failing the upload", async () => {
+    const successfulJpeg = await createJpegFixture({ b: 15, g: 45, r: 90 });
+    const beforeFailure = await payload.update({
+      collection: "media",
+      data: {},
+      file: {
+        data: successfulJpeg,
+        mimetype: "image/jpeg",
+        name: "before-generation-failure.jpg",
+        size: successfulJpeg.length,
+      },
+      id: mediaID,
+    });
+
+    if (typeof beforeFailure.blurHash !== "string") {
+      throw new TypeError("Expected the successful upload to generate a BlurHash");
+    }
+
+    const failedJpeg = await createJpegFixture({ b: 50, g: 80, r: 120 });
+    const afterFailure = await payload.update({
+      collection: "media",
+      context: { failBlurHashGeneration: true },
+      data: {},
+      file: {
+        data: failedJpeg,
+        mimetype: "image/jpeg",
+        name: "generation-failure.jpg",
+        size: failedJpeg.length,
+      },
+      id: mediaID,
+    });
+
+    expect(afterFailure.blurHash).toBeNull();
+  });
+
+  test("removing the file clears the generated BlurHash", async () => {
+    const jpeg = await createJpegFixture({ b: 30, g: 70, r: 120 });
+    await payload.update({
+      collection: "media",
+      data: {},
+      file: {
+        data: jpeg,
+        mimetype: "image/jpeg",
+        name: "before-removal.jpg",
+        size: jpeg.length,
+      },
+      id: mediaID,
+    });
+
+    const updated = await payload.update({
+      collection: "media",
+      data: {
+        filename: null,
+        filesize: null,
+        height: null,
+        mimeType: null,
+        thumbnailURL: null,
+        url: null,
+        width: null,
+      },
+      id: mediaID,
+    });
+
+    expect(updated.blurHash).toBeNull();
   });
 });

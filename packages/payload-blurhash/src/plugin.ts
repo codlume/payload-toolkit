@@ -4,6 +4,7 @@ import type {
   CollectionConfig,
   Config,
   Field,
+  FieldHook,
   Plugin,
   TextField,
   UploadCollectionSlug,
@@ -317,9 +318,43 @@ const findConfigurationProblems = (
   };
 };
 
+const denyCallerWrite = () => false;
+
+const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
+
+const createBlurHashLifecycleHook =
+  (enabled: boolean): FieldHook =>
+  async (args) => {
+    if (isFileRemoval(args.data)) {
+      return null;
+    }
+
+    if (!args.req.file) {
+      return args.previousValue ?? null;
+    }
+
+    if (!enabled) {
+      return null;
+    }
+
+    try {
+      return await generateBlurHash(args);
+    } catch {
+      return null;
+    }
+  };
+
 const createBlurHashField = ({ enabled, fieldName }: ResolvedOptions) =>
   ({
-    ...(enabled ? { hooks: { beforeChange: [generateBlurHash] } } : { admin: { hidden: true } }),
+    access: {
+      create: denyCallerWrite,
+      update: denyCallerWrite,
+    },
+    admin: {
+      ...(enabled ? {} : { hidden: true }),
+      readOnly: true,
+    },
+    hooks: { beforeChange: [createBlurHashLifecycleHook(enabled)] },
     localized: false,
     name: fieldName,
     required: false,

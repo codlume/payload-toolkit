@@ -66,7 +66,7 @@ describe("blurHashPlugin", () => {
     });
   });
 
-  test("keeps the field API-visible but hides it and disables generation when disabled", async () => {
+  test("keeps the disabled field API-visible and hidden in Admin", async () => {
     const config = await buildPayloadConfig(
       [{ fields: [], slug: "media", upload: true }],
       [blurHashPlugin({ collections: ["media"], enabled: false })],
@@ -76,14 +76,41 @@ describe("blurHashPlugin", () => {
     );
 
     expect({
-      generationHooks: field && "hooks" in field ? field.hooks?.beforeChange : undefined,
       hidden: field?.admin && "hidden" in field.admin ? field.admin.hidden : undefined,
       hiddenFromAPI: field && "hidden" in field ? field.hidden : undefined,
     }).toEqual({
-      generationHooks: undefined,
       hidden: true,
       hiddenFromAPI: undefined,
     });
+  });
+
+  test("makes the generated field read-only in Admin", async () => {
+    const config = await buildPayloadConfig(
+      [{ fields: [], slug: "media", upload: true }],
+      [blurHashPlugin({ collections: ["media"], enabled: false })],
+    );
+    const field = config.collections[0]?.fields.find(
+      (candidate) => "name" in candidate && candidate.name === "blurHash",
+    );
+
+    expect(field?.type === "text" ? field.admin?.readOnly : undefined).toBe(true);
+  });
+
+  test.each(["create", "update"] as const)("denies caller %s access", async (operation) => {
+    const config = await buildPayloadConfig(
+      [{ fields: [], slug: "media", upload: true }],
+      [blurHashPlugin({ collections: ["media"], enabled: false })],
+    );
+    const field = config.collections[0]?.fields.find(
+      (candidate) => "name" in candidate && candidate.name === "blurHash",
+    );
+    const access = field && "access" in field ? field.access?.[operation] : undefined;
+
+    if (!access) {
+      throw new TypeError(`Expected the generated field to deny ${operation} access`);
+    }
+
+    expect(Reflect.apply(access, undefined, [{}])).toBe(false);
   });
 
   test("adds one custom-named field to every configured collection only", async () => {
