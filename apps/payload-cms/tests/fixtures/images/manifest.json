@@ -354,6 +354,18 @@
       "sha256": "a9ab198f46daa808827ac17f8694e26abec1c36ca42bc727f42bc408f0fd65a2"
     },
     {
+      "bytes": 362,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "malformed_container",
+      "facts": ["PNG", "PLTE after IDAT", "valid chunk CRCs"],
+      "mime": "image/png",
+      "name": "png-plte-after-idat.png",
+      "sha256": "888ff9c81b431a73d6b6a5620bf3aa820d300582c2a910a6a8a24d70f980096f"
+    },
+    {
       "bytes": 339,
       "dimensions": {
         "height": 24,

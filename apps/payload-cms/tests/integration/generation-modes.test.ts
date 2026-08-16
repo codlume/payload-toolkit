@@ -12,7 +12,7 @@ import { createJpegFixture } from "./image-fixtures.ts";
 const startPayload = async (blurHashEnabled: boolean, testDirectory: string, key: string) => {
   const config = await createAppConfig({
     blurHash: {
-      alphaBackground: { b: 255, g: 255, r: 255 },
+      alphaBackground: "default",
       enabled: blurHashEnabled,
     },
     databaseURL: `file:${path.join(testDirectory, "payload.db")}`,

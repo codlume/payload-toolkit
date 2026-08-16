@@ -148,8 +148,12 @@ const hasValidPngCrc = (type: Buffer, data: Buffer, expected: number) => {
 
 const inspectPng = (input: Buffer): ImageInputInspection => {
   let animated = false;
+  let bitDepth: number | undefined;
+  let colourType: number | undefined;
   let foundImageData = false;
   let foundHeader = false;
+  let foundPalette = false;
+  let imageDataEnded = false;
   let offset = PNG_SIGNATURE.length;
 
   while (offset < input.length) {
@@ -178,7 +182,8 @@ const inspectPng = (input: Buffer): ImageInputInspection => {
     }
 
     if (!foundHeader) {
-      const colourType = data[9];
+      colourType = data[9];
+      bitDepth = data[8];
       const supportedDepths =
         colourType === undefined ? undefined : PNG_COLOUR_DEPTHS.get(colourType);
 
@@ -187,7 +192,7 @@ const inspectPng = (input: Buffer): ImageInputInspection => {
         length !== 13 ||
         data.readUInt32BE(0) === 0 ||
         data.readUInt32BE(4) === 0 ||
-        !supportedDepths?.has(data[8] ?? -1) ||
+        !supportedDepths?.has(bitDepth ?? -1) ||
         data[10] !== 0 ||
         data[11] !== 0 ||
         (data[12] !== 0 && data[12] !== 1)
@@ -207,13 +212,37 @@ const inspectPng = (input: Buffer): ImageInputInspection => {
       return { code: "malformed_container", status: "failed" };
     }
 
+    if (foundImageData && type !== "IDAT") {
+      imageDataEnded = true;
+    }
+
     if (type === "acTL") {
-      if (length !== 8 || data.readUInt32BE(0) === 0) {
+      if (animated || foundImageData || length !== 8 || data.readUInt32BE(0) === 0) {
         return { code: "malformed_container", status: "failed" };
       }
 
       animated = true;
+    } else if (type === "PLTE") {
+      const paletteEntries = length / 3;
+
+      if (
+        foundPalette ||
+        foundImageData ||
+        (colourType !== 2 && colourType !== 3 && colourType !== 6) ||
+        length === 0 ||
+        length % 3 !== 0 ||
+        paletteEntries > 256 ||
+        (colourType === 3 && bitDepth !== undefined && paletteEntries > 2 ** bitDepth)
+      ) {
+        return { code: "malformed_container", status: "failed" };
+      }
+
+      foundPalette = true;
     } else if (type === "IDAT") {
+      if (imageDataEnded || (colourType === 3 && !foundPalette)) {
+        return { code: "malformed_container", status: "failed" };
+      }
+
       foundImageData = true;
     } else if (type === "IEND") {
       if (length !== 0 || !foundImageData || chunkEnd !== input.length) {

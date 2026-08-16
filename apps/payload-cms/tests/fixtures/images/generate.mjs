@@ -29,7 +29,7 @@ const crc32 = (data) => {
   return (crc ^ 0xffffffff) >>> 0;
 };
 
-const pngChunk = (type, data = Buffer.alloc(0)) => {
+const pngChunk = (type, data) => {
   const typeBytes = Buffer.from(type, "ascii");
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length);
@@ -39,7 +39,7 @@ const pngChunk = (type, data = Buffer.alloc(0)) => {
   return Buffer.concat([length, typeBytes, data, checksum]);
 };
 
-const pngScanlines = (r, g, b, a = 255) => {
+const pngScanlines = (r, g, b, a) => {
   const rows = [];
 
   for (let y = 0; y < height; y += 1) {
@@ -81,7 +81,7 @@ const createApng = (frames) => {
     chunks.push(pngChunk("fcTL", frameControl));
     sequence += 1;
 
-    const compressed = deflateSync(pngScanlines(frame.r, frame.g, frame.b));
+    const compressed = deflateSync(pngScanlines(frame.r, frame.g, frame.b, 255));
 
     if (index === 0) {
       chunks.push(pngChunk("IDAT", compressed));
@@ -95,7 +95,7 @@ const createApng = (frames) => {
     sequence += 1;
   });
 
-  chunks.push(pngChunk("IEND"));
+  chunks.push(pngChunk("IEND", Buffer.alloc(0)));
   return Buffer.concat(chunks);
 };
 
@@ -323,6 +323,18 @@ await addFixture(
   "png-bad-crc.png",
   badCrcPng,
   ["PNG signature", "invalid IEND CRC"],
+  "malformed_container",
+);
+const palette = Buffer.from([255, 0, 0]);
+const pngWithLatePalette = Buffer.concat([
+  opaquePng.subarray(0, opaquePng.length - 12),
+  pngChunk("PLTE", palette),
+  opaquePng.subarray(opaquePng.length - 12),
+]);
+await addFixture(
+  "png-plte-after-idat.png",
+  pngWithLatePalette,
+  ["PNG", "PLTE after IDAT", "valid chunk CRCs"],
   "malformed_container",
 );
 

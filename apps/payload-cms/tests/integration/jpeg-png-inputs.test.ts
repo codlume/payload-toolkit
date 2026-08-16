@@ -57,7 +57,7 @@ describe("JPEG and PNG inputs", () => {
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-jpeg-png-"));
     const config = await createAppConfig({
-      blurHash: { alphaBackground: { b: 255, g: 255, r: 255 }, enabled: true },
+      blurHash: { alphaBackground: "default", enabled: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
       mediaBeforeChangeHooks: [],
       uploadDirectory: path.join(testDirectory, "media"),
@@ -70,14 +70,22 @@ describe("JPEG and PNG inputs", () => {
     await rm(testDirectory, { force: true, recursive: true });
   });
 
-  test("an opaque PNG receives a valid fixed-detail BlurHash", async () => {
+  test("an opaque PNG is eligible", async () => {
     const media = await uploadFixture("png-opaque.png", "image/png");
 
-    expect({
-      decodedPixels: decode(media.blurHash ?? "", 4, 3).length,
-      length: media.blurHash?.length,
-      validation: isBlurhashValid(media.blurHash ?? ""),
-    }).toEqual({ decodedPixels: 48, length: 28, validation: { result: true } });
+    expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
+  });
+
+  test("eligible input is encoded at fixed 4 × 3 detail", async () => {
+    const media = await uploadFixture("png-opaque.png", "image/png");
+
+    expect(media.blurHash).toHaveLength(28);
+  });
+
+  test("an eligible value is decodable", async () => {
+    const media = await uploadFixture("png-opaque.png", "image/png");
+
+    expect(decode(media.blurHash ?? "", 4, 3)).toHaveLength(48);
   });
 
   test.each([
@@ -89,10 +97,7 @@ describe("JPEG and PNG inputs", () => {
   ])("%s is eligible", async (fixtureName) => {
     const media = await uploadFixture(fixtureName, "image/jpeg");
 
-    expect({
-      length: media.blurHash?.length,
-      validation: isBlurhashValid(media.blurHash ?? ""),
-    }).toEqual({ length: 28, validation: { result: true } });
+    expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
   });
 
   test("an alpha PNG is eligible", async () => {
@@ -123,6 +128,7 @@ describe("JPEG and PNG inputs", () => {
     ["a malformed JPEG", "jpeg-malformed.jpg", "image/jpeg"],
     ["a truncated PNG", "png-truncated.png", "image/png"],
     ["a PNG with an invalid CRC", "png-bad-crc.png", "image/png"],
+    ["a PNG with its palette after image data", "png-plte-after-idat.png", "image/png"],
     ["a two-frame APNG", "png-apng-two-frame.png", "image/png"],
     ["a one-frame PNG carrying animation control", "png-actl-single-frame.png", "image/png"],
   ])("%s stores null", async (_description, fixtureName, mimetype) => {
