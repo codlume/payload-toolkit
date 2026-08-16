@@ -1,0 +1,115 @@
+<!doctype html>
+<!--
+  PROTOTYPE ONLY — throw this code away after the decision is captured.
+  Question: Three radically different Payload Admin BlurHash presentations,
+  switchable via ?variant=A|B|C on a standalone route because the workspace
+  application does not exist yet.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlurHash Admin preview prototype</title>
+    <link rel="stylesheet" href="./prototype.css" />
+  </head>
+  <body>
+    <div class="prototype-note" role="note">
+      <strong>Throwaway prototype</strong>
+      <span>Compare presentation, states, and bounds—not production styling.</span>
+    </div>
+
+    <div class="admin-shell">
+      <aside class="admin-sidebar" aria-label="Payload Admin navigation">
+        <a class="wordmark" href="#main-content" aria-label="Payload Admin home">
+          <span class="wordmark-mark" aria-hidden="true"></span>
+          Payload
+        </a>
+
+        <nav aria-label="Collections">
+          <p class="nav-heading">Collections</p>
+          <a class="nav-link is-active" href="#main-content" aria-current="page">
+            Media
+            <span>24</span>
+          </a>
+          <a class="nav-link" href="#main-content">Article images <span>86</span></a>
+          <a class="nav-link" href="#main-content">Authors <span>12</span></a>
+        </nav>
+
+        <p class="sidebar-caption">Payload Toolkit / development</p>
+      </aside>
+
+      <main id="main-content" class="admin-main" tabindex="-1">
+        <header class="document-header">
+          <div>
+            <p class="breadcrumb"><span id="collection-name">Media</span> / Edit</p>
+            <h1 id="document-title">mountain-reflection.jpg</h1>
+          </div>
+          <div class="header-actions" aria-hidden="true">
+            <span class="status-chip">Published</span>
+            <button type="button" disabled>Save</button>
+          </div>
+        </header>
+
+        <section class="scenario-panel" aria-labelledby="scenario-title">
+          <div>
+            <p class="scenario-eyebrow">Prototype controls</p>
+            <h2 id="scenario-title">Test the component in context</h2>
+          </div>
+
+          <label class="scenario-select">
+            <span>Collection and image shape</span>
+            <select id="collection-control">
+              <option value="media">Media · landscape</option>
+              <option value="articles">Article images · portrait</option>
+            </select>
+          </label>
+
+          <fieldset class="scenario-states">
+            <legend>Stored state</legend>
+            <label><input type="radio" name="state" value="ready" /> Generated</label>
+            <label><input type="radio" name="state" value="empty" /> No value</label>
+            <label><input type="radio" name="state" value="invalid" /> Invalid value</label>
+          </fieldset>
+        </section>
+
+        <form class="document-form" aria-label="Media document" onsubmit="return false;">
+          <div class="field-grid">
+            <label class="admin-field">
+              <span>Filename</span>
+              <input id="filename" type="text" value="mountain-reflection.jpg" readonly />
+            </label>
+            <label class="admin-field">
+              <span>Dimensions</span>
+              <input id="dimensions" type="text" value="2400 × 1500 px" readonly />
+            </label>
+          </div>
+
+          <label class="admin-field">
+            <span>Alt text</span>
+            <input
+              id="alt-text"
+              type="text"
+              value="Mountain ridge reflected in a still lake"
+              readonly
+            />
+          </label>
+
+          <div id="variant-host"></div>
+
+          <label class="admin-field">
+            <span>Caption</span>
+            <textarea rows="3" readonly>Landscape study for the autumn field guide.</textarea>
+          </label>
+        </form>
+      </main>
+    </div>
+
+    <nav class="prototype-switcher" aria-label="Prototype variants">
+      <button id="previous-variant" type="button" aria-label="Previous variant">←</button>
+      <output id="variant-label" aria-live="polite"></output>
+      <button id="next-variant" type="button" aria-label="Next variant">→</button>
+    </nav>
+
+    <script type="module" src="./prototype.js"></script>
+  </body>
+</html>
