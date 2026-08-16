@@ -323,7 +323,7 @@ const denyCallerWrite = () => false;
 const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
 
 const createBlurHashLifecycleHook =
-  (enabled: boolean): FieldHook =>
+  (options: ResolvedOptions): FieldHook =>
   async (args) => {
     if (isFileRemoval(args.data)) {
       return null;
@@ -333,30 +333,30 @@ const createBlurHashLifecycleHook =
       return args.previousValue ?? null;
     }
 
-    if (!enabled) {
+    if (!options.enabled) {
       return null;
     }
 
     try {
-      return await generateBlurHash(args);
+      return await generateBlurHash(args, { alphaBackground: options.alphaBackground });
     } catch {
       return null;
     }
   };
 
-const createBlurHashField = ({ enabled, fieldName }: ResolvedOptions) =>
+const createBlurHashField = (options: ResolvedOptions) =>
   ({
     access: {
       create: denyCallerWrite,
       update: denyCallerWrite,
     },
     admin: {
-      ...(enabled ? {} : { hidden: true }),
+      ...(options.enabled ? {} : { hidden: true }),
       readOnly: true,
     },
-    hooks: { beforeChange: [createBlurHashLifecycleHook(enabled)] },
+    hooks: { beforeChange: [createBlurHashLifecycleHook(options)] },
     localized: false,
-    name: fieldName,
+    name: options.fieldName,
     required: false,
     type: "text",
     virtual: false,
