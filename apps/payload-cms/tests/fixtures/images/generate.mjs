@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { deflateSync } from "node:zlib";
 
 import sharp from "sharp";
@@ -8,6 +12,7 @@ import sharp from "sharp";
 const fixtureDirectory = fileURLToPath(new URL("./", import.meta.url));
 const width = 40;
 const height = 24;
+const run = promisify(execFile);
 
 const crcTable = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
@@ -141,6 +146,86 @@ const createAlphaPixels = (hiddenColour) => {
   return pixels;
 };
 
+const createAnimatedPixels = () => {
+  const firstFrame = createAlphaPixels([255, 0, 0]);
+  const secondFrame = createAlphaPixels([0, 0, 255]);
+
+  return Buffer.concat([firstFrame, secondFrame]);
+};
+
+const createAvifSequence = async () => {
+  const sequenceDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-avif-sequence-"));
+
+  try {
+    await Promise.all([
+      sharp({
+        create: { background: { b: 45, g: 60, r: 225 }, channels: 3, height, width },
+      })
+        .png()
+        .toFile(path.join(sequenceDirectory, "frame-1.png")),
+      sharp({
+        create: { background: { b: 220, g: 190, r: 35 }, channels: 3, height, width },
+      })
+        .png()
+        .toFile(path.join(sequenceDirectory, "frame-2.png")),
+    ]);
+    const output = path.join(sequenceDirectory, "sequence.avif");
+    await run("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-framerate",
+      "2",
+      "-i",
+      path.join(sequenceDirectory, "frame-%d.png"),
+      "-c:v",
+      "libsvtav1",
+      "-pix_fmt",
+      "yuv420p",
+      output,
+    ]);
+
+    return readFile(output);
+  } finally {
+    await rm(sequenceDirectory, { force: true, recursive: true });
+  }
+};
+
+const replaceFourCC = (input, from, to, mode) => {
+  const output = Buffer.from(input);
+  const fromBytes = Buffer.from(from, "ascii");
+  const toBytes = Buffer.from(to, "ascii");
+  let offset = output.indexOf(fromBytes);
+
+  if (offset === -1) {
+    throw new Error(`Generated fixture does not contain ${from}`);
+  }
+
+  while (offset !== -1) {
+    toBytes.copy(output, offset);
+
+    if (mode === "first") {
+      break;
+    }
+
+    offset = output.indexOf(fromBytes, offset + toBytes.length);
+  }
+
+  return output;
+};
+
+const invalidatePrimaryItem = (input) => {
+  const output = Buffer.from(input);
+  const typeOffset = output.indexOf(Buffer.from("pitm", "ascii"));
+
+  if (typeOffset === -1 || output[typeOffset + 4] !== 0) {
+    throw new Error("Generated AVIF does not contain a version 0 primary item box");
+  }
+
+  output.writeUInt16BE(0xffff, typeOffset + 8);
+  return output;
+};
+
 const rgbPixels = createRgbPixels();
 const rgbInput = () => sharp(rgbPixels, { raw: { channels: 3, height, width } });
 const jpegOptions = { chromaSubsampling: "4:4:4", quality: 90 };
@@ -172,7 +257,13 @@ const addFixture = async (name, bytes, facts, expected) => {
         : null,
     expected,
     facts,
-    mime: name.endsWith(".png") ? "image/png" : "image/jpeg",
+    mime: name.endsWith(".png")
+      ? "image/png"
+      : name.endsWith(".webp")
+        ? "image/webp"
+        : name.endsWith(".avif")
+          ? "image/avif"
+          : "image/jpeg",
     name,
     sha256: createHash("sha256").update(bytes).digest("hex"),
   });
@@ -338,10 +429,101 @@ await addFixture(
   "malformed_container",
 );
 
+const lossyWebp = await rgbInput().webp({ lossless: false, quality: 80 }).toBuffer();
+await addFixture("webp-lossy.webp", lossyWebp, ["WebP", "simple VP8 lossy image"], "eligible");
+await addFixture(
+  "webp-lossless.webp",
+  await rgbInput().webp({ lossless: true }).toBuffer(),
+  ["WebP", "simple VP8L lossless image"],
+  "eligible",
+);
+await addFixture(
+  "webp-extended-alpha.webp",
+  await sharp(createAlphaPixels([255, 0, 0]), { raw: { channels: 4, height, width } })
+    .webp({ lossless: false, quality: 80 })
+    .toBuffer(),
+  ["WebP", "extended VP8X image", "alpha channel"],
+  "eligible",
+);
+await addFixture(
+  "webp-animated.webp",
+  await sharp(createAnimatedPixels(), {
+    animated: true,
+    raw: { channels: 4, height: height * 2, pageHeight: height, width },
+  })
+    .webp({ delay: [100, 100], loop: 0 })
+    .toBuffer(),
+  ["WebP", "VP8X animation flag", "ANIM chunk", "two ANMF frames"],
+  "animated_input",
+);
+await addFixture(
+  "webp-truncated.webp",
+  lossyWebp.subarray(0, lossyWebp.length - 2),
+  ["WebP RIFF signature", "truncated VP8 payload"],
+  "malformed_container",
+);
+const malformedWebp = Buffer.from(lossyWebp);
+malformedWebp.writeUInt32LE(malformedWebp.readUInt32LE(4) + 2, 4);
+await addFixture(
+  "webp-bad-riff-size.webp",
+  malformedWebp,
+  ["WebP RIFF signature", "declared RIFF size exceeds input"],
+  "malformed_container",
+);
+
+const avif8 = await rgbInput().avif({ bitdepth: 8, quality: 80 }).toBuffer();
+await addFixture("avif-8-bit.avif", avif8, ["AVIF image item", "8-bit AV1"], "eligible");
+await addFixture(
+  "avif-10-bit.avif",
+  await rgbInput().avif({ bitdepth: 10, quality: 80 }).toBuffer(),
+  ["AVIF image item", "10-bit AV1"],
+  "eligible",
+);
+const avifWithAlpha = await sharp(createAlphaPixels([255, 0, 0]), {
+  raw: { channels: 4, height, width },
+})
+  .avif({ bitdepth: 8, quality: 80 })
+  .toBuffer();
+await addFixture(
+  "avif-multiple-images.avif",
+  replaceFourCC(avifWithAlpha, "auxl", "free", "first"),
+  ["AVIF image collection", "two independent AV1 image items", "no auxiliary relation"],
+  "animated_input",
+);
+await addFixture(
+  "avif-sequence.avif",
+  await createAvifSequence(),
+  ["AVIF sequence", "avis major brand", "two AV1 samples"],
+  "animated_input",
+);
+await addFixture(
+  "avif-malformed-brand.avif",
+  replaceFourCC(avif8, "avif", "bad!", "all"),
+  ["ISOBMFF file type box", "missing AVIF image or sequence brand"],
+  "malformed_container",
+);
+await addFixture(
+  "avif-malformed-primary-item.avif",
+  invalidatePrimaryItem(avif8),
+  ["AVIF image item", "primary item identifier is not declared"],
+  "malformed_container",
+);
+await addFixture(
+  "avif-truncated.avif",
+  avif8.subarray(0, Math.floor(avif8.length / 2)),
+  ["AVIF file type box", "truncated meta box"],
+  "malformed_container",
+);
+
+const { stdout: ffmpegVersionOutput } = await run("ffmpeg", ["-version"]);
+const ffmpegVersion = ffmpegVersionOutput.split("\n", 1)[0];
+
 const manifest = {
   corpusLicense: "MIT",
   generatedBy: {
-    generator: "tests/fixtures/images/generate.mjs@1",
+    av1Encoder: "libsvtav1",
+    ffmpeg: ffmpegVersion,
+    generator: "tests/fixtures/images/generate.mjs@2",
     libvips: sharp.versions.vips,
     node: process.version,
     sharp: sharp.versions.sharp,

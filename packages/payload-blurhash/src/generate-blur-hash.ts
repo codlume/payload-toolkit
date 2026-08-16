@@ -29,10 +29,12 @@ export const generateBlurHash = async (
   }
 
   const metadata = await sharp(req.file.data, { animated: true, failOn: "warning" }).metadata();
+  const metadataFormat = inspection.format === "avif" ? "heif" : inspection.format;
 
   if (
-    metadata.format !== inspection.format ||
-    (inspection.format === "png" && metadata.pages !== undefined && metadata.pages !== 1)
+    metadata.format !== metadataFormat ||
+    (inspection.format === "avif" && metadata.mediaType !== "image/avif") ||
+    (metadata.pages !== undefined && metadata.pages !== 1)
   ) {
     return null;
   }

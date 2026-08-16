@@ -1,13 +1,91 @@
 {
   "corpusLicense": "MIT",
   "generatedBy": {
-    "generator": "tests/fixtures/images/generate.mjs@1",
+    "av1Encoder": "libsvtav1",
+    "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "generator": "tests/fixtures/images/generate.mjs@2",
     "libvips": "8.18.3",
     "node": "v24.13.1",
     "sharp": "0.35.3"
   },
   "provenance": "Procedurally generated for Payload Toolkit from original pixel patterns; no third-party image source was used.",
   "fixtures": [
+    {
+      "bytes": 365,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["AVIF image item", "10-bit AV1"],
+      "mime": "image/avif",
+      "name": "avif-10-bit.avif",
+      "sha256": "a38594a7c9514c5c093c9ab691ccc6d87e3110bcbce10b799324709ae90337b3"
+    },
+    {
+      "bytes": 365,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["AVIF image item", "8-bit AV1"],
+      "mime": "image/avif",
+      "name": "avif-8-bit.avif",
+      "sha256": "7d79721eea964dcbabec8c56428f448ed15e27223d21a96e557dcf41a8e0fe1f"
+    },
+    {
+      "bytes": 365,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["ISOBMFF file type box", "missing AVIF image or sequence brand"],
+      "mime": "image/avif",
+      "name": "avif-malformed-brand.avif",
+      "sha256": "885bfab0693e06d5c59bd6bea99ef99df1960c10bcf4c14ca17795d64b6646d0"
+    },
+    {
+      "bytes": 365,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["AVIF image item", "primary item identifier is not declared"],
+      "mime": "image/avif",
+      "name": "avif-malformed-primary-item.avif",
+      "sha256": "d720af5ac2211f0260688b5ebd5ccb60855be20c60ac8add2f26e768c1d6ca63"
+    },
+    {
+      "bytes": 524,
+      "dimensions": {
+        "height": 48,
+        "width": 40
+      },
+      "expected": "animated_input",
+      "facts": [
+        "AVIF image collection",
+        "two independent AV1 image items",
+        "no auxiliary relation"
+      ],
+      "mime": "image/avif",
+      "name": "avif-multiple-images.avif",
+      "sha256": "3a841bb7dd17d686ff64e7bf93f1c1db27a4c0e66a506ed5845a6dbb280a1b46"
+    },
+    {
+      "bytes": 1075,
+      "dimensions": null,
+      "expected": "animated_input",
+      "facts": ["AVIF sequence", "avis major brand", "two AV1 samples"],
+      "mime": "image/avif",
+      "name": "avif-sequence.avif",
+      "sha256": "394317d89ab88c89c82be47fce8d7fb663674df009612ef599ddded518b804d5"
+    },
+    {
+      "bytes": 182,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["AVIF file type box", "truncated meta box"],
+      "mime": "image/avif",
+      "name": "avif-truncated.avif",
+      "sha256": "89bc9349da8260a25112e41a5fddf34ac6ec130b22cfc201895f5a764950b52b"
+    },
     {
       "bytes": 578,
       "dimensions": {
@@ -376,6 +454,72 @@
       "mime": "image/png",
       "name": "png-truncated.png",
       "sha256": "ae6a7b125b284697f40e142d5978ce95916195ecf26458b018aee20796fbae76"
+    },
+    {
+      "bytes": 302,
+      "dimensions": {
+        "height": 48,
+        "width": 40
+      },
+      "expected": "animated_input",
+      "facts": ["WebP", "VP8X animation flag", "ANIM chunk", "two ANMF frames"],
+      "mime": "image/webp",
+      "name": "webp-animated.webp",
+      "sha256": "f6f09e928319f3e7b0fc87b248101b5f6d1f331a3f9969d5132e73c8900fcddc"
+    },
+    {
+      "bytes": 176,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["WebP RIFF signature", "declared RIFF size exceeds input"],
+      "mime": "image/webp",
+      "name": "webp-bad-riff-size.webp",
+      "sha256": "04120775085d05461d68c3df553e7e0f5ab595670af3c39794c500eddbd2dc9f"
+    },
+    {
+      "bytes": 180,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["WebP", "extended VP8X image", "alpha channel"],
+      "mime": "image/webp",
+      "name": "webp-extended-alpha.webp",
+      "sha256": "e4fc1a0eee94db269382681c81c0c3500990bd97b87a22eb5d063fd0799ffe36"
+    },
+    {
+      "bytes": 108,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["WebP", "simple VP8L lossless image"],
+      "mime": "image/webp",
+      "name": "webp-lossless.webp",
+      "sha256": "1c5cdda93528126dc6ebc52ae40f9a87d49bfe6cb52dceed18aad7d5767e9fe5"
+    },
+    {
+      "bytes": 176,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["WebP", "simple VP8 lossy image"],
+      "mime": "image/webp",
+      "name": "webp-lossy.webp",
+      "sha256": "cb78d7c430f4288b518815cec52f5703ca226a5e6e80aa76ff500aff20fdf4b8"
+    },
+    {
+      "bytes": 174,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["WebP RIFF signature", "truncated VP8 payload"],
+      "mime": "image/webp",
+      "name": "webp-truncated.webp",
+      "sha256": "c0477d251e528c3034e016122ed045b921d2504cf37d2a2847ddd062ecfc1b94"
     }
   ]
 }

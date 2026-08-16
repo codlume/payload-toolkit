@@ -10,13 +10,22 @@ const fixtureDirectory = new URL(
   import.meta.url,
 );
 
+const formatFromMime = (mime: string) => {
+  if (mime === "image/avif") return "avif";
+  if (mime === "image/jpeg") return "jpeg";
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+
+  throw new TypeError(`Fixture has unsupported MIME ${mime}`);
+};
+
 describe("inspectImageInput", () => {
   test.each(manifest.fixtures)("classifies $name as $expected", async (fixture) => {
     const input = await readFile(new URL(fixture.name, fixtureDirectory));
     const inspection = inspectImageInput(input, fixture.mime);
     const expected =
       fixture.expected === "eligible"
-        ? { format: fixture.mime === "image/png" ? "png" : "jpeg", status: "eligible" }
+        ? { format: formatFromMime(fixture.mime), status: "eligible" }
         : {
             code: fixture.expected,
             status: fixture.expected === "animated_input" ? "skipped" : "failed",
@@ -34,10 +43,14 @@ describe("inspectImageInput", () => {
     });
   });
 
-  test("settles declared and detected type disagreement as a failure", async () => {
-    const input = await readFile(new URL("png-opaque.png", fixtureDirectory));
+  test.each([
+    ["png-opaque.png", "image/jpeg"],
+    ["webp-lossy.webp", "image/avif"],
+    ["avif-8-bit.avif", "image/webp"],
+  ])("settles %s declared as %s as a type disagreement", async (fixture, mime) => {
+    const input = await readFile(new URL(fixture, fixtureDirectory));
 
-    expect(inspectImageInput(input, "image/jpeg")).toEqual({
+    expect(inspectImageInput(input, mime)).toEqual({
       code: "type_mismatch",
       status: "failed",
     });

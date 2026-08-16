@@ -1,4 +1,7 @@
-type ImageFormat = "jpeg" | "png";
+import { hasAvifBrand, inspectAvif } from "./inspect-avif.ts";
+import { inspectWebp } from "./inspect-webp.ts";
+
+type ImageFormat = "avif" | "jpeg" | "png" | "webp";
 
 export type ImageInputInspection =
   | { code: "animated_input" | "not_eligible"; status: "skipped" }
@@ -7,6 +10,8 @@ export type ImageInputInspection =
 
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
 const PNG_SIGNATURE = Buffer.from("89504e470d0a1a0a", "hex");
+const RIFF_SIGNATURE = Buffer.from("RIFF", "ascii");
+const WEBP_SIGNATURE = Buffer.from("WEBP", "ascii");
 const JPEG_START_OF_FRAME_MARKERS = new Set([
   0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
 ]);
@@ -31,6 +36,14 @@ const crcTable = Uint32Array.from({ length: 256 }, (_, value) => {
 
 const hasSignature = (input: Buffer, signature: Buffer) =>
   input.length >= signature.length && input.subarray(0, signature.length).equals(signature);
+
+const hasWebpSignature = (input: Buffer) =>
+  hasSignature(input, RIFF_SIGNATURE) &&
+  input.length >= 12 &&
+  input.subarray(8, 12).equals(WEBP_SIGNATURE);
+
+const hasIsoFileTypeBox = (input: Buffer) =>
+  input.length >= 8 && input.subarray(4, 8).toString("ascii") === "ftyp";
 
 const isValidJpeg = (input: Buffer) => {
   let foundFrame = false;
@@ -262,7 +275,15 @@ const inspectPng = (input: Buffer): ImageInputInspection => {
 
 export const inspectImageInput = (input: Buffer, mimeType: unknown): ImageInputInspection => {
   const expectedFormat =
-    mimeType === "image/jpeg" ? "jpeg" : mimeType === "image/png" ? "png" : undefined;
+    mimeType === "image/avif"
+      ? "avif"
+      : mimeType === "image/jpeg"
+        ? "jpeg"
+        : mimeType === "image/png"
+          ? "png"
+          : mimeType === "image/webp"
+            ? "webp"
+            : undefined;
 
   if (!expectedFormat) {
     return { code: "not_eligible", status: "skipped" };
@@ -272,13 +293,17 @@ export const inspectImageInput = (input: Buffer, mimeType: unknown): ImageInputI
     ? "jpeg"
     : hasSignature(input, PNG_SIGNATURE)
       ? "png"
-      : undefined;
+      : hasWebpSignature(input)
+        ? "webp"
+        : hasAvifBrand(input)
+          ? "avif"
+          : undefined;
 
   if (signatureFormat && signatureFormat !== expectedFormat) {
     return { code: "type_mismatch", status: "failed" };
   }
 
-  if (!signatureFormat) {
+  if (!signatureFormat && !(expectedFormat === "avif" && hasIsoFileTypeBox(input))) {
     return { code: "malformed_container", status: "failed" };
   }
 
@@ -288,5 +313,13 @@ export const inspectImageInput = (input: Buffer, mimeType: unknown): ImageInputI
       : { code: "malformed_container", status: "failed" };
   }
 
-  return inspectPng(input);
+  if (signatureFormat === "png") {
+    return inspectPng(input);
+  }
+
+  if (signatureFormat === "webp") {
+    return inspectWebp(input);
+  }
+
+  return inspectAvif(input);
 };
