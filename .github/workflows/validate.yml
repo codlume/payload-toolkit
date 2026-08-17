@@ -44,8 +44,15 @@ jobs:
       - name: Run unit tests
         run: pnpm test:unit
 
+      - name: Start test services
+        run: pnpm services:up
+
       - name: Run integration tests
         run: pnpm test:integration
 
       - name: Run end-to-end tests
         run: pnpm test:e2e
+
+      - name: Stop test services
+        if: always()
+        run: pnpm services:down

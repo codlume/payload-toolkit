@@ -14,11 +14,12 @@ const startPayload = async (blurHashEnabled: boolean, testDirectory: string, key
     blurHash: {
       alphaBackground: "default",
       debug: false,
-      enabled: blurHashEnabled,
     },
     databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
     generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
     mediaBeforeChangeHooks: [],
+    mode: blurHashEnabled ? "enabled-in-memory" : "disabled-in-memory",
+    storage: false,
     uploadDirectory: path.join(testDirectory, "media"),
   });
 

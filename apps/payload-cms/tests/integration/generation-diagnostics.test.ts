@@ -29,10 +29,12 @@ describe("generation diagnostics", () => {
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-diagnostics-"));
     const config = await createAppConfig({
-      blurHash: { alphaBackground: "default", debug: true, enabled: true },
+      blurHash: { alphaBackground: "default", debug: true },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
       generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
       mediaBeforeChangeHooks: [failBlurHashGeneration],
+      mode: "enabled-in-memory",
+      storage: false,
       uploadDirectory: path.join(testDirectory, "private-uploads"),
     });
     payload = await getPayload({ config });

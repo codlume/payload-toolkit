@@ -124,6 +124,7 @@ export interface UserAuthOperations {
 export interface Media {
   id: number;
   blurHash?: string | null;
+  prefix?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -241,6 +242,7 @@ export interface PayloadMigration {
  */
 export interface MediaSelect<T extends boolean = true> {
   blurHash?: T;
+  prefix?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;

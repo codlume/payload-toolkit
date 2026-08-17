@@ -4,6 +4,7 @@ import path from "node:path";
 import { getPayload } from "payload";
 
 import { createAppConfig } from "../../src/app-config.ts";
+import { createS3TestStorage } from "../s3-test-context.ts";
 
 export const adminUser = {
   email: "preview@example.com",
@@ -22,17 +23,24 @@ const getStateDirectory = (mode: "disabled" | "enabled") => {
 
 export const createE2EPayload = async (mode: "disabled" | "enabled") => {
   const stateDirectory = getStateDirectory(mode);
+  const s3Prefix = process.env.PAYLOAD_E2E_S3_PREFIX;
+
+  if (!s3Prefix) {
+    throw new Error("PAYLOAD_E2E_S3_PREFIX is required for Admin end-to-end tests.");
+  }
+
   await mkdir(stateDirectory, { recursive: true });
 
   const config = await createAppConfig({
     blurHash: {
       alphaBackground: "default",
       debug: false,
-      enabled: mode === "enabled",
     },
     databaseURL: `file:${path.join(stateDirectory, "payload.db")}`,
     generatedTypesFile: path.join(stateDirectory, "payload-types.generated.ts"),
     mediaBeforeChangeHooks: [],
+    mode: mode === "enabled" ? "enabled-in-memory" : "disabled-in-memory",
+    storage: createS3TestStorage(`${s3Prefix}/${mode}`),
     uploadDirectory: path.join(stateDirectory, "media"),
   });
 

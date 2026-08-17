@@ -13,6 +13,7 @@ BlurHash contract and distribution checks are completed.
 
 - Node.js 24.13.1
 - Corepack, included with the pinned Node.js release
+- Docker with Compose, for the S3 integration and browser tests
 
 The repository pins pnpm 11.10.0 through its root package manifest. Enable the
 Corepack shim, then install the committed dependency graph:
@@ -35,6 +36,21 @@ Only direct child projects of these two containers join the pnpm workspace.
 
 ## Validation
 
+Start the pinned LocalStack S3 service before running integration, end-to-end,
+or full readiness checks. The same checked-in Compose service is used locally
+and in CI:
+
+```sh
+pnpm services:up
+pnpm ready
+pnpm services:down
+```
+
+LocalStack listens at `http://127.0.0.1:4566`, creates the
+`payload-blurhash` bucket, and applies browser `PUT` CORS rules. Automated runs
+use unique database and upload directories plus object prefixes under `tests/`;
+their cleanup only deletes the prefix owned by that run.
+
 - `pnpm fmt` formats supported files and sorts package manifests.
 - `pnpm fmt:check` checks formatting without changing files.
 - `pnpm lint` runs the shared type-aware Vite+ lint policy.
@@ -47,6 +63,34 @@ Only direct child projects of these two containers join the pnpm workspace.
 
 The test commands discover participating projects by their corresponding
 `package.json` script. Projects without that script are skipped.
+
+## Payload application modes and storage
+
+`apps/payload-cms` selects one immutable startup mode with `PAYLOAD_APP_MODE`:
+
+- `enabled-in-memory` enables generation with ordinary in-memory multipart
+  handling and is the default.
+- `enabled-temporary-file` enables generation while Payload streams multipart
+  uploads through an owned temporary-file directory.
+- `disabled-in-memory` keeps the stored field and stale-value lifecycle while
+  generation and its Admin field are disabled.
+
+The application uses Payload's official S3 adapter with browser-direct uploads.
+Its local defaults target the checked-in LocalStack service. A deployment can
+select any supported S3-compatible endpoint, including Cloudflare R2, through
+environment configuration:
+
+- `PAYLOAD_S3_ENDPOINT` (R2:
+  `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`)
+- `PAYLOAD_S3_REGION` (R2: `auto`)
+- `PAYLOAD_S3_ACCESS_KEY_ID` and `PAYLOAD_S3_SECRET_ACCESS_KEY`
+- `PAYLOAD_S3_BUCKET`
+- `PAYLOAD_S3_FORCE_PATH_STYLE` (`false` disables the default path-style mode)
+- `PAYLOAD_S3_PREFIX` to isolate the application's object keys
+
+R2 credentials, accounts, and hosted smoke tests are not required by this
+repository. The deployment bucket must allow browser `PUT` requests from the
+deployed Admin origin.
 
 Future TypeScript projects should extend the strict root
 `tsconfig.base.json` baseline.

@@ -1,4 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+
+import { expect, test, type Request } from "@playwright/test";
+import sharp from "sharp";
 
 import { createE2EPayload, seedAdminUser, seedPreviewDocuments } from "./e2e-context.ts";
 import { login } from "./login.ts";
@@ -6,6 +10,8 @@ import { login } from "./login.ts";
 type SeededDocuments = Awaited<ReturnType<typeof seedPreviewDocuments>>;
 
 let documents: SeededDocuments;
+let directUploadFile: string;
+let directUploadSize: number;
 let payload: Awaited<ReturnType<typeof createE2EPayload>>;
 
 test.describe.configure({ mode: "serial" });
@@ -14,6 +20,22 @@ test.beforeAll(async () => {
   payload = await createE2EPayload("enabled");
   await seedAdminUser(payload);
   documents = await seedPreviewDocuments(payload);
+  directUploadFile = path.join(
+    process.env.PAYLOAD_E2E_STATE_DIRECTORY ?? "",
+    "direct-client-upload.jpg",
+  );
+  const directUpload = await sharp({
+    create: {
+      background: { b: 80, g: 120, r: 200 },
+      channels: 3,
+      height: 768,
+      width: 1024,
+    },
+  })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  await writeFile(directUploadFile, directUpload);
+  directUploadSize = directUpload.length;
 });
 
 test.afterAll(async () => {
@@ -189,4 +211,50 @@ test("invalid value stays selectable while the form remains usable", async ({ pa
   await expect(input).toHaveValue("not-a-blurhash");
   await expect(input).not.toBeDisabled();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+});
+
+test("authenticated uploads send file bytes directly to S3", async ({ page }) => {
+  const payloadHost = new URL(page.url()).host;
+  const s3Host = new URL(process.env.PAYLOAD_S3_ENDPOINT ?? "http://127.0.0.1:4566").host;
+  const largeRequestsToPayload: string[] = [];
+  const putsToS3: string[] = [];
+  const requestObservations: Promise<void>[] = [];
+
+  const observeRequest = (request: Request) => {
+    const requestURL = new URL(request.url());
+    const isPayloadRequest = requestURL.host === payloadHost;
+    const isS3Put = requestURL.host === s3Host && request.method() === "PUT";
+
+    if (isS3Put) {
+      putsToS3.push(request.url());
+    }
+
+    if (!isPayloadRequest) {
+      return;
+    }
+
+    requestObservations.push(
+      (async () => {
+        const contentLength = Number((await request.headerValue("content-length")) ?? 0);
+
+        if (isPayloadRequest && contentLength >= directUploadSize) {
+          largeRequestsToPayload.push(`${request.method()} ${request.url()}`);
+        }
+      })(),
+    );
+  };
+
+  await page.goto("/admin/collections/media/create");
+  page.on("request", observeRequest);
+  await page.setInputFiles('input[type="file"]', directUploadFile);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page).toHaveURL(/\/admin\/collections\/media\/[^/]+$/);
+  await expect.poll(() => putsToS3.length).toBe(1);
+  page.off("request", observeRequest);
+  await Promise.all(requestObservations);
+
+  expect({ largeRequestsToPayload, putsToS3: putsToS3.length }).toEqual({
+    largeRequestsToPayload: [],
+    putsToS3: 1,
+  });
 });

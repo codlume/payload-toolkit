@@ -5,9 +5,14 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+import { S3Client } from "@aws-sdk/client-s3";
+
+import { deleteOwnedS3Prefix } from "../delete-owned-s3-prefix.mjs";
+
 const appDirectory = fileURLToPath(new URL("../..", import.meta.url));
 const stateDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-e2e-"));
 const runID = path.basename(stateDirectory);
+const s3Prefix = `tests/${runID}/e2e`;
 const enabledDistDirectory = `.next-e2e-${runID}-enabled`;
 const disabledDistDirectory = `.next-e2e-${runID}-disabled`;
 const enabledTsconfigPath = `tsconfig-e2e-${runID}-enabled.json`;
@@ -63,6 +68,20 @@ const removeOwnedPath = async (target, parent, prefix) => {
   await rm(resolvedTarget, { force: true, recursive: true });
 };
 
+const removeOwnedS3Objects = async (prefix) => {
+  const client = new S3Client({
+    credentials: {
+      accessKeyId: process.env.PAYLOAD_S3_ACCESS_KEY_ID ?? "test",
+      secretAccessKey: process.env.PAYLOAD_S3_SECRET_ACCESS_KEY ?? "test",
+    },
+    endpoint: process.env.PAYLOAD_S3_ENDPOINT ?? "http://127.0.0.1:4566",
+    forcePathStyle: process.env.PAYLOAD_S3_FORCE_PATH_STYLE !== "false",
+    region: process.env.PAYLOAD_S3_REGION ?? "us-east-1",
+  });
+  const bucket = process.env.PAYLOAD_S3_BUCKET ?? "payload-blurhash";
+  await deleteOwnedS3Prefix({ bucket, client, prefix });
+};
+
 let exitCode = 1;
 
 try {
@@ -94,6 +113,7 @@ try {
           PAYLOAD_E2E_DISABLED_TSCONFIG_PATH: disabledTsconfigPath,
           PAYLOAD_E2E_ENABLED_DIST_DIRECTORY: enabledDistDirectory,
           PAYLOAD_E2E_ENABLED_PORT: String(enabledPort),
+          PAYLOAD_E2E_S3_PREFIX: s3Prefix,
           PAYLOAD_E2E_ENABLED_TSCONFIG_PATH: enabledTsconfigPath,
           PAYLOAD_E2E_STATE_DIRECTORY: stateDirectory,
         },
@@ -106,6 +126,7 @@ try {
   });
 } finally {
   await Promise.all([
+    removeOwnedS3Objects(s3Prefix),
     removeOwnedPath(stateDirectory, tmpdir(), "payload-blurhash-e2e-"),
     removeOwnedPath(
       path.join(appDirectory, enabledDistDirectory),

@@ -8,6 +8,8 @@
     "lint": "vp lint --deny-warnings --report-unused-disable-directives",
     "prepare": "vp config --no-agent",
     "ready": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "services:down": "docker compose -f compose.yaml down --remove-orphans",
+    "services:up": "docker compose -f compose.yaml up -d --wait localstack",
     "test:e2e": "vp run -r test:e2e",
     "test:integration": "vp run -r test:integration",
     "test:unit": "vp run -r test:unit",

@@ -17,6 +17,7 @@ const enabledDistDirectory = requireEnvironment("PAYLOAD_E2E_ENABLED_DIST_DIRECT
 const disabledDistDirectory = requireEnvironment("PAYLOAD_E2E_DISABLED_DIST_DIRECTORY");
 const enabledTsconfigPath = requireEnvironment("PAYLOAD_E2E_ENABLED_TSCONFIG_PATH");
 const disabledTsconfigPath = requireEnvironment("PAYLOAD_E2E_DISABLED_TSCONFIG_PATH");
+const s3Prefix = requireEnvironment("PAYLOAD_E2E_S3_PREFIX");
 const enabledPort = Number(requireEnvironment("PAYLOAD_E2E_ENABLED_PORT"));
 const disabledPort = Number(requireEnvironment("PAYLOAD_E2E_DISABLED_PORT"));
 
@@ -51,9 +52,10 @@ export default defineConfig({
     {
       command: `pnpm exec next dev --hostname 127.0.0.1 --port ${enabledPort}`,
       env: {
-        PAYLOAD_BLURHASH_ENABLED: "true",
+        PAYLOAD_APP_MODE: "enabled-in-memory",
         PAYLOAD_NEXT_DIST_DIRECTORY: enabledDistDirectory,
         PAYLOAD_NEXT_TSCONFIG_PATH: enabledTsconfigPath,
+        PAYLOAD_S3_PREFIX: `${s3Prefix}/enabled`,
         PAYLOAD_STATE_DIRECTORY: path.join(stateDirectory, "enabled"),
       },
       reuseExistingServer: false,
@@ -63,9 +65,10 @@ export default defineConfig({
     {
       command: `pnpm exec next dev --hostname 127.0.0.1 --port ${disabledPort}`,
       env: {
-        PAYLOAD_BLURHASH_ENABLED: "false",
+        PAYLOAD_APP_MODE: "disabled-in-memory",
         PAYLOAD_NEXT_DIST_DIRECTORY: disabledDistDirectory,
         PAYLOAD_NEXT_TSCONFIG_PATH: disabledTsconfigPath,
+        PAYLOAD_S3_PREFIX: `${s3Prefix}/disabled`,
         PAYLOAD_STATE_DIRECTORY: path.join(stateDirectory, "disabled"),
       },
       reuseExistingServer: false,

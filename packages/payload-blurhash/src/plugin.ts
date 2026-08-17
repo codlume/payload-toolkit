@@ -1,3 +1,4 @@
+import { readFile, stat } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 
 import type {
@@ -48,6 +49,7 @@ type GenerationRuntime = {
   diagnostics: ReturnType<typeof createGenerationDiagnostics>;
   enabled: boolean;
   generator: ReturnType<typeof createBlurHashGenerator> | undefined;
+  maxInputBytes: number;
   sharp: SharpDependency | undefined;
 };
 
@@ -331,6 +333,28 @@ const denyCallerWrite = () => false;
 
 const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
 
+const readEffectiveUpload = async (
+  file: NonNullable<Parameters<FieldHook>[0]["req"]["file"]>,
+  maxInputBytes: number,
+) => {
+  if (!file.tempFilePath) {
+    return { input: file.data, inputBytes: file.data.length } as const;
+  }
+
+  try {
+    const fileStats = await stat(file.tempFilePath);
+
+    if (fileStats.size > maxInputBytes) {
+      return { code: "input_too_large", inputBytes: fileStats.size } as const;
+    }
+
+    const input = await readFile(file.tempFilePath);
+    return { input, inputBytes: input.length } as const;
+  } catch {
+    return { code: "decode_failed", inputBytes: file.size } as const;
+  }
+};
+
 const createBlurHashLifecycleHook =
   (runtime: GenerationRuntime, collectionSlug: string): FieldHook =>
   async (args) => {
@@ -344,22 +368,29 @@ const createBlurHashLifecycleHook =
 
     const sharp = args.req.payload.config.sharp ?? runtime.sharp;
 
-    if (!runtime.enabled || !runtime.generator || !sharp || !args.req.file.data) {
+    if (!runtime.enabled || !runtime.generator || !sharp) {
       return null;
     }
+
+    const effectiveUpload = await readEffectiveUpload(args.req.file, runtime.maxInputBytes);
 
     const finishDiagnostics = runtime.diagnostics.start({
       collection: collectionSlug,
       height: args.data?.height,
-      inputBytes: args.req.file.data.length,
+      inputBytes: effectiveUpload.inputBytes,
       logger: args.req.payload.logger,
       mimeType: args.data?.mimeType,
       width: args.data?.width,
     });
 
+    if ("code" in effectiveUpload) {
+      finishDiagnostics({ code: effectiveUpload.code, status: "failed" });
+      return null;
+    }
+
     try {
       const outcome = await runtime.generator.generate({
-        input: args.req.file.data,
+        input: effectiveUpload.input,
         mimeType: args.data?.mimeType,
         sharp,
       });
@@ -432,6 +463,7 @@ export const blurHashPlugin = (options: BlurHashPluginOptions): Plugin => {
       diagnostics: createGenerationDiagnostics(resolvedOptions.debug),
       enabled: resolvedOptions.enabled,
       generator,
+      maxInputBytes: resolvedOptions.limits.maxInputBytes,
       sharp: config.sharp,
     };
 
