@@ -7,7 +7,12 @@ const composeProject = `payload-blurhash-compat-${runID}`;
 const builtImages = [];
 
 const runDocker = (arguments_) =>
-  runCommand({ arguments_, command: "docker", cwd: repositoryDirectory });
+  runCommand({
+    arguments_,
+    command: "docker",
+    cwd: repositoryDirectory,
+    env: { ...process.env, LOCALSTACK_PORT: "0" },
+  });
 
 const runLane = async (lane) => {
   const image = `${composeProject}-${lane.name}`;
@@ -49,6 +54,7 @@ try {
     arguments_: ["--filter", "@codlume/payload-blurhash", "build"],
     command: "pnpm",
     cwd: repositoryDirectory,
+    env: process.env,
   });
   await runDocker(["compose", "-p", composeProject, "up", "-d", "--wait", "localstack"]);
   const laneResults = await Promise.allSettled(compatibilityLanes.map(runLane));

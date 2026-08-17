@@ -156,6 +156,7 @@ try {
     arguments_: ["install", "--lockfile-only", "--strict-peer-dependencies"],
     command: "pnpm",
     cwd: consumerDirectory,
+    env: process.env,
   });
   await access(path.join(consumerDirectory, "pnpm-lock.yaml"));
   await rm(path.join(consumerDirectory, "node_modules"), { force: true, recursive: true });
@@ -165,6 +166,7 @@ try {
     arguments_: ["install", "--frozen-lockfile", "--strict-peer-dependencies"],
     command: "pnpm",
     cwd: consumerDirectory,
+    env: process.env,
   });
 
   console.log(`[${lane.name}] Checking the installed tarball and pinned dependency graph...`);
@@ -172,6 +174,7 @@ try {
     arguments_: ["--test", "tests/compat/installed-package.test.mjs"],
     command: process.execPath,
     cwd: consumerDirectory,
+    env: process.env,
   });
   const lockfile = await readFile(path.join(consumerDirectory, "pnpm-lock.yaml"), "utf8");
   assert.doesNotMatch(lockfile, /workspace:/u);
@@ -181,6 +184,7 @@ try {
     arguments_: ["exec", "tsc", "--noEmit"],
     command: "pnpm",
     cwd: consumerDirectory,
+    env: process.env,
   });
 
   console.log(`[${lane.name}] Running configuration, lifecycle, decoder, and storage checks...`);
@@ -195,6 +199,7 @@ try {
     ],
     command: "pnpm",
     cwd: consumerDirectory,
+    env: process.env,
   });
 
   console.log(`[${lane.name}] Checking generated artifacts...`);
@@ -202,10 +207,16 @@ try {
     arguments_: ["--test", "tests/build/generated-artifacts.test.mjs"],
     command: process.execPath,
     cwd: consumerDirectory,
+    env: process.env,
   });
 
   console.log(`[${lane.name}] Building the shared application for production...`);
-  await runCommand({ arguments_: ["build"], command: "pnpm", cwd: consumerDirectory });
+  await runCommand({
+    arguments_: ["build"],
+    command: "pnpm",
+    cwd: consumerDirectory,
+    env: process.env,
+  });
   console.log(`[${lane.name}] Compatibility lane passed.`);
 } finally {
   if (temporaryDirectory) {

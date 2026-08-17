@@ -15,6 +15,6 @@ services:
       retries: 30
       start_period: 5s
     ports:
-      - "4566:4566"
+      - "${LOCALSTACK_PORT:-4566}:4566"
     volumes:
       - ./infra/localstack/ready.d:/etc/localstack/init/ready.d:ro
