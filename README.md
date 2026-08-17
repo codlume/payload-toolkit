@@ -58,11 +58,31 @@ their cleanup only deletes the prefix owned by that run.
 - `pnpm test:unit` runs unit-test scripts across the workspace.
 - `pnpm test:integration` runs integration-test scripts across the workspace.
 - `pnpm test:e2e` runs end-to-end-test scripts across the workspace.
+- `pnpm test:limits` builds a controlled Linux image, caps it at 2 vCPU and
+  2 GiB, and records the BlurHash resource-limit evidence described below.
 - `pnpm ready` runs every non-mutating validation command above and is the
   authoritative local readiness check.
 
 The test commands discover participating projects by their corresponding
 `package.json` script. Projects without that script are skipped.
+
+### Resource-limit evidence
+
+`pnpm test:limits` checks the default 25 MiB compressed-byte, 40-million-pixel,
+16,384-pixel-side, ten-second timeout, and concurrency-two boundaries. It then
+runs one warm-up and five recorded executions for each successful boundary
+workload, including two concurrent inputs that each combine the 40-million-pixel
+and 25 MiB limits. Successful work must finish within five seconds, two
+concurrent generations must stay below 1.5 GiB of total process memory, and the
+plugin queue must never observe more than two active generations.
+
+The gate writes `artifacts/limits/blurhash-limits.json` with decode, queue, and
+total durations, outcome codes, input sizes, dimensions, and peak memory. Its
+large fixtures are generated in an owned temporary directory inside the
+container and removed whether the gate succeeds or fails. The evidence
+directory is ignored by Git and can be uploaded by CI without changing the
+working tree. This controlled gate is intentionally separate from ordinary
+local readiness.
 
 ## Payload application modes and storage
 

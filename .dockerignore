@@ -1,0 +1,9 @@
+.git
+.github
+.next*
+.payload
+artifacts
+dist
+node_modules
+playwright-report
+test-results

@@ -13,6 +13,7 @@
     "test:build": "pnpm --filter @codlume/payload-blurhash test:build && pnpm --filter @codlume/payload-cms test:generated && pnpm --filter @codlume/payload-cms build",
     "test:e2e": "vp run -r test:e2e",
     "test:integration": "vp run -r test:integration",
+    "test:limits": "node tests/limits/run.mjs",
     "test:unit": "vp run -r test:unit",
     "typecheck": "pnpm --filter @codlume/payload-blurhash build && vp check --no-fmt --no-lint"
   },

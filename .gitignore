@@ -1,4 +1,5 @@
 node_modules/
+/artifacts/
 packages/*/dist/
 apps/payload-cms/.payload/
 apps/payload-cms/.next*/
