@@ -331,18 +331,22 @@ test("generated import map resolves the named preview export", () => {
       path.join(consumerDirectory, "tsconfig.json"),
       `${JSON.stringify(typeScriptConfig, null, 2)}\n`,
     ),
+    writeFile(
+      path.join(consumerDirectory, "pnpm-workspace.yaml"),
+      "packages:\n  - .\n\nallowBuilds:\n  esbuild: true\n  sharp: true\n",
+    ),
   ]);
 };
 
 const verifyCleanConsumer = async (consumerDirectory) => {
   await run(
     pnpmCommand,
-    ["install", "--lockfile-only", "--ignore-workspace", "--strict-peer-dependencies"],
+    ["install", "--lockfile-only", "--strict-peer-dependencies"],
     consumerDirectory,
   );
   await run(
     pnpmCommand,
-    ["install", "--frozen-lockfile", "--ignore-workspace", "--strict-peer-dependencies"],
+    ["install", "--frozen-lockfile", "--strict-peer-dependencies"],
     consumerDirectory,
   );
   await run(pnpmCommand, ["exec", "tsc", "--noEmit"], consumerDirectory);

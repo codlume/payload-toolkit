@@ -5,9 +5,9 @@ Payload Toolkit is a collection of independently released plugins for
 workspace where those plugins and the applications that exercise them will be
 developed.
 
-The workspace currently contains the first private plugin slice and the private
-Payload application that exercises it. Both remain unreleased while the full
-BlurHash contract and distribution checks are completed.
+The workspace currently contains the private BlurHash plugin and the private
+Payload application that exercises it. The plugin is implementation-complete
+but remains unpublished; release automation and npm publication are deferred.
 
 ## Prerequisites
 
@@ -21,6 +21,7 @@ Corepack shim, then install the committed dependency graph:
 ```sh
 corepack enable
 pnpm install --frozen-lockfile
+pnpm browsers:install
 ```
 
 ## Workspace layout
@@ -54,19 +55,33 @@ their cleanup only deletes the prefix owned by that run.
 - `pnpm fmt` formats supported files and sorts package manifests.
 - `pnpm fmt:check` checks formatting without changing files.
 - `pnpm lint` runs the shared type-aware Vite+ lint policy.
+- `pnpm browsers:install` installs the pinned Playwright Chromium build required
+  by end-to-end tests. CI adds `--with-deps` for clean Linux runners.
 - `pnpm typecheck` runs Vite+'s integrated TypeScript checker.
 - `pnpm test:unit` runs unit-test scripts across the workspace.
 - `pnpm test:integration` runs integration-test scripts across the workspace.
 - `pnpm test:e2e` runs end-to-end-test scripts across the workspace.
+- `pnpm test:build` checks package entry-point isolation, generated Payload
+  artifacts, and the workspace application's production build.
+- `pnpm test:pack` inspects the real package tarball and installs it in a clean
+  current-lane consumer without workspace hoisting.
 - `pnpm test:compat` builds isolated Linux consumers for the minimum Node
   22.12.0 and current Node 24.13.1 lanes. Each installs the real plugin tarball
   with Payload 3.88.0 and the exact host dependency pins, then exercises the
   shared application source through configuration, lifecycle, decoder, S3,
-  generated-artifact, type, and production-build checks.
+  generated-artifact, type, and production-build checks. Pass `minimum` or
+  `current` to run one lane, such as `pnpm test:compat minimum`.
 - `pnpm test:limits` builds a controlled Linux image, caps it at 2 vCPU and
   2 GiB, and records the BlurHash resource-limit evidence described below.
-- `pnpm ready` runs every non-mutating validation command above and is the
-  authoritative local readiness check.
+- `pnpm ready` is the authoritative current-lane readiness check. It runs
+  formatting checks, linting, type-checking, unit, integration, end-to-end,
+  build/generated-artifact, and pack checks without rewriting source files.
+  Compatibility lanes and controlled resource measurements remain explicit
+  commands because they use isolated or hardware-bounded Docker environments.
+
+Pull requests and default-branch pushes run `pnpm ready` against the pinned
+LocalStack service and run `pnpm test:compat minimum` in a parallel job. CI and
+local development therefore use the same root commands.
 
 The test commands discover participating projects by their corresponding
 `package.json` script. Projects without that script are skipped.

@@ -146,12 +146,15 @@ From the repository root:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @codlume/payload-blurhash build
-pnpm --filter @codlume/payload-blurhash test:unit
-pnpm --filter @codlume/payload-blurhash test:build
-pnpm test:pack
-pnpm test:compat
+pnpm browsers:install
+pnpm services:up
+pnpm ready
+pnpm services:down
 ```
+
+`ready` is the authoritative current-lane check. It covers formatting, linting,
+types, unit and integration behavior, Admin end-to-end behavior, generated
+artifacts, the production application build, and the clean tarball consumer.
 
 `test:pack` builds and inspects the packed contents, creates a real tarball, and
 installs it in a temporary clean Payload consumer to verify runtime entries,
@@ -161,6 +164,10 @@ declarations, import-map resolution, and Payload initialization.
 workspace application's source into it, generates and freezes its dependency
 lockfile, installs the real plugin tarball, and runs the contract-critical
 Payload and production-build checks without workspace hoisting.
+`pnpm test:compat minimum` or `pnpm test:compat current` runs one lane. CI runs
+the minimum lane in parallel with current-lane readiness. Controlled resource
+measurement remains available separately through `pnpm test:limits` and is not
+part of ordinary readiness.
 
 ## License
 

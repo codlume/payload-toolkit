@@ -2,6 +2,19 @@ import { runCommand } from "./run-command.mjs";
 import { compatibilityLanes } from "./versions.mjs";
 
 const repositoryDirectory = new URL("../../", import.meta.url);
+const requestedLaneName = process.argv[2];
+const selectedLanes = requestedLaneName
+  ? compatibilityLanes.filter(({ name }) => name === requestedLaneName)
+  : compatibilityLanes;
+
+if (selectedLanes.length === 0) {
+  throw new Error(
+    `Unknown compatibility lane "${requestedLaneName}". Expected one of: ${compatibilityLanes
+      .map(({ name }) => name)
+      .join(", ")}.`,
+  );
+}
+
 const runID = `${Date.now()}-${process.pid}`;
 const composeProject = `payload-blurhash-compat-${runID}`;
 const builtImages = [];
@@ -57,7 +70,7 @@ try {
     env: process.env,
   });
   await runDocker(["compose", "-p", composeProject, "up", "-d", "--wait", "localstack"]);
-  const laneResults = await Promise.allSettled(compatibilityLanes.map(runLane));
+  const laneResults = await Promise.allSettled(selectedLanes.map(runLane));
   const failedLane = laneResults.find(({ status }) => status === "rejected");
 
   if (failedLane) {
