@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runCommand } from "./run-command.mjs";
 import { compatibilityLanes, dependencyVersions, pnpmVersion } from "./versions.mjs";
 
 const repositoryDirectory = fileURLToPath(new URL("../../", import.meta.url));
@@ -32,25 +33,6 @@ assert.equal(expectedNodeVersion, lane.node);
 assert.equal(expectedPayloadVersion, lane.payload);
 assert.equal(process.version, `v${lane.node}`);
 assert.equal(dependencyVersions.payload, lane.payload);
-
-const run = ({ arguments_, command, cwd }) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, arguments_, {
-      cwd,
-      env: process.env,
-      stdio: "inherit",
-    });
-
-    child.on("error", reject);
-    child.on("exit", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`${command} ${arguments_.join(" ")} exited with ${code ?? signal}`));
-    });
-  });
 
 const pack = (destination) =>
   new Promise((resolve, reject) => {
@@ -170,7 +152,7 @@ try {
   );
 
   console.log(`[${lane.name}] Generating an isolated consumer lockfile...`);
-  await run({
+  await runCommand({
     arguments_: ["install", "--lockfile-only", "--strict-peer-dependencies"],
     command: "pnpm",
     cwd: consumerDirectory,
@@ -179,14 +161,14 @@ try {
   await rm(path.join(consumerDirectory, "node_modules"), { force: true, recursive: true });
 
   console.log(`[${lane.name}] Proving a clean frozen-lockfile installation...`);
-  await run({
+  await runCommand({
     arguments_: ["install", "--frozen-lockfile", "--strict-peer-dependencies"],
     command: "pnpm",
     cwd: consumerDirectory,
   });
 
   console.log(`[${lane.name}] Checking the installed tarball and pinned dependency graph...`);
-  await run({
+  await runCommand({
     arguments_: ["--test", "tests/compat/installed-package.test.mjs"],
     command: process.execPath,
     cwd: consumerDirectory,
@@ -195,14 +177,14 @@ try {
   assert.doesNotMatch(lockfile, /workspace:/u);
 
   console.log(`[${lane.name}] Type-checking the shared application source...`);
-  await run({
+  await runCommand({
     arguments_: ["exec", "tsc", "--noEmit"],
     command: "pnpm",
     cwd: consumerDirectory,
   });
 
   console.log(`[${lane.name}] Running configuration, lifecycle, decoder, and storage checks...`);
-  await run({
+  await runCommand({
     arguments_: [
       "exec",
       "vitest",
@@ -216,14 +198,14 @@ try {
   });
 
   console.log(`[${lane.name}] Checking generated artifacts...`);
-  await run({
+  await runCommand({
     arguments_: ["--test", "tests/build/generated-artifacts.test.mjs"],
     command: process.execPath,
     cwd: consumerDirectory,
   });
 
   console.log(`[${lane.name}] Building the shared application for production...`);
-  await run({ arguments_: ["build"], command: "pnpm", cwd: consumerDirectory });
+  await runCommand({ arguments_: ["build"], command: "pnpm", cwd: consumerDirectory });
   console.log(`[${lane.name}] Compatibility lane passed.`);
 } finally {
   if (temporaryDirectory) {

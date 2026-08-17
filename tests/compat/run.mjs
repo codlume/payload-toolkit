@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-
+import { runCommand } from "./run-command.mjs";
 import { compatibilityLanes } from "./versions.mjs";
 
 const repositoryDirectory = new URL("../../", import.meta.url);
@@ -7,26 +6,8 @@ const runID = `${Date.now()}-${process.pid}`;
 const composeProject = `payload-blurhash-compat-${runID}`;
 const builtImages = [];
 
-const run = ({ arguments_, command }) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, arguments_, {
-      cwd: repositoryDirectory,
-      env: process.env,
-      stdio: "inherit",
-    });
-
-    child.on("error", reject);
-    child.on("exit", (code, signal) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`${command} exited with ${code ?? signal}`));
-    });
-  });
-
-const runDocker = (arguments_) => run({ arguments_, command: "docker" });
+const runDocker = (arguments_) =>
+  runCommand({ arguments_, command: "docker", cwd: repositoryDirectory });
 
 const runLane = async (lane) => {
   const image = `${composeProject}-${lane.name}`;
@@ -64,9 +45,10 @@ const runLane = async (lane) => {
 };
 
 try {
-  await run({
+  await runCommand({
     arguments_: ["--filter", "@codlume/payload-blurhash", "build"],
     command: "pnpm",
+    cwd: repositoryDirectory,
   });
   await runDocker(["compose", "-p", composeProject, "up", "-d", "--wait", "localstack"]);
   const laneResults = await Promise.allSettled(compatibilityLanes.map(runLane));
