@@ -347,7 +347,11 @@ const verifyCleanConsumer = async (consumerDirectory) => {
   );
   await run(pnpmCommand, ["exec", "tsc", "--noEmit"], consumerDirectory);
   await run(pnpmCommand, ["exec", "payload", "generate:importmap"], consumerDirectory);
-  await run(process.execPath, ["--test", "assert-server.mjs"], consumerDirectory);
+  await run(
+    process.execPath,
+    ["--test", "--test-force-exit", "assert-server.mjs"],
+    consumerDirectory,
+  );
   await run(
     process.execPath,
     ["--experimental-loader", "./ignore-css-loader.mjs", "--test", "assert-client.mjs"],
