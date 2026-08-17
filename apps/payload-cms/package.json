@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "next build",
     "dev": "next dev",
     "generate:importmap": "payload generate:importmap --config src/payload.config.ts",
     "generate:types": "payload generate:types --config src/payload.config.ts",
-    "test:e2e": "node tests/e2e/run.mjs",
-    "test:integration": "vitest run tests/integration --maxWorkers=1"
+    "test:generated": "node --test tests/build/generated-artifacts.test.mjs",
+    "test:e2e": "pnpm --filter @codlume/payload-blurhash build && node tests/e2e/run.mjs",
+    "test:integration": "pnpm --filter @codlume/payload-blurhash build && vitest run tests/integration --maxWorkers=1"
   },
   "dependencies": {
     "@codlume/payload-blurhash": "workspace:*",

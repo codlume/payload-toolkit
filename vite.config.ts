@@ -8,6 +8,7 @@ const validationIgnorePatterns = [
   "generated",
   "node_modules",
   "pnpm-lock.yaml",
+  "apps/payload-cms/src/app/(payload)/admin/importMap.js",
   "*.tsbuildinfo",
   "**/*.generated.*",
   "**/generated/**",

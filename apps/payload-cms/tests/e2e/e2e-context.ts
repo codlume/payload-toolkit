@@ -37,7 +37,10 @@ export const createE2EPayload = async (mode: "disabled" | "enabled") => {
       debug: false,
     },
     databaseURL: `file:${path.join(stateDirectory, "payload.db")}`,
-    generatedTypesFile: path.join(stateDirectory, "payload-types.generated.ts"),
+    generatedFiles: {
+      importMap: path.join(stateDirectory, "importMap.js"),
+      types: path.join(stateDirectory, "payload-types.generated.ts"),
+    },
     mediaBeforeChangeHooks: [],
     mode: mode === "enabled" ? "enabled-in-memory" : "disabled-in-memory",
     storage: createS3TestStorage(`${s3Prefix}/${mode}`),

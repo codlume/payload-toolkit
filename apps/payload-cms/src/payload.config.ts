@@ -19,7 +19,12 @@ export default createAppConfig({
     debug: false,
   },
   databaseURL: `file:${path.join(stateDirectory, "payload.db")}`,
-  generatedTypesFile: path.resolve("src/payload-types.generated.ts"),
+  generatedFiles: {
+    importMap: path.resolve(
+      process.env.PAYLOAD_IMPORT_MAP_FILE ?? "src/app/(payload)/admin/importMap.js",
+    ),
+    types: path.resolve(process.env.PAYLOAD_TS_OUTPUT_PATH ?? "src/payload-types.generated.ts"),
+  },
   mediaBeforeChangeHooks: [],
   mode: configuredMode,
   storage: {

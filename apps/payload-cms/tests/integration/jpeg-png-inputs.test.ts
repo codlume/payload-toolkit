@@ -59,7 +59,10 @@ describe("JPEG and PNG inputs", () => {
     const config = await createAppConfig({
       blurHash: { alphaBackground: "default", debug: false },
       databaseURL: `file:${path.join(testDirectory, "payload.db")}`,
-      generatedTypesFile: path.join(testDirectory, "payload-types.generated.ts"),
+      generatedFiles: {
+        importMap: path.join(testDirectory, "importMap.js"),
+        types: path.join(testDirectory, "payload-types.generated.ts"),
+      },
       mediaBeforeChangeHooks: [],
       mode: "enabled-in-memory",
       storage: false,

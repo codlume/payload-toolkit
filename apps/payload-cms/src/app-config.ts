@@ -20,7 +20,10 @@ type AppConfigOptions = {
     debug: boolean;
   };
   databaseURL: string;
-  generatedTypesFile: string;
+  generatedFiles: {
+    importMap: string;
+    types: string;
+  };
   mediaBeforeChangeHooks: CollectionBeforeChangeHook[];
   mode: "disabled-in-memory" | "enabled-in-memory" | "enabled-temporary-file";
   storage: AppStorageOptions | false;
@@ -30,13 +33,18 @@ type AppConfigOptions = {
 export const createAppConfig = ({
   blurHash,
   databaseURL,
-  generatedTypesFile,
+  generatedFiles,
   mediaBeforeChangeHooks,
   mode,
   storage,
   uploadDirectory,
 }: AppConfigOptions) =>
   buildConfig({
+    admin: {
+      importMap: {
+        importMapFile: generatedFiles.importMap,
+      },
+    },
     collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users],
     db: sqliteAdapter({ client: { url: databaseURL } }),
     plugins: [
@@ -70,6 +78,6 @@ export const createAppConfig = ({
           }
         : {},
     typescript: {
-      outputFile: generatedTypesFile,
+      outputFile: generatedFiles.types,
     },
   });

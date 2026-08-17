@@ -6,16 +6,18 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     },
     "./client": {
-      "types": "./src/client.ts",
-      "import": "./src/client.ts"
+      "types": "./dist/client.d.mts",
+      "import": "./dist/client.mjs"
     }
   },
   "scripts": {
-    "test:unit": "vitest run tests/unit"
+    "build": "vp pack",
+    "test:build": "pnpm build && node --test tests/build/package-contract.test.mjs && vitest run tests/build/client-entry.test.ts",
+    "test:unit": "pnpm build && vitest run tests/unit"
   },
   "dependencies": {
     "blurhash": "2.0.5"
@@ -31,6 +33,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "sharp": "0.35.3",
+    "typescript": "5.9.3",
     "vitest": "4.1.9"
   },
   "peerDependencies": {
