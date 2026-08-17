@@ -1,0 +1,39 @@
+{
+  "name": "@codlume/payload-cms",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "generate:importmap": "payload generate:importmap --config src/payload.config.ts",
+    "generate:types": "payload generate:types --config src/payload.config.ts",
+    "test:generated": "node --test tests/build/generated-artifacts.test.mjs",
+    "test:e2e": "pnpm --filter @codlume/payload-blurhash build && node tests/e2e/run.mjs",
+    "test:integration": "pnpm --filter @codlume/payload-blurhash build && vitest run tests/integration --maxWorkers=1"
+  },
+  "dependencies": {
+    "@codlume/payload-blurhash": "workspace:*",
+    "@payloadcms/db-sqlite": "3.88.0",
+    "@payloadcms/next": "3.88.0",
+    "@payloadcms/storage-s3": "3.88.0",
+    "@payloadcms/ui": "3.88.0",
+    "graphql": "16.14.2",
+    "next": "15.4.11",
+    "payload": "3.88.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sharp": "0.35.3"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "3.1112.0",
+    "@aws-sdk/lib-storage": "3.1112.0",
+    "@playwright/test": "1.58.2",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.3",
+    "blurhash": "2.0.5",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

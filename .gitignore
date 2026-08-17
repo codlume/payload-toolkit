@@ -1,1 +1,9 @@
+.DS_Store
 node_modules/
+/artifacts/
+packages/*/dist/
+apps/payload-cms/.payload/
+apps/payload-cms/.next*/
+apps/payload-cms/playwright-report/
+apps/payload-cms/test-results/
+apps/payload-cms/tsconfig-e2e-*.json

@@ -23,3 +23,11 @@ _Avoid_: Payload plugin, production app
 **Internal library**:
 A non-published workspace package introduced only when multiple Payload plugins need to share an implementation.
 _Avoid_: Payload plugin, configuration package
+
+**BlurHash plugin**:
+The Payload plugin that enriches eligible images with a compact placeholder representation and exposes a static preview in Payload Admin.
+_Avoid_: Image optimizer, thumbnail generator, logger package
+
+**Eligible image**:
+A newly uploaded or replaced static raster asset in a configured media collection that the BlurHash plugin supports.
+_Avoid_: Media file, all uploads, existing media

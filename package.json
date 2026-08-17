@@ -3,15 +3,23 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "browsers:install": "pnpm --filter @codlume/payload-cms exec playwright install chromium",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "lint": "vp lint --deny-warnings --report-unused-disable-directives",
+    "prelint": "pnpm --filter @codlume/payload-blurhash build",
     "prepare": "vp config --no-agent",
-    "ready": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "ready": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:e2e && pnpm test:build && pnpm test:pack",
+    "services:down": "docker compose -f compose.yaml down --remove-orphans",
+    "services:up": "docker compose -f compose.yaml up -d --wait localstack",
+    "test:build": "pnpm --filter @codlume/payload-blurhash test:build && pnpm --filter @codlume/payload-cms test:generated && pnpm --filter @codlume/payload-cms build",
+    "test:compat": "node tests/compat/run.mjs",
     "test:e2e": "vp run -r test:e2e",
     "test:integration": "vp run -r test:integration",
+    "test:limits": "node tests/limits/run.mjs",
+    "test:pack": "pnpm --filter @codlume/payload-blurhash test:pack",
     "test:unit": "vp run -r test:unit",
-    "typecheck": "vp check --no-fmt --no-lint"
+    "typecheck": "pnpm --filter @codlume/payload-blurhash build && vp check --no-fmt --no-lint"
   },
   "devDependencies": {
     "vite-plus": "0.2.2"

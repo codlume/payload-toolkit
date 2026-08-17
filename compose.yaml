@@ -1,0 +1,20 @@
+name: payload-toolkit
+
+services:
+  localstack:
+    image: localstack/localstack:4.14.0
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_SECRET_ACCESS_KEY: test
+      SERVICES: s3
+    healthcheck:
+      test: ["CMD", "awslocal", "s3api", "head-bucket", "--bucket", "payload-blurhash"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    ports:
+      - "${LOCALSTACK_PORT:-4566}:4566"
+    volumes:
+      - ./infra/localstack/ready.d:/etc/localstack/init/ready.d:ro

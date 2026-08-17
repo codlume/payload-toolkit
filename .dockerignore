@@ -1,0 +1,11 @@
+.git
+.github
+**/.next*
+**/.payload
+artifacts
+**/dist
+!packages/payload-blurhash/dist
+!packages/payload-blurhash/dist/**
+**/node_modules
+**/playwright-report
+**/test-results

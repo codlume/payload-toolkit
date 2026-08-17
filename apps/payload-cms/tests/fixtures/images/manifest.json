@@ -1,0 +1,525 @@
+{
+  "corpusLicense": "MIT",
+  "generatedBy": {
+    "av1Encoder": "libsvtav1",
+    "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "generator": "tests/fixtures/images/generate.mjs@2",
+    "libvips": "8.18.3",
+    "node": "v24.13.1",
+    "sharp": "0.35.3"
+  },
+  "provenance": "Procedurally generated for Payload Toolkit from original pixel patterns; no third-party image source was used.",
+  "fixtures": [
+    {
+      "bytes": 365,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["AVIF image item", "10-bit AV1"],
+      "mime": "image/avif",
+      "name": "avif-10-bit.avif",
+      "sha256": "a38594a7c9514c5c093c9ab691ccc6d87e3110bcbce10b799324709ae90337b3"
+    },
+    {
+      "bytes": 365,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["AVIF image item", "8-bit AV1"],
+      "mime": "image/avif",
+      "name": "avif-8-bit.avif",
+      "sha256": "7d79721eea964dcbabec8c56428f448ed15e27223d21a96e557dcf41a8e0fe1f"
+    },
+    {
+      "bytes": 365,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["ISOBMFF file type box", "missing AVIF image or sequence brand"],
+      "mime": "image/avif",
+      "name": "avif-malformed-brand.avif",
+      "sha256": "885bfab0693e06d5c59bd6bea99ef99df1960c10bcf4c14ca17795d64b6646d0"
+    },
+    {
+      "bytes": 365,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["AVIF image item", "primary item identifier is not declared"],
+      "mime": "image/avif",
+      "name": "avif-malformed-primary-item.avif",
+      "sha256": "d720af5ac2211f0260688b5ebd5ccb60855be20c60ac8add2f26e768c1d6ca63"
+    },
+    {
+      "bytes": 524,
+      "dimensions": {
+        "height": 48,
+        "width": 40
+      },
+      "expected": "animated_input",
+      "facts": [
+        "AVIF image collection",
+        "two independent AV1 image items",
+        "no auxiliary relation"
+      ],
+      "mime": "image/avif",
+      "name": "avif-multiple-images.avif",
+      "sha256": "3a841bb7dd17d686ff64e7bf93f1c1db27a4c0e66a506ed5845a6dbb280a1b46"
+    },
+    {
+      "bytes": 1075,
+      "dimensions": null,
+      "expected": "animated_input",
+      "facts": ["AVIF sequence", "avis major brand", "two AV1 samples"],
+      "mime": "image/avif",
+      "name": "avif-sequence.avif",
+      "sha256": "394317d89ab88c89c82be47fce8d7fb663674df009612ef599ddded518b804d5"
+    },
+    {
+      "bytes": 182,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["AVIF file type box", "truncated meta box"],
+      "mime": "image/avif",
+      "name": "avif-truncated.avif",
+      "sha256": "89bc9349da8260a25112e41a5fddf34ac6ec130b22cfc201895f5a764950b52b"
+    },
+    {
+      "bytes": 578,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "RGB", "no EXIF orientation"],
+      "mime": "image/jpeg",
+      "name": "jpeg-baseline.jpg",
+      "sha256": "4f4165b230aa8bf5fbf1ed4bc91e0ba19918c99c75f12e55a061cd6cba1b0f88"
+    },
+    {
+      "bytes": 639,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "CMYK"],
+      "mime": "image/jpeg",
+      "name": "jpeg-cmyk.jpg",
+      "sha256": "b21e62597297d02aeea10b4a874ae015401d3608ae12d20f623e573d4899559a"
+    },
+    {
+      "bytes": 934,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "grayscale"],
+      "mime": "image/jpeg",
+      "name": "jpeg-grayscale.jpg",
+      "sha256": "a72b787a9408333a30dc658f57f83480c5da24aa376e74ed9cb93910201e4a7a"
+    },
+    {
+      "bytes": 1058,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "embedded Display P3 ICC profile"],
+      "mime": "image/jpeg",
+      "name": "jpeg-icc-p3.jpg",
+      "sha256": "b1a6a3491da6eb94822da9b337ab9d8160aca666beb3520e07ff0cded5cffe94"
+    },
+    {
+      "bytes": 603,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "malformed_container",
+      "facts": ["decodable JPEG", "bytes after EOI"],
+      "mime": "image/jpeg",
+      "name": "jpeg-malformed.jpg",
+      "sha256": "9b59cf2f4d9bda86b8d4271760cd6fee54e0f1bec2235bf530f36f9ff0470b92"
+    },
+    {
+      "bytes": 580,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 2"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-2-reference.jpg",
+      "sha256": "829d1d962405d6b0dbff3bd366d1f8e8408a575c1bd03abfc1133cf41fe453e3"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 2"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-2.jpg",
+      "sha256": "d44fde21151e6cf63853a1e49b036a17e1f4014b16cf43a5556e00de7692f3bd"
+    },
+    {
+      "bytes": 580,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 3"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-3-reference.jpg",
+      "sha256": "ebcbdf2bb1a3cb97324064bf76157ee132e1f42d419fffc842959d3e0a5efbfd"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 3"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-3.jpg",
+      "sha256": "775eecc8b7f5767a104683da80173bd0c545bb76ee4dc757dcc4641b3e93c2c1"
+    },
+    {
+      "bytes": 580,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 4"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-4-reference.jpg",
+      "sha256": "efbc1566d89bfc1f64658f86956c86759c4a041a30d04f8c058d3c3ecb59a50d"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 4"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-4.jpg",
+      "sha256": "1bf7f74ed1f0b0e93f1d242b016d3cefb9dcfacf79442d9e86b45bce10c30cd4"
+    },
+    {
+      "bytes": 590,
+      "dimensions": {
+        "height": 40,
+        "width": 24
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 5"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-5-reference.jpg",
+      "sha256": "1079cbf2f9574e88f10ab0151a0613705da1e643f3c39b9d983203b88a0fe432"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 5"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-5.jpg",
+      "sha256": "67e16d3fb740514a0274491e0fe4a7dcf85a4ba9424166fa6cc7175026720823"
+    },
+    {
+      "bytes": 590,
+      "dimensions": {
+        "height": 40,
+        "width": 24
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 6"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-6-reference.jpg",
+      "sha256": "aaf4499c090c0b1f97c95c0f8ca2b4387d425d4f7ad79961d4d52729e2cc7c84"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 6"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-6.jpg",
+      "sha256": "bdec5ed29c62dfab195d94f75614027ea2fbac9c7d8f296e5614523c4d052603"
+    },
+    {
+      "bytes": 591,
+      "dimensions": {
+        "height": 40,
+        "width": 24
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 7"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-7-reference.jpg",
+      "sha256": "634c47667e54705ca00855a3e60d4a07cd0bf87a716487b742679f5cec040b33"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 7"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-7.jpg",
+      "sha256": "f3e6bd25fc86cc5451f487b2fea12c355c0756d2a0070e536e48e158c11f69bd"
+    },
+    {
+      "bytes": 590,
+      "dimensions": {
+        "height": 40,
+        "width": 24
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "pixels normalized for EXIF orientation 8"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-8-reference.jpg",
+      "sha256": "06e7afbbcc2b2d6c500363a509b3167ae39dec45f01b516cce0eb925ba4198c8"
+    },
+    {
+      "bytes": 768,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["baseline DCT", "EXIF orientation 8"],
+      "mime": "image/jpeg",
+      "name": "jpeg-orientation-8.jpg",
+      "sha256": "60e41ae531eb4010a1895c791aa9276f530ef336de8ff5e84580af7a3785168f"
+    },
+    {
+      "bytes": 826,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["progressive DCT", "RGB"],
+      "mime": "image/jpeg",
+      "name": "jpeg-progressive.jpg",
+      "sha256": "7e6f488490bd939075afee4e52b7686368a78005f0af9c1ba54bc49c2541b8ee"
+    },
+    {
+      "bytes": 289,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["JPEG signature", "truncated entropy data", "missing EOI"],
+      "mime": "image/jpeg",
+      "name": "jpeg-truncated.jpg",
+      "sha256": "420bc9fbc7a5be58914a6018bd3e2bd4f48a1378c95146ed5dcbfe7b840cb6d7"
+    },
+    {
+      "bytes": 170,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "animated_input",
+      "facts": ["PNG", "APNG acTL", "one frame"],
+      "mime": "image/png",
+      "name": "png-actl-single-frame.png",
+      "sha256": "60197e01ed49579f57872f90b4256c864e12cecbedc5fad33bffac80bc00f791"
+    },
+    {
+      "bytes": 183,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["PNG", "RGB", "alpha fixture composited against black"],
+      "mime": "image/png",
+      "name": "png-alpha-black-reference.png",
+      "sha256": "8000769a430360e6ce17158f4039781873505f9147fb8f40298facd488aab803"
+    },
+    {
+      "bytes": 185,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["PNG", "RGBA", "transparent pixels retain hidden blue RGB"],
+      "mime": "image/png",
+      "name": "png-alpha-hidden-blue.png",
+      "sha256": "ad41d0dce3c662756d13a67c978d5a484e33e549f48ba4df61189d3def868678"
+    },
+    {
+      "bytes": 184,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["PNG", "RGBA", "transparent pixels retain hidden red RGB"],
+      "mime": "image/png",
+      "name": "png-alpha-hidden-red.png",
+      "sha256": "988e63a216a3ba7df53d1aa7f1da848bd84efd91f15550344a901480b201dbe8"
+    },
+    {
+      "bytes": 184,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["PNG", "RGB", "alpha fixture composited against white"],
+      "mime": "image/png",
+      "name": "png-alpha-white-reference.png",
+      "sha256": "bec8bcfe922f628806f58b57a7436d4378f85fa2bffef992abb3f8b75099f8f9"
+    },
+    {
+      "bytes": 280,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "animated_input",
+      "facts": ["PNG", "APNG acTL", "two frames"],
+      "mime": "image/png",
+      "name": "png-apng-two-frame.png",
+      "sha256": "53cf21312910462cce7486d1e31d099caeb273dea1a63df65ab790a1b458483d"
+    },
+    {
+      "bytes": 347,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "malformed_container",
+      "facts": ["PNG signature", "invalid IEND CRC"],
+      "mime": "image/png",
+      "name": "png-bad-crc.png",
+      "sha256": "df954224558c209f18cf2ef1d462c5884d9912a3722f3474f7cbc6d725bfe46c"
+    },
+    {
+      "bytes": 347,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["PNG", "RGB", "opaque"],
+      "mime": "image/png",
+      "name": "png-opaque.png",
+      "sha256": "a9ab198f46daa808827ac17f8694e26abec1c36ca42bc727f42bc408f0fd65a2"
+    },
+    {
+      "bytes": 362,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "malformed_container",
+      "facts": ["PNG", "PLTE after IDAT", "valid chunk CRCs"],
+      "mime": "image/png",
+      "name": "png-plte-after-idat.png",
+      "sha256": "888ff9c81b431a73d6b6a5620bf3aa820d300582c2a910a6a8a24d70f980096f"
+    },
+    {
+      "bytes": 339,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "malformed_container",
+      "facts": ["PNG signature", "missing IEND"],
+      "mime": "image/png",
+      "name": "png-truncated.png",
+      "sha256": "ae6a7b125b284697f40e142d5978ce95916195ecf26458b018aee20796fbae76"
+    },
+    {
+      "bytes": 302,
+      "dimensions": {
+        "height": 48,
+        "width": 40
+      },
+      "expected": "animated_input",
+      "facts": ["WebP", "VP8X animation flag", "ANIM chunk", "two ANMF frames"],
+      "mime": "image/webp",
+      "name": "webp-animated.webp",
+      "sha256": "f6f09e928319f3e7b0fc87b248101b5f6d1f331a3f9969d5132e73c8900fcddc"
+    },
+    {
+      "bytes": 176,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["WebP RIFF signature", "declared RIFF size exceeds input"],
+      "mime": "image/webp",
+      "name": "webp-bad-riff-size.webp",
+      "sha256": "04120775085d05461d68c3df553e7e0f5ab595670af3c39794c500eddbd2dc9f"
+    },
+    {
+      "bytes": 180,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["WebP", "extended VP8X image", "alpha channel"],
+      "mime": "image/webp",
+      "name": "webp-extended-alpha.webp",
+      "sha256": "e4fc1a0eee94db269382681c81c0c3500990bd97b87a22eb5d063fd0799ffe36"
+    },
+    {
+      "bytes": 108,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["WebP", "simple VP8L lossless image"],
+      "mime": "image/webp",
+      "name": "webp-lossless.webp",
+      "sha256": "1c5cdda93528126dc6ebc52ae40f9a87d49bfe6cb52dceed18aad7d5767e9fe5"
+    },
+    {
+      "bytes": 176,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["WebP", "simple VP8 lossy image"],
+      "mime": "image/webp",
+      "name": "webp-lossy.webp",
+      "sha256": "cb78d7c430f4288b518815cec52f5703ca226a5e6e80aa76ff500aff20fdf4b8"
+    },
+    {
+      "bytes": 174,
+      "dimensions": null,
+      "expected": "malformed_container",
+      "facts": ["WebP RIFF signature", "truncated VP8 payload"],
+      "mime": "image/webp",
+      "name": "webp-truncated.webp",
+      "sha256": "c0477d251e528c3034e016122ed045b921d2504cf37d2a2847ddd062ecfc1b94"
+    }
+  ]
+}

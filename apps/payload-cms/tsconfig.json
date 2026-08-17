@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "jsx": "preserve",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@payload-config": ["./src/payload.config.ts"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "incremental": true
+  },
+  "extends": "../../tsconfig.base.json",
+  "include": [".next/types/**/*.ts", "next-env.d.ts", "src/**/*", "tests/**/*"],
+  "exclude": ["node_modules"]
+}
