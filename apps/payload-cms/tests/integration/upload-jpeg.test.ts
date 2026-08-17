@@ -16,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from "vites
 import { createAppConfig } from "../../src/app-config.ts";
 import type { Media } from "../../src/payload-types.generated.ts";
 import { createJpegFixture } from "./image-fixtures.ts";
-import { readStoredMedia } from "./rest-response.ts";
+import { reuploadStoredMediaAndCompareHash } from "./rest-response.ts";
 
 const CALLER_SUPPLIED_HASH = "caller-supplied";
 const failBlurHashGeneration: CollectionBeforeChangeHook = ({ context, data, req }) => {
@@ -96,21 +96,11 @@ describe("BlurHash upload lifecycle", () => {
       throw new TypeError("Expected stored media metadata.");
     }
 
-    const stored = await readStoredMedia(payload.config, media.filename);
-    const repeated = await payload.create({
-      collection: "media",
-      data: {},
-      file: {
-        data: stored,
-        mimetype: media.mimeType,
-        name: `stored-${media.filename}`,
-        size: stored.length,
-      },
-    });
+    const effectiveBytes = await reuploadStoredMediaAndCompareHash(payload, media);
 
     expect({
       hash: media.blurHash,
-      hashMatchesStoredBytes: media.blurHash === repeated.blurHash,
+      hashMatchesStoredBytes: effectiveBytes.hashMatchesStoredBytes,
       length: media.blurHash?.length,
       validation: isBlurhashValid(media.blurHash ?? ""),
     }).toEqual({

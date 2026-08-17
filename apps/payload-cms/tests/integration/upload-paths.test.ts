@@ -15,7 +15,7 @@ import {
   s3TestBucket,
 } from "../s3-test-context.ts";
 import { createJpegFixture } from "./image-fixtures.ts";
-import { readCreatedMedia, readStoredMedia } from "./rest-response.ts";
+import { readCreatedMedia, reuploadStoredMediaAndCompareHash } from "./rest-response.ts";
 
 const describeBlurHash = (value: string) => ({
   decodedBytes: decode(value, 4, 3).length,
@@ -28,37 +28,6 @@ describe("official upload paths", () => {
   let payload: Payload;
   let s3Prefix: string;
   let testDirectory: string;
-
-  const describeEffectiveBytes = async (media: {
-    blurHash?: null | string | undefined;
-    filename?: null | string | undefined;
-    mimeType?: null | string | undefined;
-  }) => {
-    if (
-      typeof media.blurHash !== "string" ||
-      typeof media.filename !== "string" ||
-      typeof media.mimeType !== "string"
-    ) {
-      throw new TypeError("Expected generated media metadata.");
-    }
-
-    const stored = await readStoredMedia(payload.config, media.filename);
-    const repeated = await payload.create({
-      collection: "media",
-      data: {},
-      file: {
-        data: stored,
-        mimetype: media.mimeType,
-        name: `stored-${media.filename}`,
-        size: stored.length,
-      },
-    });
-
-    return {
-      hashMatchesStoredBytes: media.blurHash === repeated.blurHash,
-      storedMimeType: media.mimeType,
-    };
-  };
 
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-upload-paths-"));
@@ -121,7 +90,7 @@ describe("official upload paths", () => {
       ? Buffer.from(await object.Body.transformToByteArray())
       : undefined;
     client.destroy();
-    const effectiveBytes = await describeEffectiveBytes(media);
+    const effectiveBytes = await reuploadStoredMediaAndCompareHash(payload, media);
 
     expect({
       documentHash: describeBlurHash(media.blurHash ?? ""),
@@ -154,7 +123,7 @@ describe("official upload paths", () => {
       }),
     });
     const media = await readCreatedMedia(response);
-    const effectiveBytes = await describeEffectiveBytes(media);
+    const effectiveBytes = await reuploadStoredMediaAndCompareHash(payload, media);
 
     expect({
       blurHash: describeBlurHash(media.blurHash),
@@ -205,7 +174,7 @@ describe("official upload paths", () => {
       }),
     });
     const media = await readCreatedMedia(response);
-    const effectiveBytes = await describeEffectiveBytes(media);
+    const effectiveBytes = await reuploadStoredMediaAndCompareHash(payload, media);
 
     expect({
       blurHash: describeBlurHash(media.blurHash),

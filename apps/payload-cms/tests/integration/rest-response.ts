@@ -1,4 +1,10 @@
-import { handleEndpoints, type SanitizedConfig } from "payload";
+import { handleEndpoints, type Payload, type SanitizedConfig } from "payload";
+
+type StoredMedia = {
+  blurHash?: null | string | undefined;
+  filename?: null | string | undefined;
+  mimeType?: null | string | undefined;
+};
 
 export const readCreatedMedia = async (response: Response) => {
   const result: unknown = await response.json();
@@ -32,4 +38,31 @@ export const readStoredMedia = async (config: SanitizedConfig, filename: string)
   }
 
   return Buffer.from(await response.arrayBuffer());
+};
+
+export const reuploadStoredMediaAndCompareHash = async (payload: Payload, media: StoredMedia) => {
+  if (
+    typeof media.blurHash !== "string" ||
+    typeof media.filename !== "string" ||
+    typeof media.mimeType !== "string"
+  ) {
+    throw new TypeError("Expected generated media metadata.");
+  }
+
+  const stored = await readStoredMedia(payload.config, media.filename);
+  const repeated = await payload.create({
+    collection: "media",
+    data: {},
+    file: {
+      data: stored,
+      mimetype: media.mimeType,
+      name: `stored-${media.filename}`,
+      size: stored.length,
+    },
+  });
+
+  return {
+    hashMatchesStoredBytes: media.blurHash === repeated.blurHash,
+    storedMimeType: media.mimeType,
+  };
 };
