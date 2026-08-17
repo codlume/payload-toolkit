@@ -102,7 +102,7 @@ test("Payload import map matches the committed Admin components", async () => {
 test("Admin preview resolves through the installed package client export", () => {
   assert.ok(
     fileURLToPath(import.meta.resolve("@codlume/payload-blurhash/client")).endsWith(
-      path.join("packages", "payload-blurhash", "dist", "client.mjs"),
+      path.join("dist", "client.mjs"),
     ),
   );
 });

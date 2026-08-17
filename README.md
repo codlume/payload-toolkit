@@ -58,6 +58,11 @@ their cleanup only deletes the prefix owned by that run.
 - `pnpm test:unit` runs unit-test scripts across the workspace.
 - `pnpm test:integration` runs integration-test scripts across the workspace.
 - `pnpm test:e2e` runs end-to-end-test scripts across the workspace.
+- `pnpm test:compat` builds isolated Linux consumers for the minimum Node
+  22.12.0 and current Node 24.13.1 lanes. Each installs the real plugin tarball
+  with Payload 3.88.0 and the exact host dependency pins, then exercises the
+  shared application source through configuration, lifecycle, decoder, S3,
+  generated-artifact, type, and production-build checks.
 - `pnpm test:limits` builds a controlled Linux image, caps it at 2 vCPU and
   2 GiB, and records the BlurHash resource-limit evidence described below.
 - `pnpm ready` runs every non-mutating validation command above and is the

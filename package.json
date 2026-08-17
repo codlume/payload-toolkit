@@ -11,6 +11,7 @@
     "services:down": "docker compose -f compose.yaml down --remove-orphans",
     "services:up": "docker compose -f compose.yaml up -d --wait localstack",
     "test:build": "pnpm --filter @codlume/payload-blurhash test:build && pnpm --filter @codlume/payload-cms test:generated && pnpm --filter @codlume/payload-cms build",
+    "test:compat": "node tests/compat/run.mjs",
     "test:e2e": "vp run -r test:e2e",
     "test:integration": "vp run -r test:integration",
     "test:limits": "node tests/limits/run.mjs",

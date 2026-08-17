@@ -22,6 +22,9 @@ passed to Payload instead of installing or configuring its own decoder.
 - Sharp 0.35.3 in the currently tested application lanes
 
 Payload 4, Node 20, and versions outside the verified lanes are not supported.
+The compatibility gate installs the real package tarball with Payload 3.88.0
+against Node 22.12.0 and Node 24.13.1. Payload 3.88.0 was the newest stable
+release below 4 when these pins were selected.
 
 ## Configuration
 
@@ -147,11 +150,17 @@ pnpm --filter @codlume/payload-blurhash build
 pnpm --filter @codlume/payload-blurhash test:unit
 pnpm --filter @codlume/payload-blurhash test:build
 pnpm test:pack
+pnpm test:compat
 ```
 
 `test:pack` builds and inspects the packed contents, creates a real tarball, and
 installs it in a temporary clean Payload consumer to verify runtime entries,
 declarations, import-map resolution, and Payload initialization.
+
+`test:compat` creates one isolated consumer per verified Node lane, copies the
+workspace application's source into it, generates and freezes its dependency
+lockfile, installs the real plugin tarball, and runs the contract-critical
+Payload and production-build checks without workspace hoisting.
 
 ## License
 

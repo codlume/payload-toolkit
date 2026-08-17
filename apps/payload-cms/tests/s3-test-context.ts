@@ -3,7 +3,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { deleteOwnedS3Prefix } from "./delete-owned-s3-prefix.mjs";
 
 export const s3TestBucket = "payload-blurhash";
-export const s3TestEndpoint = "http://127.0.0.1:4566";
+export const s3TestEndpoint = process.env.PAYLOAD_S3_ENDPOINT ?? "http://127.0.0.1:4566";
 
 const credentials = {
   accessKeyId: "test",
