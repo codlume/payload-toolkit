@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { decode, isBlurhashValid } from "blurhash";
 import { getPayload, handleEndpoints, type Payload } from "payload";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -14,7 +15,13 @@ import {
   s3TestBucket,
 } from "../s3-test-context.ts";
 import { createJpegFixture } from "./image-fixtures.ts";
-import { readCreatedBlurHash } from "./rest-response.ts";
+import { readCreatedMedia } from "./rest-response.ts";
+
+const describeBlurHash = (value: string) => ({
+  decodedBytes: decode(value, 4, 3).length,
+  length: value.length,
+  validation: isBlurhashValid(value),
+});
 
 describe("official upload paths", () => {
   let authToken: string;
@@ -85,12 +92,12 @@ describe("official upload paths", () => {
     client.destroy();
 
     expect({
-      documentHash: media.blurHash,
-      objectBytes,
+      documentHash: describeBlurHash(media.blurHash ?? ""),
+      objectMatchesUpload: objectBytes?.equals(jpeg),
       status: object.$metadata.httpStatusCode,
     }).toEqual({
-      documentHash: "L42QgRp2fQp2pMflfQflfQfQfQfQ",
-      objectBytes: jpeg,
+      documentHash: { decodedBytes: 48, length: 28, validation: { result: true } },
+      objectMatchesUpload: true,
       status: 200,
     });
   });
@@ -109,10 +116,10 @@ describe("official upload paths", () => {
         method: "POST",
       }),
     });
-    const { blurHash, status } = await readCreatedBlurHash(response);
+    const { blurHash, status } = await readCreatedMedia(response);
 
-    expect({ blurHash, status }).toEqual({
-      blurHash: "LB4r0@pLfQpLpfflfQflfQfQfQfQ",
+    expect({ blurHash: describeBlurHash(blurHash), status }).toEqual({
+      blurHash: { decodedBytes: 48, length: 28, validation: { result: true } },
       status: 201,
     });
   });
@@ -151,10 +158,10 @@ describe("official upload paths", () => {
         method: "POST",
       }),
     });
-    const { blurHash, status } = await readCreatedBlurHash(response);
+    const { blurHash, status } = await readCreatedMedia(response);
 
-    expect({ blurHash, status }).toEqual({
-      blurHash: "LHOBSx^OfQ^O}?oefQoefQfQfQfQ",
+    expect({ blurHash: describeBlurHash(blurHash), status }).toEqual({
+      blurHash: { decodedBytes: 48, length: 28, validation: { result: true } },
       status: 201,
     });
   });

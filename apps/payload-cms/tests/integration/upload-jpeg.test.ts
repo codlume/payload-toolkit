@@ -73,8 +73,8 @@ describe("BlurHash upload lifecycle", () => {
     await rm(testDirectory, { force: true, recursive: true });
   });
 
-  test("the generated collection type exposes a nullable BlurHash string", () => {
-    expectTypeOf<Exclude<Media["blurHash"], undefined>>().toEqualTypeOf<string | null>();
+  test("the generated collection type exposes Payload's optional nullable field contract", () => {
+    expectTypeOf<Media["blurHash"]>().toEqualTypeOf<string | null | undefined>();
   });
 
   test("generated upload collection slugs configure the plugin", () => {

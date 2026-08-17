@@ -14,11 +14,13 @@ describe("encodeBlurHash", () => {
 
     expect({
       decodedPixels: decoded.length,
+      hash,
       length: hash.length,
       sizeFlag: hash[0],
       validation: isBlurhashValid(hash),
     }).toEqual({
       decodedPixels: 16,
+      hash: "L~Lqe9|ldL|l~h|c_X|cfH|T|c|T",
       length: 28,
       sizeFlag: "L",
       validation: { result: true },
