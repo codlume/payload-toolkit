@@ -122,6 +122,8 @@ export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
             background: "var(--theme-elevation-100)",
             border: "1px solid var(--theme-elevation-150)",
             borderRadius: "var(--style-radius-s)",
+            // Keep the border outside the 160x96 box so it never shrinks the canvas.
+            boxSizing: "content-box",
             display: "flex",
             flex: "0 0 auto",
             height: canvasDimensions.height,
