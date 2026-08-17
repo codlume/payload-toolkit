@@ -1,21 +1,14 @@
 "use client";
 
-import { useField } from "@payloadcms/ui";
+import { FieldDescription, FieldLabel, useField } from "@payloadcms/ui";
 import { decode } from "blurhash";
 import type { TextFieldClientComponent } from "payload";
 import React, { useEffect, useMemo, useRef } from "react";
 
-const MAX_CANVAS_HEIGHT = 180;
-const MAX_CANVAS_WIDTH = 288;
+const MAX_CANVAS_HEIGHT = 96;
+const MAX_CANVAS_WIDTH = 160;
 const MAX_INTRINSIC_EDGE = 32;
 const FALLBACK_ASPECT_RATIO = 3 / 2;
-const NARROW_LAYOUT_STYLE = `
-  @media (max-width: 48rem) {
-    [data-blurhash-layout] {
-      grid-template-columns: minmax(0, 1fr) !important;
-    }
-  }
-`;
 
 type PreviewState =
   | { height: number; pixels: Uint8ClampedArray; status: "generated"; width: number }
@@ -50,33 +43,25 @@ const getIntrinsicDimensions = (aspectRatio: number) => {
   };
 };
 
-const panelStyle = {
-  background: "var(--theme-elevation-50)",
-  border: "1px solid var(--theme-elevation-150)",
-  borderRadius: "var(--style-radius-m)",
-  padding: "var(--base)",
-  width: "100%",
-} as const;
-
 const contentStyle = {
-  display: "grid",
-  gap: "var(--base)",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(18rem, 100%), 1fr))",
-} as const;
-
-const previewSurfaceStyle = {
-  alignItems: "center",
-  background: "var(--theme-elevation-100)",
+  alignItems: "flex-start",
   display: "flex",
-  justifyContent: "center",
-  minHeight: 180,
-  minWidth: 0,
+  flexWrap: "wrap",
+  gap: "calc(var(--base) / 2)",
 } as const;
 
 const detailsStyle = {
   display: "grid",
-  gap: "calc(var(--base) / 2)",
+  flex: "1 1 18rem",
+  maxWidth: "36rem",
   minWidth: 0,
+} as const;
+
+const readOnlyInputStyle = {
+  background: "var(--theme-elevation-100)",
+  boxShadow: "none",
+  color: "var(--theme-elevation-400)",
+  cursor: "text",
 } as const;
 
 export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
@@ -105,9 +90,14 @@ export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
     }
   }, [aspectRatio, blurHash, hasStoredValue]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const helpID = `${path}-blurhash-help`;
   const inputID = `${path}-blurhash-value`;
   const statusID = `${path}-blurhash-status`;
+  const status =
+    preview.status === "generated"
+      ? "Generated automatically from the current image."
+      : preview.status === "invalid"
+        ? "The stored BlurHash could not be decoded. Its original value is preserved."
+        : "No BlurHash is available for this image.";
 
   useEffect(() => {
     const context = canvasRef.current?.getContext("2d");
@@ -122,11 +112,25 @@ export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
   }, [preview]);
 
   return (
-    <section aria-labelledby={`${path}-blurhash-label`} data-blurhash-panel="" style={panelStyle}>
-      <style>{NARROW_LAYOUT_STYLE}</style>
-      <h3 id={`${path}-blurhash-label`}>BlurHash</h3>
+    <div className="blurhash-field field-type read-only text" data-blurhash-panel="">
+      <FieldLabel htmlFor={inputID} label="BlurHash" path={path} />
       <div data-blurhash-layout="" style={contentStyle}>
-        <div data-blurhash-preview-surface="" style={previewSurfaceStyle}>
+        <div
+          data-blurhash-preview-surface=""
+          style={{
+            alignItems: "center",
+            background: "var(--theme-elevation-100)",
+            border: "1px solid var(--theme-elevation-150)",
+            borderRadius: "var(--style-radius-s)",
+            display: "flex",
+            flex: "0 0 auto",
+            height: canvasDimensions.height,
+            justifyContent: "center",
+            maxWidth: "100%",
+            overflow: "hidden",
+            width: canvasDimensions.width,
+          }}
+        >
           {preview.status === "generated" ? (
             <canvas
               aria-hidden="true"
@@ -145,32 +149,34 @@ export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
               width={preview.width}
             />
           ) : (
-            <span>{preview.status === "invalid" ? "Preview unavailable" : "No value"}</span>
+            <span
+              style={{
+                color: "var(--theme-elevation-500)",
+                fontSize: "0.8125rem",
+                padding: "calc(var(--base) / 2)",
+                textAlign: "center",
+              }}
+            >
+              {preview.status === "invalid" ? "Preview unavailable" : "No value"}
+            </span>
           )}
         </div>
         <div data-blurhash-details="" style={detailsStyle}>
-          <label htmlFor={inputID}>Read-only value</label>
           <input
-            aria-describedby={`${helpID} ${statusID}`}
+            aria-describedby={statusID}
             id={inputID}
             name={path}
             readOnly
+            spellCheck={false}
+            style={readOnlyInputStyle}
             type="text"
             value={blurHash}
           />
-          <p id={statusID}>
-            {preview.status === "generated"
-              ? "BlurHash generated from the current image."
-              : preview.status === "invalid"
-                ? "The stored BlurHash could not be decoded. Its original value is preserved."
-                : "No BlurHash is available for this image."}
-          </p>
-          <p id={helpID}>
-            A compact placeholder generated from the current image. The value is managed
-            automatically.
-          </p>
+          <div id={statusID}>
+            <FieldDescription description={status} path={path} />
+          </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 };

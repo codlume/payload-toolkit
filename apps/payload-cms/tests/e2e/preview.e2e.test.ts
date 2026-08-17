@@ -88,15 +88,37 @@ test("generated value renders one bounded static accessible preview", async ({ p
 
   const panel = page.locator("[data-blurhash-panel]");
   const canvas = panel.locator("canvas[data-blurhash-preview]");
-  const input = panel.getByLabel("Read-only value");
+  const input = panel.getByLabel("BlurHash");
 
-  await expect(panel.getByRole("heading", { name: "BlurHash" })).toBeVisible();
-  await expect(panel.getByText("BlurHash generated from the current image.")).toBeVisible();
+  await expect(panel.getByText("Generated automatically from the current image.")).toBeVisible();
   await expect(input).toHaveAttribute("readonly", "");
   await expect(input).not.toBeDisabled();
+  await expect(panel).toHaveClass(/\bfield-type\b/);
+  await expect(panel).toHaveClass(/\bread-only\b/);
+  await expect(panel).toHaveClass(/\btext\b/);
+  await expect(panel.getByText("Read-only value")).toHaveCount(0);
   await expect(canvas).toHaveAttribute("aria-hidden", "true");
   await expect(canvas).toHaveAttribute("tabindex", "-1");
   await expect.poll(() => getDrawCount(page)).toBe(1);
+
+  const description = panel.getByText("Generated automatically from the current image.");
+  const inputBounds = await input.boundingBox();
+  const descriptionBounds = await description.boundingBox();
+  const surfaceBounds = await panel.locator("[data-blurhash-preview-surface]").boundingBox();
+
+  if (!descriptionBounds || !inputBounds || !surfaceBounds) {
+    throw new Error("Expected the compact preview layout to be visible.");
+  }
+
+  expect({
+    descriptionBelowInput: descriptionBounds.y >= inputBounds.y + inputBounds.height,
+    descriptionLeftAligned: Math.abs(descriptionBounds.x - inputBounds.x) < 1,
+    inputTopAlignedWithPreview: Math.abs(inputBounds.y - surfaceBounds.y) < 1,
+  }).toEqual({
+    descriptionBelowInput: true,
+    descriptionLeftAligned: true,
+    inputTopAlignedWithPreview: true,
+  });
 
   const canvasMetrics = await canvas.evaluate((element) => {
     if (!(element instanceof HTMLCanvasElement)) {
@@ -118,7 +140,7 @@ test("generated value renders one bounded static accessible preview", async ({ p
 
   await page.waitForTimeout(250);
 
-  expect(canvasMetrics.cssHeight).toBeCloseTo(172.8, 2);
+  expect(canvasMetrics.cssHeight).toBeCloseTo(96, 2);
   expect(canvasMetrics.cssWidth / canvasMetrics.cssHeight).toBeCloseTo(5 / 3, 4);
   expect({
     animationName: canvasMetrics.animationName,
@@ -133,7 +155,7 @@ test("generated value renders one bounded static accessible preview", async ({ p
   }).toEqual({
     animationName: "none",
     buttons: 0,
-    cssWidth: 288,
+    cssWidth: 160,
     drawCount: 1,
     intrinsicHeight: 19,
     intrinsicWidth: 32,
@@ -153,7 +175,7 @@ test("preview layout stacks at a narrow viewport", async ({ page }) => {
     surface: await surface.boundingBox(),
   };
 
-  await page.setViewportSize({ height: 900, width: 540 });
+  await page.setViewportSize({ height: 900, width: 360 });
 
   const narrow = {
     details: await details.boundingBox(),
@@ -190,7 +212,7 @@ test("missing value renders the neutral no-value state", async ({ page }) => {
   await page.goto(`/admin/collections/media/${documents.missingID}`);
 
   const panel = page.locator("[data-blurhash-panel]");
-  const input = panel.getByLabel("Read-only value");
+  const input = panel.getByLabel("BlurHash");
 
   await expect(panel.getByText("No value", { exact: true })).toBeVisible();
   await expect(panel.getByText("No BlurHash is available for this image.")).toBeVisible();
@@ -202,7 +224,7 @@ test("invalid value stays selectable while the form remains usable", async ({ pa
   await page.goto(`/admin/collections/media/${documents.invalidID}`);
 
   const panel = page.locator("[data-blurhash-panel]");
-  const input = panel.getByLabel("Read-only value");
+  const input = panel.getByLabel("BlurHash");
 
   await expect(panel.getByText("Preview unavailable", { exact: true })).toBeVisible();
   await expect(

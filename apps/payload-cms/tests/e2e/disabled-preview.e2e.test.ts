@@ -19,5 +19,5 @@ test("disabled configuration hides the Admin preview", async ({ page }) => {
   await page.goto("/admin/collections/media/create");
 
   await expect(page.locator("[data-blurhash-panel]")).toHaveCount(0);
-  await expect(page.getByLabel("Read-only value")).toHaveCount(0);
+  await expect(page.getByLabel("BlurHash")).toHaveCount(0);
 });

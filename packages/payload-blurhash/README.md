@@ -127,10 +127,12 @@ Enabling debug diagnostics does not change the host logger level.
 ## Admin preview
 
 The generated field renders a static preview and a selectable read-only value.
-The canvas preserves the source aspect ratio inside a 288 × 180 CSS-pixel bound,
-is decoded once at a small memoized resolution, and has no animation or repaint
-loop. Valid, absent, and invalid stored values have distinct accessible states;
-an invalid value remains available for inspection without breaking the form.
+The canvas preserves the source aspect ratio inside a compact 160 × 96
+CSS-pixel bound, is decoded once at a small memoized resolution, and has no
+animation or repaint loop. The preview follows Payload's standard field
+hierarchy and theme tokens. Valid, absent, and invalid stored values have
+distinct accessible states; an invalid value remains available for inspection
+without breaking the form.
 
 ## Disabled mode and existing media
 

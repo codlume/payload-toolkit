@@ -12,6 +12,14 @@ const formValues = vi.hoisted((): { current: Record<string, unknown> } => ({
 }));
 
 vi.mock("@payloadcms/ui", () => ({
+  FieldDescription: ({ description }: { description: string }) => (
+    <div className="field-description">{description}</div>
+  ),
+  FieldLabel: ({ htmlFor, label }: { htmlFor: string; label: string }) => (
+    <label className="field-label" htmlFor={htmlFor}>
+      {label}
+    </label>
+  ),
   useField: ({ path }: { path: string }) => ({ value: formValues.current[path] }),
 }));
 
@@ -51,7 +59,7 @@ afterEach(() => {
 
 test("generated BlurHash is presented as one static accessible preview", () => {
   const { container } = renderPreview(GENERATED_BLUR_HASH);
-  const input = screen.getByLabelText("Read-only value");
+  const input = screen.getByLabelText("BlurHash");
   const canvas = container.querySelector("canvas");
 
   if (!(input instanceof HTMLInputElement)) {
@@ -72,12 +80,9 @@ test("generated BlurHash is presented as one static accessible preview", () => {
     disabled: input.disabled,
     drawCount: putImageData.mock.calls.length,
     fieldLabel: screen.getByText("BlurHash").textContent,
-    help: screen.getByText(
-      "A compact placeholder generated from the current image. The value is managed automatically.",
-    ).textContent,
     liveRegions: container.querySelectorAll("[aria-live]").length,
     readOnly: input.readOnly,
-    status: screen.getByText("BlurHash generated from the current image.").textContent,
+    status: screen.getByText("Generated automatically from the current image.").textContent,
     value: input.value,
   }).toEqual({
     canvas: {
@@ -85,25 +90,96 @@ test("generated BlurHash is presented as one static accessible preview", () => {
       height: 21,
       styleAspectRatio: "1.5",
       styleHeight: "auto",
-      styleWidth: "270px",
+      styleWidth: "144px",
       tabIndex: -1,
       width: 32,
     },
-    describedBy: "blurHash-blurhash-help blurHash-blurhash-status",
+    describedBy: "blurHash-blurhash-status",
     disabled: false,
     drawCount: 1,
     fieldLabel: "BlurHash",
-    help: "A compact placeholder generated from the current image. The value is managed automatically.",
     liveRegions: 0,
     readOnly: true,
-    status: "BlurHash generated from the current image.",
+    status: "Generated automatically from the current image.",
     value: GENERATED_BLUR_HASH,
+  });
+});
+
+test("generated BlurHash follows Payload's compact field hierarchy", () => {
+  const { container } = renderPreview(GENERATED_BLUR_HASH);
+  const panel = container.querySelector("[data-blurhash-panel]");
+  const canvas = container.querySelector("canvas");
+  const details = container.querySelector("[data-blurhash-details]");
+  const input = screen.queryByLabelText("BlurHash");
+  const layout = container.querySelector("[data-blurhash-layout]");
+  const generatedDescription = screen.queryByText(
+    "Generated automatically from the current image.",
+  );
+
+  if (!(panel instanceof HTMLElement)) {
+    throw new TypeError("Expected the BlurHash field container to be an element");
+  }
+
+  expect({
+    cardChrome: {
+      background: panel.style.background,
+      border: panel.style.border,
+      borderRadius: panel.style.borderRadius,
+      padding: panel.style.padding,
+    },
+    canvasWidth: canvas?.style.width,
+    descriptionInDetails: details?.contains(generatedDescription ?? null),
+    duplicateLabel: screen.queryByText("Read-only value")?.textContent,
+    fieldClasses: {
+      blurHash: panel.classList.contains("blurhash-field"),
+      payloadField: panel.classList.contains("field-type"),
+      textField: panel.classList.contains("text"),
+    },
+    generatedDescription: generatedDescription?.textContent,
+    input: input && {
+      background: input instanceof HTMLInputElement ? input.style.background : undefined,
+      boxShadow: input instanceof HTMLInputElement ? input.style.boxShadow : undefined,
+      color: input instanceof HTMLInputElement ? input.style.color : undefined,
+      cursor: input instanceof HTMLInputElement ? input.style.cursor : undefined,
+      disabled: input instanceof HTMLInputElement && input.disabled,
+      readOnly: input instanceof HTMLInputElement && input.readOnly,
+      value: input instanceof HTMLInputElement ? input.value : undefined,
+    },
+    layoutAlignment: layout instanceof HTMLElement ? layout.style.alignItems : undefined,
+    paragraphCount: panel?.querySelectorAll("p").length,
+  }).toEqual({
+    cardChrome: {
+      background: "",
+      border: "",
+      borderRadius: "",
+      padding: "",
+    },
+    canvasWidth: "144px",
+    descriptionInDetails: true,
+    duplicateLabel: undefined,
+    fieldClasses: {
+      blurHash: true,
+      payloadField: true,
+      textField: true,
+    },
+    generatedDescription: "Generated automatically from the current image.",
+    input: {
+      background: "var(--theme-elevation-100)",
+      boxShadow: "none",
+      color: "var(--theme-elevation-400)",
+      cursor: "text",
+      disabled: false,
+      readOnly: true,
+      value: GENERATED_BLUR_HASH,
+    },
+    layoutAlignment: "flex-start",
+    paragraphCount: 0,
   });
 });
 
 test("missing BlurHash is presented without a canvas", () => {
   const { container } = renderPreview(null, 640, 480);
-  const input = screen.getByLabelText("Read-only value");
+  const input = screen.getByLabelText("BlurHash");
 
   if (!(input instanceof HTMLInputElement)) {
     throw new TypeError("Expected the read-only value control to be an input");
@@ -128,7 +204,7 @@ test.each(["", "not-a-blurhash"])(
   "invalid BlurHash %j remains selectable without breaking the field",
   (invalidValue) => {
     const { container } = renderPreview(invalidValue, 640, 480);
-    const input = screen.getByLabelText("Read-only value");
+    const input = screen.getByLabelText("BlurHash");
 
     if (!(input instanceof HTMLInputElement)) {
       throw new TypeError("Expected the read-only value control to be an input");
@@ -178,6 +254,6 @@ test("preview work is memoized by BlurHash and aspect ratio", () => {
     longestIntrinsicEdge: 32,
     styleAspectRatio: "1.51",
     styleHeight: "auto",
-    styleWidth: "271.8px",
+    styleWidth: "144.96px",
   });
 });
