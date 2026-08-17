@@ -1,8 +1,12 @@
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { createAppConfig } from "./app-config.ts";
 
 const stateDirectory = path.resolve(process.env.PAYLOAD_STATE_DIRECTORY ?? ".payload");
+// The state directory is gitignored, so fresh checkouts lack it and libsql
+// fails with SQLITE_CANTOPEN rather than creating parent directories.
+mkdirSync(stateDirectory, { recursive: true });
 const configuredMode = process.env.PAYLOAD_APP_MODE ?? "enabled-in-memory";
 
 if (
