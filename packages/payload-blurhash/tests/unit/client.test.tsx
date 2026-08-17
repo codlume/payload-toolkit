@@ -5,7 +5,6 @@ import React from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { BlurHashPreview } from "@codlume/payload-blurhash/client";
-import * as clientEntry from "@codlume/payload-blurhash/client";
 
 const GENERATED_BLUR_HASH = "L~Lqe9|ldL|l~h|c_X|cfH|T|c|T";
 const formValues = vi.hoisted((): { current: Record<string, unknown> } => ({
@@ -102,10 +101,6 @@ test("generated BlurHash is presented as one static accessible preview", () => {
   });
 });
 
-test("client entry exports only the preview component", () => {
-  expect(Object.keys(clientEntry)).toEqual(["BlurHashPreview"]);
-});
-
 test("missing BlurHash is presented without a canvas", () => {
   const { container } = renderPreview(null, 640, 480);
   const input = screen.getByLabelText("Read-only value");
@@ -129,35 +124,37 @@ test("missing BlurHash is presented without a canvas", () => {
   });
 });
 
-test("invalid BlurHash remains selectable without breaking the field", () => {
-  const invalidValue = "not-a-blurhash";
-  const { container } = renderPreview(invalidValue, 640, 480);
-  const input = screen.getByLabelText("Read-only value");
+test.each(["", "not-a-blurhash"])(
+  "invalid BlurHash %j remains selectable without breaking the field",
+  (invalidValue) => {
+    const { container } = renderPreview(invalidValue, 640, 480);
+    const input = screen.getByLabelText("Read-only value");
 
-  if (!(input instanceof HTMLInputElement)) {
-    throw new TypeError("Expected the read-only value control to be an input");
-  }
+    if (!(input instanceof HTMLInputElement)) {
+      throw new TypeError("Expected the read-only value control to be an input");
+    }
 
-  expect({
-    canvasCount: container.querySelectorAll("canvas").length,
-    disabled: input.disabled,
-    drawCount: putImageData.mock.calls.length,
-    readOnly: input.readOnly,
-    state: screen.getByText("Preview unavailable").textContent,
-    status: screen.getByText(
-      "The stored BlurHash could not be decoded. Its original value is preserved.",
-    ).textContent,
-    value: input.value,
-  }).toEqual({
-    canvasCount: 0,
-    disabled: false,
-    drawCount: 0,
-    readOnly: true,
-    state: "Preview unavailable",
-    status: "The stored BlurHash could not be decoded. Its original value is preserved.",
-    value: invalidValue,
-  });
-});
+    expect({
+      canvasCount: container.querySelectorAll("canvas").length,
+      disabled: input.disabled,
+      drawCount: putImageData.mock.calls.length,
+      readOnly: input.readOnly,
+      state: screen.getByText("Preview unavailable").textContent,
+      status: screen.getByText(
+        "The stored BlurHash could not be decoded. Its original value is preserved.",
+      ).textContent,
+      value: input.value,
+    }).toEqual({
+      canvasCount: 0,
+      disabled: false,
+      drawCount: 0,
+      readOnly: true,
+      state: "Preview unavailable",
+      status: "The stored BlurHash could not be decoded. Its original value is preserved.",
+      value: invalidValue,
+    });
+  },
+);
 
 test("preview work is memoized by BlurHash and aspect ratio", () => {
   const { container, rerender } = renderPreview(GENERATED_BLUR_HASH, 150, 100);

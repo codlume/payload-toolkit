@@ -75,6 +75,7 @@ const PAYLOAD_OWNED_FIELD_NAMES = new Set([
   "height",
   "id",
   "mimeType",
+  "prefix",
   "sizes",
   "thumbnailURL",
   "updatedAt",

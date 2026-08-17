@@ -8,8 +8,8 @@ export const runCommand = ({ arguments_, command, cwd, env }) =>
       stdio: "inherit",
     });
 
-    child.on("error", reject);
-    child.on("exit", (code, signal) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
       if (code === 0) {
         resolve();
         return;

@@ -17,6 +17,7 @@ RUN corepack enable && corepack prepare pnpm@11.10.0 --activate \
 
 COPY apps/payload-cms/tests/fixtures/images apps/payload-cms/tests/fixtures/images
 COPY packages/payload-blurhash packages/payload-blurhash
+COPY tests/run-command.mjs tests/run-command.mjs
 COPY tests/limits tests/limits
 
 RUN pnpm --filter @codlume/payload-blurhash build

@@ -83,11 +83,12 @@ export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
   const { value } = useField<unknown>({ path });
   const { value: width } = useField<unknown>({ path: "width" });
   const { value: height } = useField<unknown>({ path: "height" });
+  const hasStoredValue = typeof value === "string";
   const blurHash = typeof value === "string" ? value : "";
   const aspectRatio = getAspectRatio(width, height);
   const canvasDimensions = getDimensions(aspectRatio, MAX_CANVAS_WIDTH, MAX_CANVAS_HEIGHT);
   const preview = useMemo<PreviewState>(() => {
-    if (blurHash.length === 0) {
+    if (!hasStoredValue) {
       return { status: "missing" };
     }
 
@@ -102,7 +103,7 @@ export const BlurHashPreview: TextFieldClientComponent = ({ path }) => {
     } catch {
       return { status: "invalid" };
     }
-  }, [aspectRatio, blurHash]);
+  }, [aspectRatio, blurHash, hasStoredValue]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const helpID = `${path}-blurhash-help`;
   const inputID = `${path}-blurhash-value`;

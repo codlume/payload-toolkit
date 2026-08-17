@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runCommand } from "./run-command.mjs";
+import { runCommand } from "../run-command.mjs";
 import { compatibilityLanes, dependencyVersions, pnpmVersion } from "./versions.mjs";
 
 const repositoryDirectory = fileURLToPath(new URL("../../", import.meta.url));
@@ -113,6 +113,7 @@ const createConsumerPackageJSON = (tarballPath, consumerDirectory) => ({
   },
   devDependencies: {
     "@aws-sdk/client-s3": dependencyVersions["@aws-sdk/client-s3"],
+    "@aws-sdk/lib-storage": dependencyVersions["@aws-sdk/lib-storage"],
     "@playwright/test": dependencyVersions["@playwright/test"],
     "@types/node": dependencyVersions["@types/node"],
     "@types/react": dependencyVersions["@types/react"],

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { createAppConfig } from "../../src/app-config.ts";
 import { readImageFixture } from "./image-fixtures.ts";
-import { readCreatedMedia } from "./rest-response.ts";
+import { readCreatedMedia, readStoredMedia } from "./rest-response.ts";
 
 describe("temporary-file uploads", () => {
   let authToken: string;
@@ -79,7 +79,7 @@ describe("temporary-file uploads", () => {
     };
     const source = await readImageFixture("jpeg-baseline.jpg");
     const transformedUpload = await upload(source, "temporary-file.jpg", "image/jpeg");
-    const stored = await readFile(path.join(testDirectory, "media", transformedUpload.filename));
+    const stored = await readStoredMedia(payload.config, transformedUpload.filename);
     const storedMetadata = await sharp(stored).metadata();
     const repeatedUpload = await upload(stored, "stored.png", "image/png");
 

@@ -11,6 +11,7 @@ WORKDIR /workspace
 COPY tsconfig.base.json tsconfig.base.json
 COPY apps/payload-cms apps/payload-cms
 COPY packages/payload-blurhash packages/payload-blurhash
+COPY tests/run-command.mjs tests/run-command.mjs
 COPY tests/compat tests/compat
 
 CMD ["node", "tests/compat/inside.mjs"]

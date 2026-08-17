@@ -1,3 +1,5 @@
+import { handleEndpoints, type SanitizedConfig } from "payload";
+
 export const readCreatedMedia = async (response: Response) => {
   const result: unknown = await response.json();
   const document =
@@ -17,4 +19,17 @@ export const readCreatedMedia = async (response: Response) => {
     mimeType: readString("mimeType"),
     status: response.status,
   };
+};
+
+export const readStoredMedia = async (config: SanitizedConfig, filename: string) => {
+  const response = await handleEndpoints({
+    config,
+    request: new Request(`http://localhost/api/media/file/${encodeURIComponent(filename)}`),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Expected stored media response, received ${response.status}.`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
 };

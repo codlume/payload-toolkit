@@ -29,6 +29,10 @@ test("createUser makes user retrievable", async () => {
 - Survive internal refactors
 - One logical assertion per test
 
+Private pure-function seams may be tested directly only when exhaustive malformed-input coverage or
+a deterministic golden is impractical through the public API. Keep those symbols private, and do not
+use their tests as a substitute for public-contract coverage.
+
 ### Bad Tests
 
 ```typescript

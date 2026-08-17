@@ -15,7 +15,7 @@ import {
   s3TestBucket,
 } from "../s3-test-context.ts";
 import { createJpegFixture } from "./image-fixtures.ts";
-import { readCreatedMedia } from "./rest-response.ts";
+import { readCreatedMedia, readStoredMedia } from "./rest-response.ts";
 
 const describeBlurHash = (value: string) => ({
   decodedBytes: decode(value, 4, 3).length,
@@ -28,6 +28,37 @@ describe("official upload paths", () => {
   let payload: Payload;
   let s3Prefix: string;
   let testDirectory: string;
+
+  const describeEffectiveBytes = async (media: {
+    blurHash?: null | string | undefined;
+    filename?: null | string | undefined;
+    mimeType?: null | string | undefined;
+  }) => {
+    if (
+      typeof media.blurHash !== "string" ||
+      typeof media.filename !== "string" ||
+      typeof media.mimeType !== "string"
+    ) {
+      throw new TypeError("Expected generated media metadata.");
+    }
+
+    const stored = await readStoredMedia(payload.config, media.filename);
+    const repeated = await payload.create({
+      collection: "media",
+      data: {},
+      file: {
+        data: stored,
+        mimetype: media.mimeType,
+        name: `stored-${media.filename}`,
+        size: stored.length,
+      },
+    });
+
+    return {
+      hashMatchesStoredBytes: media.blurHash === repeated.blurHash,
+      storedMimeType: media.mimeType,
+    };
+  };
 
   beforeAll(async () => {
     testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-upload-paths-"));
@@ -90,13 +121,19 @@ describe("official upload paths", () => {
       ? Buffer.from(await object.Body.transformToByteArray())
       : undefined;
     client.destroy();
+    const effectiveBytes = await describeEffectiveBytes(media);
 
     expect({
       documentHash: describeBlurHash(media.blurHash ?? ""),
+      effectiveBytes,
       objectMatchesUpload: objectBytes?.equals(jpeg),
       status: object.$metadata.httpStatusCode,
     }).toEqual({
       documentHash: { decodedBytes: 48, length: 28, validation: { result: true } },
+      effectiveBytes: {
+        hashMatchesStoredBytes: true,
+        storedMimeType: "image/jpeg",
+      },
       objectMatchesUpload: true,
       status: 200,
     });
@@ -116,10 +153,19 @@ describe("official upload paths", () => {
         method: "POST",
       }),
     });
-    const { blurHash, status } = await readCreatedMedia(response);
+    const media = await readCreatedMedia(response);
+    const effectiveBytes = await describeEffectiveBytes(media);
 
-    expect({ blurHash: describeBlurHash(blurHash), status }).toEqual({
+    expect({
+      blurHash: describeBlurHash(media.blurHash),
+      effectiveBytes,
+      status: media.status,
+    }).toEqual({
       blurHash: { decodedBytes: 48, length: 28, validation: { result: true } },
+      effectiveBytes: {
+        hashMatchesStoredBytes: true,
+        storedMimeType: "image/jpeg",
+      },
       status: 201,
     });
   });
@@ -158,10 +204,19 @@ describe("official upload paths", () => {
         method: "POST",
       }),
     });
-    const { blurHash, status } = await readCreatedMedia(response);
+    const media = await readCreatedMedia(response);
+    const effectiveBytes = await describeEffectiveBytes(media);
 
-    expect({ blurHash: describeBlurHash(blurHash), status }).toEqual({
+    expect({
+      blurHash: describeBlurHash(media.blurHash),
+      effectiveBytes,
+      status: media.status,
+    }).toEqual({
       blurHash: { decodedBytes: 48, length: 28, validation: { result: true } },
+      effectiveBytes: {
+        hashMatchesStoredBytes: true,
+        storedMimeType: "image/jpeg",
+      },
       status: 201,
     });
   });

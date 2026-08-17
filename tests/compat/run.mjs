@@ -1,4 +1,4 @@
-import { runCommand } from "./run-command.mjs";
+import { runCommand } from "../run-command.mjs";
 import { compatibilityLanes } from "./versions.mjs";
 
 const repositoryDirectory = new URL("../../", import.meta.url);

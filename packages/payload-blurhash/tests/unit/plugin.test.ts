@@ -423,6 +423,27 @@ describe("blurHashPlugin", () => {
     });
   });
 
+  test("rejects the S3 adapter's Payload-owned prefix field", async () => {
+    await expect(
+      buildPayloadConfig(
+        [{ fields: [], slug: "media", upload: true }],
+        [
+          blurHashPlugin({
+            collections: ["media"],
+            enabled: false,
+            fieldName: "prefix",
+          }),
+        ],
+      ),
+    ).rejects.toMatchObject({
+      message: [
+        "Invalid BlurHash plugin configuration:",
+        '- `fieldName` "prefix" is reserved by Payload; choose a plugin-owned field name.',
+      ].join("\n"),
+      name: "BlurHashPluginConfigError",
+    });
+  });
+
   test("accepts RGB boundaries and explicit positive safe limits without hidden ceilings", async () => {
     const config = await buildPayloadConfig(
       [{ fields: [], slug: "media", upload: true }],

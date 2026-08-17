@@ -9,7 +9,7 @@ import { buildConfig, getPayload } from "payload";
 import sharp from "sharp";
 
 import { blurHashPlugin } from "@codlume/payload-blurhash";
-import { runCommand } from "../../../../tests/limits/run-command.mjs";
+import { runCommand } from "../../../../tests/run-command.mjs";
 
 process.env.NODE_ENV = "test";
 process.env.PAYLOAD_FORCE_DRIZZLE_PUSH = "true";
@@ -589,7 +589,10 @@ const measure = async (outputFile) => {
   const harnesses = [];
 
   try {
-    await runCommand(process.execPath, [scriptPath, "--generate-fixtures", fixtureDirectory]);
+    await runCommand({
+      arguments_: [scriptPath, "--generate-fixtures", fixtureDirectory],
+      command: process.execPath,
+    });
     const harness = await startPayloadHarness({
       directory: fixtureDirectory,
       name: "default-limits",

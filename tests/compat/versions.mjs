@@ -1,7 +1,8 @@
 export const pnpmVersion = "10.34.5";
 
 export const dependencyVersions = Object.freeze({
-  "@aws-sdk/client-s3": "3.1111.0",
+  "@aws-sdk/client-s3": "3.1112.0",
+  "@aws-sdk/lib-storage": "3.1112.0",
   "@payloadcms/db-sqlite": "3.88.0",
   "@payloadcms/next": "3.88.0",
   "@payloadcms/storage-s3": "3.88.0",
