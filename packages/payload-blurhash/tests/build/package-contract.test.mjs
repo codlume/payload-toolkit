@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const packageJSONPath = new URL("../../package.json", import.meta.url);
+const rootPackageJSONPath = new URL("../../../../package.json", import.meta.url);
+const readmePath = new URL("../../README.md", import.meta.url);
+const licensePath = new URL("../../LICENSE", import.meta.url);
 const distDirectory = new URL("../../dist/", import.meta.url);
 const rootEntryPath = new URL("index.mjs", distDirectory);
 const clientEntryPath = new URL("client.mjs", distDirectory);
@@ -12,6 +15,115 @@ const rootDeclarationPath = new URL("index.d.mts", distDirectory);
 const clientDeclarationPath = new URL("client.d.mts", distDirectory);
 
 const readPackageJSON = async () => JSON.parse(await readFile(packageJSONPath, "utf8"));
+
+test("README covers the unreleased consumer contract", async () => {
+  const readme = await readFile(readmePath, "utf8");
+  const requiredHeadings = [
+    "# Payload BlurHash",
+    "## Unreleased",
+    "## Compatibility",
+    "## Configuration",
+    "## Field and API behavior",
+    "## Supported media",
+    "## Resource limits",
+    "## Logging and privacy",
+    "## Admin preview",
+    "## Disabled mode and existing media",
+    "## Development",
+    "## License",
+  ];
+
+  assert.deepEqual(
+    requiredHeadings.filter((heading) => !readme.split("\n").includes(heading)),
+    [],
+  );
+});
+
+test("README states the supported Payload and Node ranges", async () => {
+  const readme = await readFile(readmePath, "utf8");
+
+  assert.deepEqual(
+    {
+      node: /Node >=22\.12\.0 <23 \|\| >=24\.0\.0 <25/u.test(readme),
+      payload: /Payload >=3\.88\.0 <4/u.test(readme),
+    },
+    { node: true, payload: true },
+  );
+});
+
+test("package includes the complete Codlume MIT license", async () => {
+  const license = await readFile(licensePath, "utf8");
+
+  assert.deepEqual(
+    {
+      copyright: /Copyright \(c\) 2026 Codlume/u.test(license),
+      grant: /Permission is hereby granted, free of charge/u.test(license),
+      heading: /^MIT License$/mu.test(license),
+      warranty: /THE SOFTWARE IS PROVIDED "AS IS"/u.test(license),
+    },
+    { copyright: true, grant: true, heading: true, warranty: true },
+  );
+});
+
+test("package declares runtime and host relationships without bundling Sharp", async () => {
+  const packageJSON = await readPackageJSON();
+
+  assert.deepEqual(
+    {
+      dependencies: packageJSON.dependencies,
+      developmentHosts: {
+        graphql: packageJSON.devDependencies.graphql,
+        next: packageJSON.devDependencies.next,
+        payloadNext: packageJSON.devDependencies["@payloadcms/next"],
+        payload: packageJSON.devDependencies.payload,
+        react: packageJSON.devDependencies.react,
+        reactDOM: packageJSON.devDependencies["react-dom"],
+        sharp: packageJSON.devDependencies.sharp,
+        ui: packageJSON.devDependencies["@payloadcms/ui"],
+      },
+      peers: packageJSON.peerDependencies,
+    },
+    {
+      dependencies: {
+        blurhash: "2.0.5",
+      },
+      developmentHosts: {
+        graphql: "16.14.2",
+        next: "15.4.11",
+        payloadNext: "3.88.0",
+        payload: "3.88.0",
+        react: "19.2.8",
+        reactDOM: "19.2.8",
+        sharp: "0.35.3",
+        ui: "3.88.0",
+      },
+      peers: {
+        "@payloadcms/ui": ">=3.88.0 <4",
+        payload: ">=3.88.0 <4",
+        react: "^19.0.1 || ^19.1.2 || ^19.2.1",
+        "react-dom": "^19.0.1 || ^19.1.2 || ^19.2.1",
+      },
+    },
+  );
+});
+
+test("package owns the tarball gate exposed from the workspace root", async () => {
+  const [packageJSON, rootPackageJSON] = await Promise.all([
+    readPackageJSON(),
+    readFile(rootPackageJSONPath, "utf8").then(JSON.parse),
+  ]);
+
+  assert.deepEqual(
+    {
+      package: packageJSON.scripts["test:pack"],
+      root: rootPackageJSON.scripts["test:pack"],
+    },
+    {
+      package: "node tests/pack/run.mjs",
+      root: "pnpm --filter @codlume/payload-blurhash test:pack",
+    },
+  );
+});
 
 const parseModule = async (modulePath) =>
   ts.createSourceFile(
