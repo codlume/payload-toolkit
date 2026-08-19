@@ -143,7 +143,13 @@ describe("activityPlugin", () => {
       type: field.type,
       updateAllowed: Reflect.apply(updateAccess, undefined, [{}]),
     }).toEqual({
-      admin: { position: "sidebar", readOnly: true },
+      admin: {
+        components: {
+          Field: "@codlume/payload-activity/client#LastModifiedByField",
+        },
+        position: "sidebar",
+        readOnly: true,
+      },
       createAllowed: false,
       localized: false,
       relationTo: "users",
@@ -182,7 +188,14 @@ describe("activityPlugin", () => {
         { previousValue: undefined, req: { user: { collection: "users", id: 42 } } },
       ]),
     }).toEqual({
-      admin: { hidden: true, position: "sidebar", readOnly: true },
+      admin: {
+        components: {
+          Field: "@codlume/payload-activity/client#LastModifiedByField",
+        },
+        hidden: true,
+        position: "sidebar",
+        readOnly: true,
+      },
       existing: 12,
       newDocument: null,
     });

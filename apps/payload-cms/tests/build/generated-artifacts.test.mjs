@@ -90,11 +90,14 @@ test("Payload import map matches the committed Admin components", async () => {
 
   assert.deepEqual(
     {
+      containsLastModifiedByField:
+        /"@codlume\/payload-activity\/client#LastModifiedByField"/u.test(generatedImportMap),
       containsBlurHashPreview:
         /"@codlume\/payload-blurhash\/client#BlurHashPreview"/u.test(generatedImportMap),
       content: generatedImportMap,
     },
     {
+      containsLastModifiedByField: true,
       containsBlurHashPreview: true,
       content: committedImportMap,
     },
@@ -102,10 +105,16 @@ test("Payload import map matches the committed Admin components", async () => {
   );
 });
 
-test("Admin preview resolves through the installed package client export", () => {
-  assert.ok(
-    fileURLToPath(import.meta.resolve("@codlume/payload-blurhash/client")).endsWith(
-      path.join("dist", "client.mjs"),
-    ),
+test("Admin fields resolve through the installed package client exports", () => {
+  assert.deepEqual(
+    {
+      activity: fileURLToPath(import.meta.resolve("@codlume/payload-activity/client")).endsWith(
+        path.join("dist", "client.mjs"),
+      ),
+      blurHash: fileURLToPath(import.meta.resolve("@codlume/payload-blurhash/client")).endsWith(
+        path.join("dist", "client.mjs"),
+      ),
+    },
+    { activity: true, blurHash: true },
   );
 });

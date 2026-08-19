@@ -62,6 +62,18 @@ Payload's Local API skips field access checks by default, so the field hook
 returns an ID or `null` on every write. Caller-supplied field values cannot
 replace the attribution result.
 
+## Admin sidebar
+
+The read-only sidebar field shows the admin user's configured title with an
+email fallback and links to that user's document. The document's `updatedAt`
+value appears beside the user as an absolute local timestamp. Unattributed
+edits show `—`.
+
+The component makes one request for an attributed user. While that request is
+in flight, it shows only the timestamp. A failed request or deleted user falls
+back to the stored user ID. It has no spinner, relative-time timer, or animated
+loading state.
+
 ## Disabled mode
 
 `enabled: false` keeps the field in the schema, hides it in Admin, and preserves
