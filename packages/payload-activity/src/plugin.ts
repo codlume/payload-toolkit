@@ -9,6 +9,8 @@ import type {
   RelationshipField,
 } from "payload";
 
+import { createActivityDiagnostics } from "./activity-diagnostics.ts";
+
 type ActivityTargets =
   | { collections: CollectionSlug[]; globals?: GlobalSlug[] }
   | { collections?: CollectionSlug[]; globals: GlobalSlug[] };
@@ -306,17 +308,45 @@ const findConfigurationProblems = (
 const denyCallerWrite = () => false;
 
 const createAttributionHook =
-  (enabled: boolean, adminUserCollection: CollectionSlug): FieldHook =>
-  ({ previousValue, req }) => {
+  (
+    enabled: boolean,
+    adminUserCollection: CollectionSlug,
+    diagnostics: ReturnType<typeof createActivityDiagnostics>,
+  ): FieldHook =>
+  ({ collection, global, operation, previousValue, req }) => {
     if (!enabled) {
       return previousValue ?? null;
     }
 
     const user = req.user;
-    return user?.collection === adminUserCollection && user.id != null ? user.id : null;
+    if (user?.collection === adminUserCollection && user.id != null) {
+      diagnostics({
+        collection,
+        event: "attribution_applied",
+        global,
+        operation: operation === "create" ? "create" : "update",
+        req,
+        userId: user.id,
+      });
+      return user.id;
+    }
+
+    diagnostics({
+      collection,
+      event: "attribution_cleared",
+      global,
+      operation: operation === "create" ? "create" : "update",
+      reason:
+        user && user.collection !== adminUserCollection ? "foreign_auth_collection" : "no_user",
+      req,
+    });
+    return null;
   };
 
-const createActivityField = ({ adminUserCollection, enabled, fieldName }: ResolvedOptions) =>
+const createActivityField = (
+  { adminUserCollection, enabled, fieldName }: ResolvedOptions,
+  diagnostics: ReturnType<typeof createActivityDiagnostics>,
+) =>
   ({
     access: {
       create: denyCallerWrite,
@@ -330,7 +360,7 @@ const createActivityField = ({ adminUserCollection, enabled, fieldName }: Resolv
       position: "sidebar",
       readOnly: true,
     },
-    hooks: { beforeChange: [createAttributionHook(enabled, adminUserCollection)] },
+    hooks: { beforeChange: [createAttributionHook(enabled, adminUserCollection, diagnostics)] },
     label: "Last Modified By",
     localized: false,
     name: fieldName,
@@ -365,7 +395,8 @@ export const activityPlugin = (options: ActivityPluginOptions): Plugin => {
       throw new ActivityPluginConfigError(problems);
     }
 
-    const activityField = createActivityField(resolvedOptions);
+    const diagnostics = createActivityDiagnostics(resolvedOptions.debug);
+    const activityField = createActivityField(resolvedOptions, diagnostics);
 
     return {
       ...config,

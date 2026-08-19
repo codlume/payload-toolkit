@@ -1,6 +1,6 @@
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { buildConfig, type Config, type FieldHook, type Plugin } from "payload";
-import { describe, expect, expectTypeOf, test } from "vitest";
+import { describe, expect, expectTypeOf, test, vi } from "vitest";
 
 import { activityPlugin, type ActivityPluginOptions } from "@codlume/payload-activity";
 
@@ -20,21 +20,36 @@ const createSourceConfig = () =>
     secret: "activity-unit-test-secret",
   }) satisfies Config;
 
-const getActivityField = async (options: ActivityPluginOptions = { collections: ["posts"] }) => {
+type ActivityFieldTarget = {
+  entityType: "collection" | "global";
+  slug: string;
+};
+
+const defaultActivityTarget = { entityType: "collection", slug: "posts" } as const;
+
+const getActivityField = async (
+  options: ActivityPluginOptions = { collections: ["posts"] },
+  target: ActivityFieldTarget = defaultActivityTarget,
+) => {
   const transformed = await activityPlugin(options)(createSourceConfig());
-  const field = transformed.collections
-    ?.find(({ slug }) => slug === "posts")
+  const targets =
+    target.entityType === "collection" ? transformed.collections : transformed.globals;
+  const field = targets
+    ?.find(({ slug }) => slug === target.slug)
     ?.fields.find((candidate) => "name" in candidate && candidate.name === "lastModifiedBy");
 
   if (!field || field.type !== "relationship") {
-    throw new TypeError("Expected posts to have the Activity relationship field");
+    throw new TypeError(`Expected ${target.slug} to have the Activity relationship field`);
   }
 
   return field;
 };
 
-const getActivityHook = async (options?: ActivityPluginOptions): Promise<FieldHook> => {
-  const field = await getActivityField(options);
+const getActivityHook = async (
+  options?: ActivityPluginOptions,
+  target: ActivityFieldTarget = defaultActivityTarget,
+): Promise<FieldHook> => {
+  const field = await getActivityField(options, target);
   const hook = field.hooks?.beforeChange?.[0];
 
   if (!hook) {
@@ -42,6 +57,34 @@ const getActivityHook = async (options?: ActivityPluginOptions): Promise<FieldHo
   }
 
   return hook;
+};
+
+const invokeActivityHook = async ({
+  debug,
+  operation,
+  options,
+  previousValue,
+  target,
+  user,
+}: {
+  debug: (entry: unknown) => unknown;
+  operation: "create" | "update";
+  options: ActivityPluginOptions;
+  previousValue: number | undefined;
+  target: ActivityFieldTarget;
+  user: { collection: string; id?: number | string } | undefined;
+}) => {
+  const hook = await getActivityHook(options, target);
+
+  return Reflect.apply(hook, undefined, [
+    {
+      collection: target.entityType === "collection" ? { slug: target.slug } : null,
+      global: target.entityType === "global" ? { slug: target.slug } : null,
+      operation,
+      previousValue,
+      req: { payload: { logger: { debug } }, user },
+    },
+  ]);
 };
 
 const buildPayloadConfig = (
@@ -172,6 +215,115 @@ describe("activityPlugin", () => {
     ]);
 
     expect(result).toBe(expected);
+  });
+
+  test("logs an attributed collection edit when debug diagnostics are enabled", async () => {
+    const debug = vi.fn();
+    await invokeActivityHook({
+      debug,
+      operation: "update",
+      options: { collections: ["posts"], debug: true },
+      previousValue: undefined,
+      target: defaultActivityTarget,
+      user: { collection: "users", id: 42 },
+    });
+
+    expect(debug.mock.calls).toEqual([
+      [
+        {
+          entityType: "collection",
+          event: "attribution_applied",
+          operation: "update",
+          plugin: "activity",
+          slug: "posts",
+          userId: 42,
+        },
+      ],
+    ]);
+  });
+
+  test("logs why an unattributed global edit has no user", async () => {
+    const debug = vi.fn();
+    await invokeActivityHook({
+      debug,
+      operation: "update",
+      options: { debug: true, globals: ["site-settings"] },
+      previousValue: undefined,
+      target: { entityType: "global", slug: "site-settings" },
+      user: undefined,
+    });
+
+    expect(debug.mock.calls).toEqual([
+      [
+        {
+          entityType: "global",
+          event: "attribution_cleared",
+          operation: "update",
+          plugin: "activity",
+          reason: "no_user",
+          slug: "site-settings",
+        },
+      ],
+    ]);
+  });
+
+  test("logs why an edit from another auth collection is cleared", async () => {
+    const debug = vi.fn();
+    await invokeActivityHook({
+      debug,
+      operation: "create",
+      options: { collections: ["posts"], debug: true },
+      previousValue: undefined,
+      target: defaultActivityTarget,
+      user: { collection: "customers", id: 21 },
+    });
+
+    expect(debug.mock.calls).toEqual([
+      [
+        {
+          entityType: "collection",
+          event: "attribution_cleared",
+          operation: "create",
+          plugin: "activity",
+          reason: "foreign_auth_collection",
+          slug: "posts",
+        },
+      ],
+    ]);
+  });
+
+  const silentDiagnosticModes = [
+    ["debug diagnostics are disabled", { debug: false }],
+    ["attribution is disabled", { debug: true, enabled: false }],
+  ] satisfies [string, Pick<ActivityPluginOptions, "debug" | "enabled">][];
+
+  test.each(silentDiagnosticModes)("does not log when %s", async (_label, mode) => {
+    const debug = vi.fn();
+    await invokeActivityHook({
+      debug,
+      operation: "update",
+      options: { collections: ["posts"], ...mode },
+      previousValue: 7,
+      target: defaultActivityTarget,
+      user: { collection: "users", id: 42 },
+    });
+
+    expect(debug).not.toHaveBeenCalled();
+  });
+
+  test("keeps attribution working when the host logger throws", async () => {
+    const result = await invokeActivityHook({
+      debug: () => {
+        throw new Error("logger unavailable");
+      },
+      operation: "update",
+      options: { collections: ["posts"], debug: true },
+      previousValue: undefined,
+      target: defaultActivityTarget,
+      user: { collection: "users", id: 42 },
+    });
+
+    expect(result).toBe(42);
   });
 
   test("keeps the field hidden and preserves its value while disabled", async () => {

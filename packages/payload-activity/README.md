@@ -48,7 +48,7 @@ Configuration errors are reported together at startup. The plugin rejects
 missing targets and empty, duplicate, malformed, or unknown collection and
 global slugs. It also rejects unsafe, reserved, or colliding field names,
 duplicate registration, and an invalid admin user collection. The `debug`
-option is validated but this package slice does not emit diagnostics yet.
+option enables structured attribution diagnostics through Payload's logger.
 
 ## Attribution behavior
 
@@ -61,6 +61,18 @@ the field never keeps stale attribution.
 Payload's Local API skips field access checks by default, so the field hook
 returns an ID or `null` on every write. Caller-supplied field values cannot
 replace the attribution result.
+
+## Debug diagnostics
+
+Set `debug: true` to emit one debug-level entry for each attribution decision.
+Every entry includes `plugin: "activity"`, the target's `entityType` and `slug`,
+the write `operation`, and one of these outcomes:
+
+- `attribution_applied` with the attributed `userId`
+- `attribution_cleared` with a `no_user` or `foreign_auth_collection` reason
+
+The plugin emits no diagnostics by default or while `enabled` is `false`. An
+error from the configured Payload logger does not interrupt the write.
 
 ## Admin sidebar
 
