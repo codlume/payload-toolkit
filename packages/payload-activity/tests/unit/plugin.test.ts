@@ -60,6 +60,9 @@ const buildPayloadConfig = (
 describe("activityPlugin", () => {
   test("requires at least one configured target", () => {
     expectTypeOf<{}>().not.toMatchTypeOf<ActivityPluginOptions>();
+  });
+
+  test("accepts global strings before generated types exist", () => {
     expectTypeOf<{ globals: ["not-yet-generated"] }>().toMatchTypeOf<ActivityPluginOptions>();
   });
 

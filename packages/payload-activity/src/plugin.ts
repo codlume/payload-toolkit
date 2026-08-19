@@ -89,7 +89,7 @@ const resolveTargetSlugs = (
     return [];
   }
 
-  const collections: string[] = [];
+  const slugs: string[] = [];
   const seen = new Set<string>();
   const reportedDuplicates = new Set<string>();
 
@@ -110,10 +110,10 @@ const resolveTargetSlugs = (
     }
 
     seen.add(slug);
-    collections.push(slug);
+    slugs.push(slug);
   });
 
-  return collections;
+  return slugs;
 };
 
 const resolveFieldName = (value: unknown, problems: string[]) => {
