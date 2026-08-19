@@ -123,10 +123,12 @@ export interface UserAuthOperations {
  */
 export interface Media {
   id: number;
+  lastModifiedBy?: (number | null) | User;
   blurHash?: string | null;
   prefix?: string | null;
   updatedAt: string;
   createdAt: string;
+  _status?: ('draft' | 'published') | null;
   url?: string | null;
   thumbnailURL?: string | null;
   filename?: string | null;
@@ -241,10 +243,12 @@ export interface PayloadMigration {
  * via the `definition` "media_select".
  */
 export interface MediaSelect<T extends boolean = true> {
+  lastModifiedBy?: T;
   blurHash?: T;
   prefix?: T;
   updatedAt?: T;
   createdAt?: T;
+  _status?: T;
   url?: T;
   thumbnailURL?: T;
   filename?: T;

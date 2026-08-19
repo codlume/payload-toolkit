@@ -69,10 +69,13 @@ test("Payload types match the committed application schema", async () => {
   assert.deepEqual(
     {
       containsBlurHash: /blurHash\?: string \| null;/u.test(generatedTypes),
+      containsLastModifiedBy:
+        /lastModifiedBy\?: \(number \| null\) \| User;/u.test(generatedTypes),
       content: generatedTypes,
     },
     {
       containsBlurHash: true,
+      containsLastModifiedBy: true,
       content: committedTypes,
     },
     "Payload types are out of date",

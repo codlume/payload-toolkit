@@ -1,3 +1,4 @@
+import { activityPlugin } from "@codlume/payload-activity";
 import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blurhash";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { s3Storage, type S3StorageOptions } from "@payloadcms/storage-s3";
@@ -48,6 +49,7 @@ export const createAppConfig = ({
     collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users],
     db: sqliteAdapter({ client: { url: databaseURL } }),
     plugins: [
+      activityPlugin({ collections: ["media"] }),
       blurHashPlugin({
         collections: ["media"],
         debug: blurHash.debug,
