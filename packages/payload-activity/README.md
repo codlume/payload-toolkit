@@ -12,8 +12,8 @@ name and Codlume npm scope are provisional and are not claimed or reserved.
 
 ## Configuration
 
-Register the plugin once and list the collections that need edit attribution.
-Generated Payload types provide completion for collection slugs.
+Register the plugin once and list the collections and globals that need edit
+attribution. Generated Payload types provide completion for both slug types.
 
 ```ts
 import { activityPlugin } from "@codlume/payload-activity";
@@ -24,30 +24,39 @@ export default buildConfig({
     { auth: true, fields: [], slug: "users" },
     { fields: [], slug: "posts" },
   ],
-  plugins: [activityPlugin({ collections: ["posts"] })],
+  globals: [{ fields: [], slug: "site-settings" }],
+  plugins: [
+    activityPlugin({
+      collections: ["posts"],
+      globals: ["site-settings"],
+    }),
+  ],
 });
 ```
 
+At least one collection or global is required.
+
 | Option        | Type               | Default            |
 | ------------- | ------------------ | ------------------ |
-| `collections` | `CollectionSlug[]` | Required           |
+| `collections` | `CollectionSlug[]` | No collections     |
+| `globals`     | `GlobalSlug[]`     | No globals         |
 | `enabled`     | `boolean`          | `true`             |
 | `debug`       | `boolean`          | `false`            |
 | `fieldName`   | `string`           | `"lastModifiedBy"` |
 
 Configuration errors are reported together at startup. The plugin rejects
-missing, empty, duplicate, malformed, and unknown collection slugs. It also
-rejects unsafe, reserved, or colliding field names, duplicate registration,
-and an invalid admin user collection. The `debug` option is validated but this
-package slice does not emit diagnostics yet.
+missing targets and empty, duplicate, malformed, or unknown collection and
+global slugs. It also rejects unsafe, reserved, or colliding field names,
+duplicate registration, and an invalid admin user collection. The `debug`
+option is validated but this package slice does not emit diagnostics yet.
 
 ## Attribution behavior
 
-Each configured collection receives a nullable relationship to the admin user
-collection. The field is read-only in Admin and denies direct create and update
-access. An edit made by an admin user stores that user's ID. A write without a
-user, or with a user from another auth collection, stores `null` so the field
-never keeps stale attribution.
+Each configured collection and global receives a nullable relationship to the
+admin user collection. The field is read-only in Admin and denies direct create
+and update access. An edit made by an admin user stores that user's ID. A write
+without a user, or with a user from another auth collection, stores `null` so
+the field never keeps stale attribution.
 
 Payload's Local API skips field access checks by default, so the field hook
 returns an ID or `null` on every write. Caller-supplied field values cannot

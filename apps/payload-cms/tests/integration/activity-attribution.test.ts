@@ -15,6 +15,8 @@ describe("activity attribution", () => {
   let clearedValue: unknown;
   let draftValue: unknown;
   let draftsEnabled: boolean;
+  let globalAttributedValue: unknown;
+  let globalClearedValue: unknown;
   let payload: Payload;
   let testDirectory: string;
 
@@ -45,6 +47,23 @@ describe("activity attribution", () => {
       data: { email: "activity@example.com", password: "activity-password" },
     });
     adminUserID = admin.id;
+
+    const attributedGlobal = await payload.updateGlobal({
+      data: {},
+      depth: 0,
+      overrideAccess: false,
+      slug: "site-settings",
+      user: admin,
+    });
+    globalAttributedValue = Reflect.get(attributedGlobal, "lastModifiedBy");
+
+    const clearedGlobal = await payload.updateGlobal({
+      data: {},
+      depth: 0,
+      slug: "site-settings",
+    });
+    globalClearedValue = Reflect.get(clearedGlobal, "lastModifiedBy");
+
     const input = await createJpegFixture({ b: 30, g: 90, r: 180 });
     const attributed = await payload.create({
       collection: "media",
@@ -115,5 +134,13 @@ describe("activity attribution", () => {
 
   test("an authenticated autosave records that user", () => {
     expect(autosaveValue).toBe(adminUserID);
+  });
+
+  test("an authenticated global update records that user", () => {
+    expect(globalAttributedValue).toBe(adminUserID);
+  });
+
+  test("an unattributed Local API global update clears the user", () => {
+    expect(globalClearedValue).toBeNull();
   });
 });

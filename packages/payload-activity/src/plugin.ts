@@ -4,12 +4,16 @@ import type {
   Config,
   Field,
   FieldHook,
+  GlobalSlug,
   Plugin,
   RelationshipField,
 } from "payload";
 
-export type ActivityPluginOptions = {
-  collections: CollectionSlug[];
+type ActivityTargets =
+  | { collections: CollectionSlug[]; globals?: GlobalSlug[] }
+  | { collections?: CollectionSlug[]; globals: GlobalSlug[] };
+
+export type ActivityPluginOptions = ActivityTargets & {
   debug?: boolean;
   enabled?: boolean;
   fieldName?: string;
@@ -21,6 +25,7 @@ type ResolvedOptions = {
   debug: boolean;
   enabled: boolean;
   fieldName: string;
+  globals: string[];
 };
 
 const PLUGIN_SLUG = "@codlume/payload-activity";
@@ -70,9 +75,17 @@ class ActivityPluginConfigError extends Error {
 const formatValue = (value: unknown) =>
   typeof value === "string" ? JSON.stringify(value) : String(value);
 
-const resolveCollections = (value: unknown, problems: string[]) => {
+const resolveTargetSlugs = (
+  value: unknown,
+  name: "collections" | "globals",
+  problems: string[],
+) => {
+  if (value === undefined) {
+    return [];
+  }
+
   if (!Array.isArray(value) || value.length === 0) {
-    problems.push("`collections` must be a non-empty array of collection slugs.");
+    problems.push(`\`${name}\` must be a non-empty array of ${name.slice(0, -1)} slugs.`);
     return [];
   }
 
@@ -83,14 +96,14 @@ const resolveCollections = (value: unknown, problems: string[]) => {
   value.forEach((slug, index) => {
     if (typeof slug !== "string" || slug.length === 0) {
       problems.push(
-        `\`collections[${index}]\` must be a non-empty string; received ${formatValue(slug)}.`,
+        `\`${name}[${index}]\` must be a non-empty string; received ${formatValue(slug)}.`,
       );
       return;
     }
 
     if (seen.has(slug)) {
       if (!reportedDuplicates.has(slug)) {
-        problems.push(`\`collections\` must not contain duplicate slug "${slug}".`);
+        problems.push(`\`${name}\` must not contain duplicate slug "${slug}".`);
         reportedDuplicates.add(slug);
       }
       return;
@@ -199,7 +212,13 @@ const findConfigurationProblems = (
   options: ActivityPluginOptions,
 ): { options: ResolvedOptions; problems: string[] } => {
   const problems: string[] = [];
-  const collections = resolveCollections(options.collections, problems);
+  const collections = resolveTargetSlugs(options.collections, "collections", problems);
+  const globals = resolveTargetSlugs(options.globals, "globals", problems);
+
+  if (options.collections === undefined && options.globals === undefined) {
+    problems.push("Configure at least one target with `collections` or `globals`.");
+  }
+
   const fieldName = resolveFieldName(options.fieldName, problems);
   const enabled = resolveBoolean(options.enabled, true, "enabled", problems);
   const debug = resolveBoolean(options.debug, false, "debug", problems);
@@ -245,6 +264,23 @@ const findConfigurationProblems = (
     }
   }
 
+  const availableGlobals = new Map(config.globals?.map((global) => [global.slug, global]));
+
+  for (const slug of globals) {
+    const global = availableGlobals.get(slug);
+
+    if (!global) {
+      problems.push(`Global "${slug}" does not exist.`);
+      continue;
+    }
+
+    if (hasTopLevelDataField(global.fields, fieldName)) {
+      problems.push(
+        `Global "${slug}" already has a top-level data-bearing field named "${fieldName}".`,
+      );
+    }
+  }
+
   const adminUserCollection = config.admin?.user ?? "users";
   const adminCollection = availableCollections.get(adminUserCollection);
 
@@ -261,6 +297,7 @@ const findConfigurationProblems = (
       debug,
       enabled,
       fieldName,
+      globals,
     },
     problems,
   };
@@ -299,17 +336,20 @@ const createActivityField = ({ adminUserCollection, enabled, fieldName }: Resolv
     type: "relationship",
   }) satisfies RelationshipField;
 
-const createCollectionTransformer = (options: ResolvedOptions) => {
-  const configuredCollections = new Set(options.collections);
+const createTargetTransformer = <Target extends { fields: Field[]; slug: string }>(
+  configuredSlugs: string[],
+  activityField: RelationshipField,
+) => {
+  const configuredTargets = new Set(configuredSlugs);
 
-  return (collection: CollectionConfig): CollectionConfig => {
-    if (!configuredCollections.has(collection.slug)) {
-      return collection;
+  return (target: Target): Target => {
+    if (!configuredTargets.has(target.slug)) {
+      return target;
     }
 
     return {
-      ...collection,
-      fields: [...collection.fields, createActivityField(options)],
+      ...target,
+      fields: [...target.fields, activityField],
     };
   };
 };
@@ -322,9 +362,16 @@ export const activityPlugin = (options: ActivityPluginOptions): Plugin => {
       throw new ActivityPluginConfigError(problems);
     }
 
+    const activityField = createActivityField(resolvedOptions);
+
     return {
       ...config,
-      collections: (config.collections ?? []).map(createCollectionTransformer(resolvedOptions)),
+      collections: (config.collections ?? []).map(
+        createTargetTransformer(resolvedOptions.collections, activityField),
+      ),
+      globals: (config.globals ?? []).map(
+        createTargetTransformer(resolvedOptions.globals, activityField),
+      ),
     };
   };
 

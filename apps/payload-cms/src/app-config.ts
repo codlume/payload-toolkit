@@ -8,6 +8,7 @@ import sharp from "sharp";
 
 import { createMediaCollection } from "./collections/media.ts";
 import { Users } from "./collections/users.ts";
+import { SiteSettings } from "./globals/site-settings.ts";
 
 type AppStorageOptions = {
   bucket: string;
@@ -48,8 +49,9 @@ export const createAppConfig = ({
     },
     collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users],
     db: sqliteAdapter({ client: { url: databaseURL } }),
+    globals: [SiteSettings],
     plugins: [
-      activityPlugin({ collections: ["media"] }),
+      activityPlugin({ collections: ["media"], globals: ["site-settings"] }),
       blurHashPlugin({
         collections: ["media"],
         debug: blurHash.debug,

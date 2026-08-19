@@ -11,6 +11,7 @@ const buildInvalidConfig = (options) =>
       { fields: [], slug: "posts" },
     ],
     db: sqliteAdapter({ client: { url: ":memory:" } }),
+    globals: [{ fields: [], slug: "site-settings" }],
     plugins: [activityPlugin(options)],
     secret: "activity-runtime-validation-test-secret",
   });
@@ -44,10 +45,34 @@ test("rejects a non-array collections value", async () => {
   });
 });
 
-test("rejects missing collections from an untyped caller", async () => {
+test("rejects malformed runtime global target values together", async () => {
+  await expect(
+    buildInvalidConfig({
+      collections: ["posts"],
+      globals: ["site-settings", "", 17],
+    }),
+  ).rejects.toMatchObject({
+    message: [
+      "Invalid Activity plugin configuration:",
+      '- `globals[1]` must be a non-empty string; received "".',
+      "- `globals[2]` must be a non-empty string; received 17.",
+    ].join("\n"),
+    name: "ActivityPluginConfigError",
+  });
+});
+
+test("rejects an empty globals array even when a collection is configured", async () => {
+  await expect(buildInvalidConfig({ collections: ["posts"], globals: [] })).rejects.toMatchObject({
+    message:
+      "Invalid Activity plugin configuration:\n- `globals` must be a non-empty array of global slugs.",
+    name: "ActivityPluginConfigError",
+  });
+});
+
+test("rejects missing targets from an untyped caller", async () => {
   await expect(buildInvalidConfig({})).rejects.toMatchObject({
     message:
-      "Invalid Activity plugin configuration:\n- `collections` must be a non-empty array of collection slugs.",
+      "Invalid Activity plugin configuration:\n- Configure at least one target with `collections` or `globals`.",
     name: "ActivityPluginConfigError",
   });
 });

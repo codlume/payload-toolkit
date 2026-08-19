@@ -13,6 +13,10 @@ const createSourceConfig = () =>
       { fields: [], slug: "pages" },
     ],
     db: sqliteAdapter({ client: { url: ":memory:" } }),
+    globals: [
+      { fields: [], slug: "site-settings" },
+      { fields: [], slug: "navigation" },
+    ],
     secret: "activity-unit-test-secret",
   }) satisfies Config;
 
@@ -54,8 +58,9 @@ const buildPayloadConfig = (
   });
 
 describe("activityPlugin", () => {
-  test("requires configured collections", () => {
+  test("requires at least one configured target", () => {
     expectTypeOf<{}>().not.toMatchTypeOf<ActivityPluginOptions>();
+    expectTypeOf<{ globals: ["not-yet-generated"] }>().toMatchTypeOf<ActivityPluginOptions>();
   });
 
   test("accepts collection strings before generated types exist", () => {
@@ -80,6 +85,27 @@ describe("activityPlugin", () => {
       { fields: [], slug: "users" },
       { fields: [{ name: "lastModifiedBy", relationTo: "users" }], slug: "posts" },
       { fields: [], slug: "pages" },
+    ]);
+  });
+
+  test("adds the last-modified relationship to configured globals only", async () => {
+    const transformed = await activityPlugin({ globals: ["site-settings"] })(createSourceConfig());
+
+    expect(
+      transformed.globals?.map((global) => ({
+        fields: global.fields.flatMap((field) =>
+          "name" in field
+            ? [{ name: field.name, relationTo: Reflect.get(field, "relationTo") }]
+            : [],
+        ),
+        slug: global.slug,
+      })),
+    ).toEqual([
+      {
+        fields: [{ name: "lastModifiedBy", relationTo: "users" }],
+        slug: "site-settings",
+      },
+      { fields: [], slug: "navigation" },
     ]);
   });
 
@@ -183,6 +209,35 @@ describe("activityPlugin", () => {
         "- Register `activityPlugin` only once; found 2 registrations.",
         '- Collection "posts" already has a top-level data-bearing field named "updatedAt".',
         '- Collection "missing" does not exist.',
+      ].join("\n"),
+      name: "ActivityPluginConfigError",
+    });
+  });
+
+  test("reports global target problems together", async () => {
+    await expect(
+      buildConfig({
+        collections: [{ auth: true, fields: [], slug: "users" }],
+        db: sqliteAdapter({ client: { url: ":memory:" } }),
+        globals: [
+          {
+            fields: [{ name: "lastModifiedBy", type: "text" }],
+            slug: "site-settings",
+          },
+        ],
+        plugins: [
+          activityPlugin({
+            globals: ["site-settings", "site-settings", "missing"],
+          }),
+        ],
+        secret: "activity-unit-test-secret",
+      }),
+    ).rejects.toMatchObject({
+      message: [
+        "Invalid Activity plugin configuration:",
+        '- `globals` must not contain duplicate slug "site-settings".',
+        '- Global "site-settings" already has a top-level data-bearing field named "lastModifiedBy".',
+        '- Global "missing" does not exist.',
       ].join("\n"),
       name: "ActivityPluginConfigError",
     });
