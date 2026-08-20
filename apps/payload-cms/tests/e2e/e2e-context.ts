@@ -51,11 +51,24 @@ export const createE2EPayload = async (mode: "disabled" | "enabled") => {
   return getPayload({ config });
 };
 
-export const seedAdminUser = (payload: Awaited<ReturnType<typeof createE2EPayload>>) =>
-  payload.create({
+export const seedAdminUser = async (payload: Awaited<ReturnType<typeof createE2EPayload>>) => {
+  const existingUsers = await payload.find({
+    collection: "users",
+    depth: 0,
+    limit: 1,
+    where: { email: { equals: adminUser.email } },
+  });
+  const [existingUser] = existingUsers.docs;
+
+  if (existingUser) {
+    return existingUser;
+  }
+
+  return payload.create({
     collection: "users",
     data: adminUser,
   });
+};
 
 const createUpload = async (
   payload: Awaited<ReturnType<typeof createE2EPayload>>,

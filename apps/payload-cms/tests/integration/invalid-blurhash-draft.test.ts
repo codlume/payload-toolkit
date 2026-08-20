@@ -6,6 +6,7 @@ import { getPayload, type Payload } from "payload";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { createAppConfig } from "../../src/app-config.ts";
+import { seedAdminUser } from "../e2e/e2e-context.ts";
 import { setStoredBlurHash } from "../stored-blur-hash-fixture.ts";
 
 let invalidDocumentID: number | string;
@@ -58,4 +59,11 @@ test("the invalid BlurHash fixture is visible to an Admin draft read", async () 
   });
 
   expect(document.blurHash).toBe("not-a-blurhash");
+});
+
+test("the Admin user seed is safe to repeat after a Playwright retry", async () => {
+  const firstUser = await seedAdminUser(payload);
+  const retryUser = await seedAdminUser(payload);
+
+  expect(retryUser.id).toBe(firstUser.id);
 });

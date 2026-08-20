@@ -232,7 +232,7 @@ test("invalid value stays selectable while the form remains usable", async ({ pa
   ).toBeVisible();
   await expect(input).toHaveValue("not-a-blurhash");
   await expect(input).not.toBeDisabled();
-  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save Draft" })).toBeVisible();
 });
 
 test("authenticated uploads send file bytes directly to S3", async ({ page }) => {
