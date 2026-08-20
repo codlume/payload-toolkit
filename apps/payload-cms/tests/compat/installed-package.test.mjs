@@ -8,45 +8,82 @@ const applicationDirectory = fileURLToPath(new URL("../../", import.meta.url));
 const applicationPackageJSON = JSON.parse(
   await readFile(path.join(applicationDirectory, "package.json"), "utf8"),
 );
-const serverEntryPath = fileURLToPath(import.meta.resolve("@codlume/payload-blurhash"));
-const installedPackageDirectory = path.dirname(path.dirname(serverEntryPath));
-const installedPackageJSON = JSON.parse(
-  await readFile(path.join(installedPackageDirectory, "package.json"), "utf8"),
+const pluginNames = ["@codlume/payload-activity", "@codlume/payload-blurhash"];
+const installedPlugins = Object.fromEntries(
+  await Promise.all(
+    pluginNames.map(async (name) => {
+      const serverEntryPath = fileURLToPath(import.meta.resolve(name));
+      const directory = path.dirname(path.dirname(serverEntryPath));
+      const packageJSON = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+
+      return [name, { directory, packageJSON, serverEntryPath }];
+    }),
+  ),
 );
 
-void test("the consumer resolves the real tarball inside its own installation", async () => {
-  const [applicationPath, installedPackagePath, lockfile] = await Promise.all([
+void test("the consumer resolves the real tarballs inside its own installation", async () => {
+  const [applicationPath, lockfile, installedPackagePaths] = await Promise.all([
     realpath(applicationDirectory),
-    realpath(installedPackageDirectory),
     readFile(path.join(applicationDirectory, "pnpm-lock.yaml"), "utf8"),
+    Promise.all(
+      Object.entries(installedPlugins).map(async ([name, plugin]) => {
+        const [directory, serverEntryPath] = await Promise.all([
+          realpath(plugin.directory),
+          realpath(plugin.serverEntryPath),
+        ]);
+        return [name, { directory, serverEntryPath }];
+      }),
+    ),
   ]);
 
   assert.deepEqual(
-    {
-      builtServerEntry: serverEntryPath.endsWith(path.join("dist", "index.mjs")),
-      installedInsideConsumer: installedPackagePath.startsWith(applicationPath),
-      workspaceReference: /workspace:/u.test(lockfile),
-    },
-    {
-      builtServerEntry: true,
-      installedInsideConsumer: true,
-      workspaceReference: false,
-    },
+    Object.fromEntries(
+      installedPackagePaths.map(([name, installedPackage]) => [
+        name,
+        {
+          builtServerEntry: installedPackage.serverEntryPath.endsWith(
+            path.join("dist", "index.mjs"),
+          ),
+          installedInsideConsumer: installedPackage.directory.startsWith(applicationPath),
+          workspaceReference: /workspace:/u.test(lockfile),
+        },
+      ]),
+    ),
+    Object.fromEntries(
+      pluginNames.map((name) => [
+        name,
+        {
+          builtServerEntry: true,
+          installedInsideConsumer: true,
+          workspaceReference: false,
+        },
+      ]),
+    ),
   );
 });
 
-void test("the installed package makes only the verified compatibility claims", () => {
+void test("the installed packages make only the verified compatibility claims", () => {
   assert.deepEqual(
-    {
-      engines: installedPackageJSON.engines,
-      payload: installedPackageJSON.peerDependencies.payload,
-      payloadUI: installedPackageJSON.peerDependencies["@payloadcms/ui"],
-    },
-    {
-      engines: { node: ">=22.12.0 <23 || >=24.0.0 <25" },
-      payload: ">=3.88.0 <4",
-      payloadUI: ">=3.88.0 <4",
-    },
+    Object.fromEntries(
+      Object.entries(installedPlugins).map(([name, { packageJSON }]) => [
+        name,
+        {
+          engines: packageJSON.engines,
+          payload: packageJSON.peerDependencies.payload,
+          payloadUI: packageJSON.peerDependencies["@payloadcms/ui"],
+        },
+      ]),
+    ),
+    Object.fromEntries(
+      pluginNames.map((name) => [
+        name,
+        {
+          engines: { node: ">=22.12.0 <23 || >=24.0.0 <25" },
+          payload: ">=3.88.0 <4",
+          payloadUI: ">=3.88.0 <4",
+        },
+      ]),
+    ),
   );
 });
 
@@ -55,7 +92,9 @@ void test("every host dependency is exactly pinned and installed at that version
     ...applicationPackageJSON.dependencies,
     ...applicationPackageJSON.devDependencies,
   };
-  delete declaredDependencies["@codlume/payload-blurhash"];
+  for (const pluginName of pluginNames) {
+    delete declaredDependencies[pluginName];
+  }
   const installedVersions = Object.fromEntries(
     await Promise.all(
       Object.entries(declaredDependencies).map(async ([name]) => {

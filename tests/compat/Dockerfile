@@ -10,6 +10,7 @@ WORKDIR /workspace
 
 COPY tsconfig.base.json tsconfig.base.json
 COPY apps/payload-cms apps/payload-cms
+COPY packages/payload-activity packages/payload-activity
 COPY packages/payload-blurhash packages/payload-blurhash
 COPY tests/run-command.mjs tests/run-command.mjs
 COPY tests/compat tests/compat

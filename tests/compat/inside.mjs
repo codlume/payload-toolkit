@@ -10,7 +10,10 @@ import { compatibilityLanes, dependencyVersions, pnpmVersion } from "./versions.
 
 const repositoryDirectory = fileURLToPath(new URL("../../", import.meta.url));
 const applicationSourceDirectory = path.join(repositoryDirectory, "apps/payload-cms");
-const packageDirectory = path.join(repositoryDirectory, "packages/payload-blurhash");
+const packageDirectories = Object.freeze({
+  "@codlume/payload-activity": path.join(repositoryDirectory, "packages/payload-activity"),
+  "@codlume/payload-blurhash": path.join(repositoryDirectory, "packages/payload-blurhash"),
+});
 const maximumPackOutputBytes = 10 * 1024 * 1024;
 
 const requireEnvironment = (name) => {
@@ -34,7 +37,7 @@ assert.equal(expectedPayloadVersion, lane.payload);
 assert.equal(process.version, `v${lane.node}`);
 assert.equal(dependencyVersions.payload, lane.payload);
 
-const pack = (destination) =>
+const pack = (packageDirectory, destination) =>
   new Promise((resolve, reject) => {
     const child = spawn(
       "npm",
@@ -86,7 +89,7 @@ const shouldCopyApplicationPath = (source) => {
   return !ignoredApplicationDirectories.has(topLevelDirectory);
 };
 
-const createConsumerPackageJSON = (tarballPath, consumerDirectory) => ({
+const createConsumerPackageJSON = (tarballPaths, consumerDirectory) => ({
   name: `payload-blurhash-${lane.name}-compatibility-consumer`,
   version: "0.0.0",
   private: true,
@@ -99,7 +102,12 @@ const createConsumerPackageJSON = (tarballPath, consumerDirectory) => ({
     node: lane.node,
   },
   dependencies: {
-    "@codlume/payload-blurhash": `file:${path.relative(consumerDirectory, tarballPath)}`,
+    ...Object.fromEntries(
+      Object.entries(tarballPaths).map(([name, tarballPath]) => [
+        name,
+        `file:${path.relative(consumerDirectory, tarballPath)}`,
+      ]),
+    ),
     "@payloadcms/db-sqlite": dependencyVersions["@payloadcms/db-sqlite"],
     "@payloadcms/next": dependencyVersions["@payloadcms/next"],
     "@payloadcms/storage-s3": dependencyVersions["@payloadcms/storage-s3"],
@@ -143,13 +151,20 @@ try {
     path.join(temporaryDirectory, "tsconfig.base.json"),
   );
 
-  console.log(`[${lane.name}] Packing the real plugin artifact...`);
-  const tarballFilename = await pack(temporaryDirectory);
-  const tarballPath = path.join(temporaryDirectory, tarballFilename);
-  await access(tarballPath);
+  console.log(`[${lane.name}] Packing the real plugin artifacts...`);
+  const tarballPaths = Object.fromEntries(
+    await Promise.all(
+      Object.entries(packageDirectories).map(async ([name, packageDirectory]) => {
+        const tarballFilename = await pack(packageDirectory, temporaryDirectory);
+        const tarballPath = path.join(temporaryDirectory, tarballFilename);
+        await access(tarballPath);
+        return [name, tarballPath];
+      }),
+    ),
+  );
   await writeFile(
     path.join(consumerDirectory, "package.json"),
-    `${JSON.stringify(createConsumerPackageJSON(tarballPath, consumerDirectory), null, 2)}\n`,
+    `${JSON.stringify(createConsumerPackageJSON(tarballPaths, consumerDirectory), null, 2)}\n`,
   );
 
   console.log(`[${lane.name}] Generating an isolated consumer lockfile...`);

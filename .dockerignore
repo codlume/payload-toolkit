@@ -4,6 +4,8 @@
 **/.payload
 artifacts
 **/dist
+!packages/payload-activity/dist
+!packages/payload-activity/dist/**
 !packages/payload-blurhash/dist
 !packages/payload-blurhash/dist/**
 **/node_modules
