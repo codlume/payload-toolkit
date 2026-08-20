@@ -269,7 +269,7 @@ test("authenticated uploads send file bytes directly to S3", async ({ page }) =>
   await page.goto("/admin/collections/media/create");
   page.on("request", observeRequest);
   await page.setInputFiles('input[type="file"]', directUploadFile);
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Publish changes" }).click();
   await expect(page).toHaveURL(/\/admin\/collections\/media\/[^/]+$/);
   await expect.poll(() => putsToS3.length).toBe(1);
   page.off("request", observeRequest);
