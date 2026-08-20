@@ -187,9 +187,6 @@ describe("activityPlugin", () => {
       updateAllowed: Reflect.apply(updateAccess, undefined, [{}]),
     }).toEqual({
       admin: {
-        components: {
-          Field: "@codlume/payload-activity/client#LastModifiedByField",
-        },
         position: "sidebar",
         readOnly: true,
       },
@@ -341,9 +338,6 @@ describe("activityPlugin", () => {
       ]),
     }).toEqual({
       admin: {
-        components: {
-          Field: "@codlume/payload-activity/client#LastModifiedByField",
-        },
         hidden: true,
         position: "sidebar",
         readOnly: true,

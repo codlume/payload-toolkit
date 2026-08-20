@@ -76,15 +76,9 @@ error from the configured Payload logger does not interrupt the write.
 
 ## Admin sidebar
 
-The read-only sidebar field shows the admin user's configured title with an
-email fallback and links to that user's document. The document's `updatedAt`
-value appears beside the user as an absolute local timestamp. Unattributed
-edits show `—`.
-
-The component makes one request for an attributed user. While that request is
-in flight, it shows only the timestamp. A failed request or deleted user falls
-back to the stored user ID. It has no spinner, relative-time timer, or animated
-loading state.
+Payload renders the read-only field in the sidebar with its native relationship
+UI for the configured admin user collection. The plugin does not replace the
+field with a custom Admin component.
 
 ## Disabled mode
 

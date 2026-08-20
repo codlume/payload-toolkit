@@ -8,12 +8,5 @@ export default defineConfig({
       entry: "src/index.ts",
       platform: "node",
     },
-    {
-      banner: { js: '"use client";' },
-      clean: false,
-      dts: true,
-      entry: "src/client.ts",
-      platform: "node",
-    },
   ],
 });

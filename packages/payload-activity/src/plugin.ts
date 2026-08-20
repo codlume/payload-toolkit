@@ -353,9 +353,6 @@ const createActivityField = (
       update: denyCallerWrite,
     },
     admin: {
-      components: {
-        Field: "@codlume/payload-activity/client#LastModifiedByField",
-      },
       ...(!enabled && { hidden: true }),
       position: "sidebar",
       readOnly: true,
