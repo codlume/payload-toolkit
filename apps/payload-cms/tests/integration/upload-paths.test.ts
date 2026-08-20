@@ -47,7 +47,11 @@ describe("official upload paths", () => {
     payload = await getPayload({ config });
     await payload.create({
       collection: "users",
-      data: { email: "upload-paths@example.com", password: "upload-paths-password" },
+      data: {
+        email: "upload-paths@example.com",
+        name: "Upload Paths Admin",
+        password: "upload-paths-password",
+      },
     });
     const login = await payload.login({
       collection: "users",

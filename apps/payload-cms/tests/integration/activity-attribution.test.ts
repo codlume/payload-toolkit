@@ -44,7 +44,11 @@ describe("activity attribution", () => {
 
     const admin = await payload.create({
       collection: "users",
-      data: { email: "activity@example.com", password: "activity-password" },
+      data: {
+        email: "activity@example.com",
+        name: "Activity Admin",
+        password: "activity-password",
+      },
     });
     adminUserID = admin.id;
 

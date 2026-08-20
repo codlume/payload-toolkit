@@ -41,7 +41,11 @@ describe("temporary-file uploads", () => {
     payload = await getPayload({ config });
     await payload.create({
       collection: "users",
-      data: { email: "temporary-file@example.com", password: "temporary-file-password" },
+      data: {
+        email: "temporary-file@example.com",
+        name: "Temporary File Admin",
+        password: "temporary-file-password",
+      },
     });
     const login = await payload.login({
       collection: "users",

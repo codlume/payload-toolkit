@@ -9,6 +9,7 @@ import { setStoredBlurHash } from "../stored-blur-hash-fixture.ts";
 
 export const adminUser = {
   email: "preview@example.com",
+  name: "Preview Admin",
   password: "preview-test-password",
 };
 
