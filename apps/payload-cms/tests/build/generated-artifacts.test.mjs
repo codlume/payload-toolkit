@@ -69,10 +69,13 @@ test("Payload types match the committed application schema", async () => {
   assert.deepEqual(
     {
       containsBlurHash: /blurHash\?: string \| null;/u.test(generatedTypes),
+      containsLastModifiedBy:
+        /lastModifiedBy\?: \(number \| null\) \| User;/u.test(generatedTypes),
       content: generatedTypes,
     },
     {
       containsBlurHash: true,
+      containsLastModifiedBy: true,
       content: committedTypes,
     },
     "Payload types are out of date",
@@ -99,7 +102,7 @@ test("Payload import map matches the committed Admin components", async () => {
   );
 });
 
-test("Admin preview resolves through the installed package client export", () => {
+test("Admin fields resolve through installed package client exports", () => {
   assert.ok(
     fileURLToPath(import.meta.resolve("@codlume/payload-blurhash/client")).endsWith(
       path.join("dist", "client.mjs"),

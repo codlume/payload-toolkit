@@ -1,0 +1,60 @@
+{
+  "name": "@codlume/payload-activity",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Payload CMS plugin that records the admin user who last modified a document.",
+  "keywords": [
+    "activity",
+    "attribution",
+    "cms",
+    "payload",
+    "payloadcms",
+    "plugin"
+  ],
+  "homepage": "https://github.com/codlume/payload-toolkit/tree/main/packages/payload-activity#readme",
+  "bugs": {
+    "url": "https://github.com/codlume/payload-toolkit/issues"
+  },
+  "license": "MIT",
+  "author": "Codlume",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codlume/payload-toolkit.git",
+    "directory": "packages/payload-activity"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "test:build": "pnpm build && node --test tests/build/package-contract.test.mjs",
+    "test:unit": "pnpm build && vitest run tests/unit"
+  },
+  "devDependencies": {
+    "@payloadcms/db-sqlite": "3.88.0",
+    "graphql": "16.14.2",
+    "payload": "3.88.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "peerDependencies": {
+    "payload": ">=3.88.0 <4"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23 || >=24.0.0 <25"
+  }
+}

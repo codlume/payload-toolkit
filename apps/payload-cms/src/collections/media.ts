@@ -13,4 +13,9 @@ export const createMediaCollection = (
   upload: {
     staticDir: uploadDirectory,
   },
+  versions: {
+    drafts: {
+      autosave: true,
+    },
+  },
 });

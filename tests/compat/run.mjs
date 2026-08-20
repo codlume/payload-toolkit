@@ -64,7 +64,13 @@ const runLane = async (lane) => {
 
 try {
   await runCommand({
-    arguments_: ["--filter", "@codlume/payload-blurhash", "build"],
+    arguments_: [
+      "--filter",
+      "@codlume/payload-activity",
+      "--filter",
+      "@codlume/payload-blurhash",
+      "build",
+    ],
     command: "pnpm",
     cwd: repositoryDirectory,
     env: process.env,

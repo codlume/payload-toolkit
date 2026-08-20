@@ -5,9 +5,11 @@ import { getPayload } from "payload";
 
 import { createAppConfig } from "../../src/app-config.ts";
 import { createS3TestStorage } from "../s3-test-context.ts";
+import { setStoredBlurHash } from "../stored-blur-hash-fixture.ts";
 
 export const adminUser = {
   email: "preview@example.com",
+  name: "Preview Admin",
   password: "preview-test-password",
 };
 
@@ -50,11 +52,24 @@ export const createE2EPayload = async (mode: "disabled" | "enabled") => {
   return getPayload({ config });
 };
 
-export const seedAdminUser = (payload: Awaited<ReturnType<typeof createE2EPayload>>) =>
-  payload.create({
+export const seedAdminUser = async (payload: Awaited<ReturnType<typeof createE2EPayload>>) => {
+  const existingUsers = await payload.find({
+    collection: "users",
+    depth: 0,
+    limit: 1,
+    where: { email: { equals: adminUser.email } },
+  });
+  const [existingUser] = existingUsers.docs;
+
+  if (existingUser) {
+    return existingUser;
+  }
+
+  return payload.create({
     collection: "users",
     data: adminUser,
   });
+};
 
 const createUpload = async (
   payload: Awaited<ReturnType<typeof createE2EPayload>>,
@@ -88,11 +103,7 @@ export const seedPreviewDocuments = async (
     Buffer.from("invalid stored value fixture"),
   );
 
-  await payload.db.updateOne({
-    collection: "media",
-    data: { blurHash: "not-a-blurhash" },
-    id: invalid.id,
-  });
+  await setStoredBlurHash(payload, invalid.id, "not-a-blurhash");
 
   return {
     invalidID: invalid.id,
