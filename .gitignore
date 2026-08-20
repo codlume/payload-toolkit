@@ -7,3 +7,4 @@ apps/payload-cms/.next*/
 apps/payload-cms/playwright-report/
 apps/payload-cms/test-results/
 apps/payload-cms/tsconfig-e2e-*.json
+.claude/worktrees/
