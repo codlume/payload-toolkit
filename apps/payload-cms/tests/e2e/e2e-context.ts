@@ -5,6 +5,7 @@ import { getPayload } from "payload";
 
 import { createAppConfig } from "../../src/app-config.ts";
 import { createS3TestStorage } from "../s3-test-context.ts";
+import { setStoredBlurHash } from "../stored-blur-hash-fixture.ts";
 
 export const adminUser = {
   email: "preview@example.com",
@@ -88,11 +89,7 @@ export const seedPreviewDocuments = async (
     Buffer.from("invalid stored value fixture"),
   );
 
-  await payload.db.updateOne({
-    collection: "media",
-    data: { blurHash: "not-a-blurhash" },
-    id: invalid.id,
-  });
+  await setStoredBlurHash(payload, invalid.id, "not-a-blurhash");
 
   return {
     invalidID: invalid.id,
