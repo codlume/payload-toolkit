@@ -1,5 +1,8 @@
 import { activityPlugin } from "@codlume/payload-activity";
-import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blurhash";
+import {
+  blurHashPlugin,
+  type BlurHashPluginOptions,
+} from "@codlume/payload-blurhash";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { s3Storage, type S3StorageOptions } from "@payloadcms/storage-s3";
 import path from "node:path";
@@ -18,7 +21,8 @@ type AppStorageOptions = {
 
 type AppConfigOptions = {
   blurHash: {
-    alphaBackground: "default" | NonNullable<BlurHashPluginOptions["alphaBackground"]>;
+    alphaBackground:
+      "default" | NonNullable<BlurHashPluginOptions["alphaBackground"]>;
     debug: boolean;
   };
   databaseURL: string;
@@ -47,7 +51,10 @@ export const createAppConfig = ({
         importMapFile: generatedFiles.importMap,
       },
     },
-    collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users],
+    collections: [
+      createMediaCollection(uploadDirectory, mediaBeforeChangeHooks),
+      Users,
+    ],
     db: sqliteAdapter({ client: { url: databaseURL } }),
     globals: [SiteSettings],
     plugins: [
