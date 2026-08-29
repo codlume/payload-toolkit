@@ -8,7 +8,11 @@ const applicationDirectory = fileURLToPath(new URL("../../", import.meta.url));
 const applicationPackageJSON = JSON.parse(
   await readFile(path.join(applicationDirectory, "package.json"), "utf8"),
 );
-const pluginNames = ["@codlume/payload-activity", "@codlume/payload-blurhash"];
+const verifiedPeerRanges = {
+  "@codlume/payload-activity": { payload: ">=3.88.0 <4" },
+  "@codlume/payload-blurhash": { "@payloadcms/ui": ">=3.88.0 <4", payload: ">=3.88.0 <4" },
+};
+const pluginNames = Object.keys(verifiedPeerRanges);
 const installedPlugins = Object.fromEntries(
   await Promise.all(
     pluginNames.map(async (name) => {
@@ -69,18 +73,20 @@ void test("the installed packages make only the verified compatibility claims", 
         name,
         {
           engines: packageJSON.engines,
-          payload: packageJSON.peerDependencies.payload,
-          payloadUI: packageJSON.peerDependencies["@payloadcms/ui"],
+          payloadPeers: Object.fromEntries(
+            Object.entries(packageJSON.peerDependencies).filter(
+              ([peer]) => peer === "payload" || peer.startsWith("@payloadcms/"),
+            ),
+          ),
         },
       ]),
     ),
     Object.fromEntries(
-      pluginNames.map((name) => [
+      Object.entries(verifiedPeerRanges).map(([name, payloadPeers]) => [
         name,
         {
           engines: { node: ">=22.12.0 <23 || >=24.0.0 <25" },
-          payload: ">=3.88.0 <4",
-          payloadUI: ">=3.88.0 <4",
+          payloadPeers,
         },
       ]),
     ),
