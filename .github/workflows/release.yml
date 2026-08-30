@@ -73,10 +73,14 @@ jobs:
         with:
           skip-github-release: true
 
-      # The merge commit of the newest merged, still-pending release PR is the
-      # only commit the rest of the job may act on. Never github.sha: a later
-      # feature merge can replace the release PR's pending workflow run, and a
-      # re-run after a partial failure can start from an unrelated push. GraphQL
+      # The merge commit of the newest merged release PR is the only commit the
+      # rest of the job may act on. Never github.sha: a later feature merge can
+      # replace the release PR's pending workflow run, and a re-run after a
+      # partial failure can start from an unrelated push. A pending PR still
+      # needs its GitHub Releases and its npm publish. A tagged PR needs at most
+      # the npm publish, and only a re-run attempts it: release-please relabels
+      # the PR when it creates the GitHub Releases, before npm publish runs, so
+      # an ordinary push after a finished release finds nothing to do. GraphQL
       # avoids the search-index lag of `gh pr list --label` immediately after a
       # maintainer merges the release PR.
       - name: Find the release commit
@@ -84,21 +88,42 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
+          pr=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
             -f query='query($owner: String!, $name: String!) {
               repository(owner: $owner, name: $name) {
-                pullRequests(states: MERGED, baseRefName: "main", labels: ["autorelease: pending"],
+                pullRequests(states: MERGED, baseRefName: "main",
+                             labels: ["autorelease: pending", "autorelease: tagged"],
                              first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
-                  nodes { number mergeCommit { oid } }
+                  nodes { number mergeCommit { oid } labels(first: 20) { nodes { name } } }
                 }
               }
-            }' --jq '.data.repository.pullRequests.nodes[0].mergeCommit.oid // empty')
-          if [[ -z "$sha" ]]; then
-            echo "Nothing to release: no merged release PR is pending."
+            }' --jq '.data.repository.pullRequests.nodes[0] // empty')
+
+          number=""
+          sha=""
+          pending=""
+          if [[ -z "$pr" ]]; then
+            echo "Nothing to release: no release PR has been merged."
           else
-            echo "Release commit: $sha"
+            number=$(jq -r '.number' <<<"$pr")
+            merge_sha=$(jq -r '.mergeCommit.oid' <<<"$pr")
+            if jq -e '.labels.nodes | any(.name == "autorelease: pending")' <<<"$pr" >/dev/null; then
+              sha=$merge_sha
+              pending=true
+              echo "Release commit: $sha (release PR #$number awaits its GitHub Releases and npm publish)"
+            elif (( GITHUB_RUN_ATTEMPT > 1 )); then
+              sha=$merge_sha
+              pending=false
+              echo "Release commit: $sha (re-run; release PR #$number is tagged, publishing whatever npm still lacks)"
+            else
+              echo "Nothing to release: the newest release PR #$number is already tagged."
+            fi
           fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "number=$number"
+            echo "sha=$sha"
+            echo "pending=$pending"
+          } >> "$GITHUB_OUTPUT"
 
       # release-please leaves its prs output empty when the pending PR did not
       # change, so the live open PR is the source of truth for enrichment. Do
@@ -270,14 +295,52 @@ jobs:
         if: steps.release-commit.outputs.sha != ''
         run: pnpm build:packages && pnpm test:build && pnpm test:pack
 
-      # Each plugin publishes independently; one failure does not block the
-      # other, and the step fails at the end if any failed. -r is required even
-      # for one package: only pnpm's recursive publish skips versions already on
-      # npm and skips private packages, which is what makes a re-run safe.
+      # Tags and GitHub Releases come before npm: the public record of a version
+      # exists before the one irreversible step, and a failed publish leaves a
+      # tagged PR for the re-run to finish. A release commit that failed its own
+      # build is tagged and released anyway (a Skipped version, never on npm),
+      # because an untagged pending PR would make every later run re-find it and
+      # fail again. A re-run of an already tagged PR skips this step: release-
+      # please would find only duplicate tags and fail. paths_released is only
+      # set in the run that created a Release, so it is logged and never
+      # consulted for publishing.
+      - name: Create tags and GitHub Releases
+        id: github-release
+        if: steps.release-commit.outputs.pending == 'true' && (success() || steps.build.outcome == 'failure')
+        uses: googleapis/release-please-action@v5.0.0
+        with:
+          skip-github-pull-request: true
+
+      # release-please exits 0 when it releases nothing, for example when the
+      # merged PR's title no longer matches group-pull-request-title-pattern
+      # (it refreshes only the body of an open release PR). Its relabel to
+      # "autorelease: tagged" is the proof that every plugin in the release PR
+      # has its tag and GitHub Release. Nothing reaches npm without it.
+      - name: Verify the release PR is tagged
+        id: release-tagged
+        if: steps.github-release.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ steps.release-commit.outputs.number }}
+        run: |
+          if gh pr view "$RELEASE_PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' \
+               | grep -qx 'autorelease: tagged'; then
+            echo "Release PR #$RELEASE_PR is tagged."
+          else
+            echo "::error::release-please created no GitHub Release for release PR #$RELEASE_PR; see its log above. If it reported a bad pull request title, retitle the merged PR to match group-pull-request-title-pattern in release-please-config.json, then re-run the failed jobs."
+            exit 1
+          fi
+
+      # npm is the last step and runs only for a release commit that built and
+      # is tagged (either in this run or, on a re-run, earlier). Each plugin
+      # publishes independently; one failure does not block the other, and the
+      # step fails at the end if any failed. -r is required even for one
+      # package: only pnpm's recursive publish skips versions already on npm and
+      # skips private packages, which is what makes a re-run safe.
       # --no-git-checks because HEAD is detached. No token: pnpm publishes with
       # OIDC (id-token: write) and attaches provenance itself.
       - name: Publish to npm
-        if: steps.release-commit.outputs.sha != ''
+        if: steps.build.outcome == 'success' && (steps.release-commit.outputs.pending == 'false' || steps.release-tagged.outcome == 'success')
         run: |
           failed=()
           for dir in packages/*/; do
@@ -292,20 +355,6 @@ jobs:
             echo "::error::Publish failed for: ${failed[*]}"
             exit 1
           fi
-
-      # Tags and GitHub Releases come last so nothing public exists until the
-      # version installs: a failed publish leaves the PR pending for the re-run.
-      # The exception is a release commit that failed its own build: it is
-      # tagged and released anyway (a Skipped version, never on npm), because an
-      # untagged pending PR would make every later run re-find it and fail again.
-      # paths_released is only set in the run that created a Release, so it is
-      # logged and never consulted for publishing.
-      - name: Create tags and GitHub Releases
-        id: github-release
-        if: steps.release-commit.outputs.sha != '' && (success() || steps.build.outcome == 'failure')
-        uses: googleapis/release-please-action@v5.0.0
-        with:
-          skip-github-pull-request: true
 
       - name: Log release-please outputs
         if: always()
