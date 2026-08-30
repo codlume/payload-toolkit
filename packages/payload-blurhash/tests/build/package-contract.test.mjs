@@ -16,11 +16,11 @@ const clientDeclarationPath = new URL("client.d.mts", distDirectory);
 
 const readPackageJSON = async () => JSON.parse(await readFile(packageJSONPath, "utf8"));
 
-test("README covers the unreleased consumer contract", async () => {
+test("README covers the consumer contract", async () => {
   const readme = await readFile(readmePath, "utf8");
   const requiredHeadings = [
     "# Payload BlurHash",
-    "## Unreleased",
+    "## Installation",
     "## Compatibility",
     "## Configuration",
     "## Field and API behavior",

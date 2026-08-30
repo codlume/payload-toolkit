@@ -31,11 +31,11 @@ const run = async (command, arguments_, cwd) => {
 
 const readJSON = async (filePath) => JSON.parse(await readFile(filePath, "utf8"));
 
-const readPackResult = (output) => {
+const readPackResult = (output, packageJSON) => {
   const parsed = JSON.parse(output.trim());
   assert.equal(parsed.length, 1, "npm pack must describe exactly one package");
-  assert.equal(parsed[0].name, "@codlume/payload-blurhash");
-  assert.equal(parsed[0].version, "0.0.0");
+  assert.equal(parsed[0].name, packageJSON.name);
+  assert.equal(parsed[0].version, packageJSON.version);
   return parsed[0];
 };
 
@@ -57,6 +57,7 @@ const listFiles = async (directory, prefix = "") => {
 };
 
 const assertPackageMetadata = (packageJSON) => {
+  assert.equal("private" in packageJSON, false, "a publishable manifest has no private key");
   assert.deepEqual(
     {
       author: packageJSON.author,
@@ -67,10 +68,8 @@ const assertPackageMetadata = (packageJSON) => {
       keywords: packageJSON.keywords,
       license: packageJSON.license,
       name: packageJSON.name,
-      private: packageJSON.private,
       publishConfig: packageJSON.publishConfig,
       repository: packageJSON.repository,
-      version: packageJSON.version,
     },
     {
       author: "Codlume",
@@ -83,14 +82,12 @@ const assertPackageMetadata = (packageJSON) => {
       keywords: ["blurhash", "cms", "image", "payload", "payloadcms", "placeholder", "plugin"],
       license: "MIT",
       name: "@codlume/payload-blurhash",
-      private: true,
       publishConfig: { access: "public", registry: "https://registry.npmjs.org/" },
       repository: {
         directory: "packages/payload-blurhash",
         type: "git",
         url: "https://github.com/codlume/payload-toolkit.git",
       },
-      version: "0.0.0",
     },
   );
 };
@@ -378,7 +375,7 @@ try {
     ["pack", "--dry-run", "--json", "--ignore-scripts"],
     packageDirectory,
   );
-  await assertPackedContents(readPackResult(dryRun.stdout), packageJSON);
+  await assertPackedContents(readPackResult(dryRun.stdout, packageJSON), packageJSON);
 
   temporaryDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-pack-"));
   console.log("Creating real tarball...");
@@ -387,7 +384,7 @@ try {
     ["pack", "--json", "--ignore-scripts", "--pack-destination", temporaryDirectory],
     packageDirectory,
   );
-  const tarballFilename = readPackResult(packed.stdout).filename;
+  const tarballFilename = readPackResult(packed.stdout, packageJSON).filename;
   const tarballPath = path.join(temporaryDirectory, tarballFilename);
   await access(tarballPath);
 

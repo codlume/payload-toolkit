@@ -30,6 +30,15 @@ test("package exposes only its built ESM server entry", async () => {
   );
 });
 
+test("package is publishable to the public npm registry", async () => {
+  const packageJSON = JSON.parse(await readFile(packageJSONPath, "utf8"));
+
+  assert.deepEqual(
+    { access: packageJSON.publishConfig.access, private: "private" in packageJSON },
+    { access: "public", private: false },
+  );
+});
+
 test("server entry exposes the plugin factory", async () => {
   assert.deepEqual(Object.keys(await import("@codlume/payload-activity")), ["activityPlugin"]);
 });
@@ -46,6 +55,7 @@ test("README documents the collection attribution contract", async () => {
 
   for (const heading of [
     "# Payload Activity",
+    "## Installation",
     "## Configuration",
     "## Attribution behavior",
     "## Disabled mode",
