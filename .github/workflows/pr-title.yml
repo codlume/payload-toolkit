@@ -1,0 +1,41 @@
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional:
+    name: Conventional title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Release bumps are derived from squashed PR titles (release-please), so a
+      # title that is not a conventional commit must never reach main. Only the
+      # type and the `!` breaking marker are checked; the scope is free-form.
+      # The title is read from the environment, never interpolated into the script.
+      - name: Check title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^()]+\))?!?: \S.*$'
+
+          if [[ "$PR_TITLE" =~ $pattern ]]; then
+            echo "PR title is a conventional commit: $PR_TITLE"
+            exit 0
+          fi
+
+          {
+            echo "PR title is not a conventional commit."
+            echo
+            echo "  Title:   $PR_TITLE"
+            echo "  Pattern: $pattern"
+            echo "  Example: fix(payload-blurhash): keep the aspect ratio for tiny images"
+            echo
+            echo "Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test."
+            echo "Append ! before the colon for a breaking change (feat!: ... or feat(scope)!: ...)."
+          } >&2
+          exit 1
