@@ -17,6 +17,12 @@ For example, `fix(payload-blurhash): preserve the source aspect ratio` is a
 fix. Add `!` before the colon for a Breaking change, as in
 `feat(payload-activity)!: rename the attribution field`.
 
+Release-please titles the grouped Release pull request
+`chore(release): prepare plugin releases from main`. The `${branch}` placeholder
+names the Release pull request's base branch, regardless of how many feature
+pull requests or plugins it contains. Keep that recognized placeholder so
+release-please can parse the title after merge.
+
 A Releasable merge is a merge to `main` that changes a plugin and has a
 `feat`, `fix`, `perf`, or `revert` title, or any accepted title marked with
 `!`. While a plugin is on `0.x`, a Breaking change bumps the minor version and
