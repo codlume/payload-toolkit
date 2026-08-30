@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.0...payload-blurhash-v0.1.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **payload-blurhash:** hide empty BlurHash fields ([#68](https://github.com/codlume/payload-toolkit/issues/68)) ([8512ac1](https://github.com/codlume/payload-toolkit/commit/8512ac1f38406d118495d92f25d32cccc3961e13)) by @hadrysm
+
 ## 0.1.0 (2026-08-30)
 
 
