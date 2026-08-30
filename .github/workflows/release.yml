@@ -1,7 +1,7 @@
 name: Release
 
-# The release run: every releasable merge to main becomes a stable release of
-# the touched plugin with no human step. npm's trusted publisher is bound to
+# A releasable merge prepares a release pull request. A maintainer authorizes
+# publication by merging that pull request. npm's trusted publisher is bound to
 # this filename; do not rename it. The repair for any failure is "Re-run failed
 # jobs": every step checks the world before acting.
 
@@ -28,42 +28,22 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      # No checkout: release-please works through the API. If a merged release
-      # PR is still pending (a previous run failed after merging it), this logs
-      # "untagged, merged release PRs outstanding" and opens nothing; the steps
-      # below then pick that pending PR up.
+      # No checkout: release-please works through the API. Ordinary merges open
+      # or update a release PR and then this run has nothing left to publish. If
+      # a maintainer merged that PR, release-please logs "untagged, merged release
+      # PRs outstanding" and opens nothing; the steps below publish it.
       - name: Open or update the release PR
         id: release-pr
         uses: googleapis/release-please-action@v5.0.0
         with:
           skip-github-release: true
 
-      # Events from GITHUB_TOKEN start no workflows, so the release PR runs no
-      # Validate and its merge triggers no second release run. Never --admin:
-      # main has no rulesets, and adding one is a separate decision.
-      - name: Merge the release PR
-        if: steps.release-pr.outputs.prs_created == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ fromJSON(steps.release-pr.outputs.prs)[0].number }}
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash --delete-branch; then
-              echo "Merged release PR #$PR_NUMBER"
-              exit 0
-            fi
-            echo "Attempt $attempt: release PR #$PR_NUMBER is not mergeable yet; retrying in 15 s"
-            sleep 15
-          done
-          echo "::error::Could not merge release PR #$PR_NUMBER after 5 attempts"
-          exit 1
-
       # The merge commit of the newest merged, still-pending release PR is the
-      # only commit the rest of the job may act on. Never github.sha: a human
-      # merge can land between the release PR's creation and its merge, and a
-      # re-run after a partial failure starts from an unrelated push. GraphQL
-      # rather than `gh pr list --label`, which goes through the search index
-      # and can lag behind a merge made seconds earlier.
+      # only commit the rest of the job may act on. Never github.sha: a later
+      # feature merge can replace the release PR's pending workflow run, and a
+      # re-run after a partial failure can start from an unrelated push. GraphQL
+      # avoids the search-index lag of `gh pr list --label` immediately after a
+      # maintainer merges the release PR.
       - name: Find the release commit
         id: release-commit
         env:

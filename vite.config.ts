@@ -14,12 +14,18 @@ const validationIgnorePatterns = [
   "**/generated/**",
 ];
 
+const formatIgnorePatterns = [
+  ...validationIgnorePatterns,
+  ".release-please-manifest.json",
+  "packages/*/CHANGELOG.md",
+];
+
 export default defineConfig({
   staged: {
     "*": "vp fmt --no-error-on-unmatched-pattern",
   },
   fmt: {
-    ignorePatterns: validationIgnorePatterns,
+    ignorePatterns: formatIgnorePatterns,
     sortPackageJson: {},
   },
   lint: {

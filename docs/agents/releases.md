@@ -1,7 +1,8 @@
 # Releases
 
-Releases are automatic and independent for each Payload plugin. Do not run one
-manually.
+Release planning is automatic, and each Payload plugin keeps its own version.
+A maintainer chooses when to publish by merging the Release pull request. Never
+publish a package manually.
 
 ## Pull request titles
 
@@ -27,10 +28,26 @@ starting one.
 
 After each merge to `main`, the Release run asks release-please whether a plugin
 has releasable changes. If so, release-please opens or updates one release pull
-request for the affected plugins. The run merges that pull request itself,
-checks out its merge commit, builds and tests it, and publishes each changed
-plugin to npm through trusted publishing. It then creates the plugin's git tag
-and GitHub Release from the matching changelog entry.
+request for the affected plugins. Further merges accumulate in that Release pull
+request. Nothing is published yet.
+
+To choose a release boundary:
+
+1. Merge every feature pull request that should ship.
+2. Wait for the newest Release run to update the Release pull request from
+   `main`.
+3. Review its versions and changelog entries. If another feature pull request
+   reaches `main`, wait for the next update and review it again.
+4. Merge the Release pull request without merging another feature pull request
+   at the same time.
+
+The merge authorizes publication and starts another Release run. It checks out
+the release pull request's merge commit, builds and tests it, and publishes each
+changed plugin to npm through trusted publishing. It then creates the plugin's
+git tag and GitHub Release from the matching changelog entry. If GitHub replaces
+that pending run or a maintainer retries a failure, a later Release run may
+finish the already-authorized publication. No run can publish without a merged,
+pending Release pull request.
 
 A Release is one plugin's npm version, git tag, GitHub Release, and
 `CHANGELOG.md` entry. Plugins have independent versions, so releasing one says
@@ -50,7 +67,8 @@ changelog entry.
 
 Use "Re-run failed jobs" on the failed workflow run. The Release run checks
 which work already completed and resumes from GitHub and npm state. There is no
-`workflow_dispatch` entry point and no manual release procedure.
+`workflow_dispatch` entry point. Merging the Release pull request is the only
+approval step; never publish directly from a local checkout.
 
 Two retries need another pass:
 

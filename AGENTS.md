@@ -14,7 +14,7 @@ Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily 
 
 ### Releases
 
-Releases are automatic. See `docs/agents/releases.md` for pull request title rules, release behavior, and failure recovery.
+The Release pull request is automatic; publication requires a maintainer merge. See `docs/agents/releases.md` for pull request title rules, release behavior, and failure recovery.
 
 # Payload Toolkit
 

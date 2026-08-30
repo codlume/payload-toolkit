@@ -60,9 +60,13 @@ _Avoid_: Major bump, BREAKING CHANGE footer
 An installable build of a Payload plugin made from an open pull request, for trying the change before it merges. Not a release: no version, no tag, nothing on npm.
 _Avoid_: Prerelease, next channel, canary
 
+**Release pull request**:
+The pending version bumps and changelog entries for one or more Payload plugins. Its merge sets the release boundary and authorizes publication.
+_Avoid_: Feature pull request, manual release
+
 **Release run**:
-The single automatic job that turns releasable merges into releases. It is safe to re-run after any failure: each step skips what already exists, so re-running a failed run is the whole repair.
-_Avoid_: Deploy job, publish workflow, manual release
+The automatic job that prepares or completes a Release. A Releasable merge updates the Release pull request, while merging that pull request authorizes publication; failed work is safe to re-run.
+_Avoid_: Deploy job, manual npm publish
 
 **Skipped version**:
 A version whose release commit failed its own build. It keeps its changelog entry, tag and GitHub Release but never reaches npm; the fix ships as the next version.

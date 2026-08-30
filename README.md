@@ -42,12 +42,17 @@ performance improvement, revert, or Breaking change. Mark a Breaking change
 with `!` in the pull request title; while a plugin is on `0.x`, this bumps its
 minor version. Other releasable changes bump the patch version.
 
+Releasable merges accumulate in a Release pull request instead of publishing
+immediately. After the latest Release run updates that pull request, a
+maintainer reviews its versions and changelog entries, then merges it to
+authorize publication.
+
 Each plugin has independent Releases. A Release consists of an npm version, a
 git tag, a GitHub Release, and an entry in that plugin's `CHANGELOG.md`. Pull
 requests that touch `packages/**` receive a comment with install commands for
 their Preview builds. Agents and maintainers should follow
 [the release guide](docs/agents/releases.md), including its recovery steps,
-instead of running a release manually.
+instead of publishing a package manually.
 
 ## Validation
 
