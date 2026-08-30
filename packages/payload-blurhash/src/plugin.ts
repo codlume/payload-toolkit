@@ -332,6 +332,15 @@ const findConfigurationProblems = (
 
 const denyCallerWrite = () => false;
 
+const showWhenFieldHasValue = (fieldName: string) => (_data: unknown, siblingData: unknown) => {
+  if (!isRecord(siblingData)) {
+    return false;
+  }
+
+  const value = siblingData[fieldName];
+  return typeof value === "string" && value.length > 0;
+};
+
 const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
 
 const readEffectiveUpload = async (
@@ -421,6 +430,7 @@ const createBlurHashField = (options: ResolvedOptions, lifecycleHook: FieldHook)
             components: {
               Field: "@codlume/payload-blurhash/client#BlurHashPreview",
             },
+            condition: showWhenFieldHasValue(options.fieldName),
             width: "100%",
           }
         : { hidden: true }),

@@ -208,16 +208,11 @@ test("preview layout stacks at a narrow viewport", async ({ page }) => {
   expect(narrowCanvas.width / narrowCanvas.height).toBeCloseTo(5 / 3, 2);
 });
 
-test("missing value renders the neutral no-value state", async ({ page }) => {
+test("missing value hides the generated field", async ({ page }) => {
   await page.goto(`/admin/collections/media/${documents.missingID}`);
 
-  const panel = page.locator("[data-blurhash-panel]");
-  const input = panel.getByLabel("BlurHash");
-
-  await expect(panel.getByText("No value", { exact: true })).toBeVisible();
-  await expect(panel.getByText("No BlurHash is available for this image.")).toBeVisible();
-  await expect(input).toHaveValue("");
-  await expect(panel.locator("canvas")).toHaveCount(0);
+  await expect(page.locator("[data-blurhash-panel]")).toHaveCount(0);
+  await expect(page.getByLabel("BlurHash")).toHaveCount(0);
 });
 
 test("invalid value stays selectable while the form remains usable", async ({ page }) => {
