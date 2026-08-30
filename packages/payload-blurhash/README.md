@@ -1,10 +1,6 @@
 # Payload BlurHash
 
-## Unreleased
-
-`@codlume/payload-blurhash` is private and has not been published. The package
-name and Codlume npm scope are provisional and are not claimed or reserved.
-After a future release, the intended installation command will be:
+## Installation
 
 ```sh
 pnpm add @codlume/payload-blurhash

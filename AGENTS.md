@@ -12,6 +12,10 @@ The five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily by `/domain-modeling`). See `docs/agents/domain.md`.
 
+### Releases
+
+Releases are automatic. See `docs/agents/releases.md` for pull request title rules, release behavior, and failure recovery.
+
 # Payload Toolkit
 
 I like ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.

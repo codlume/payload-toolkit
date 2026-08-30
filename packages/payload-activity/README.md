@@ -1,9 +1,10 @@
 # Payload Activity
 
-## Unreleased
+## Installation
 
-`@codlume/payload-activity` is private and has not been published. The package
-name and Codlume npm scope are provisional and are not claimed or reserved.
+```sh
+pnpm add @codlume/payload-activity
+```
 
 ## Compatibility
 

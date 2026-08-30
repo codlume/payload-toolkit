@@ -1,13 +1,13 @@
 # Payload Toolkit
 
-Payload Toolkit is a collection of independently released plugins for
-[Payload CMS](https://payloadcms.com/). This repository provides the shared
-workspace where those plugins and the applications that exercise them will be
-developed.
-
-The workspace currently contains the private BlurHash plugin and the private
-Payload application that exercises it. The plugin is implementation-complete
-but remains unpublished; release automation and npm publication are deferred.
+Payload Toolkit develops two independently released plugins for
+[Payload CMS](https://payloadcms.com/):
+[`@codlume/payload-activity`](packages/payload-activity/) records who last
+edited configured collections and globals, and
+[`@codlume/payload-blurhash`](packages/payload-blurhash/) generates BlurHash
+placeholders for uploaded images. Both plugins are published to npm. This
+repository is their shared workspace and contains the application that
+exercises them.
 
 ## Prerequisites
 
@@ -26,14 +26,28 @@ pnpm browsers:install
 
 ## Workspace layout
 
-- `packages/payload-blurhash/` contains the private
-  `@codlume/payload-blurhash` plugin.
+- `packages/payload-activity/` contains the `@codlume/payload-activity` plugin.
+- `packages/payload-blurhash/` contains the `@codlume/payload-blurhash` plugin.
 - `apps/payload-cms/` contains the private SQLite-backed Payload application
   used to exercise the plugin through real Payload APIs.
 - Additional projects may join `packages/` or `apps/`; internal libraries are
   introduced only after multiple plugins need shared implementation.
 
 Only direct child projects of these two containers join the pnpm workspace.
+
+## Releases
+
+A Releasable merge changes a plugin on `main` through a feature, fix,
+performance improvement, revert, or Breaking change. Mark a Breaking change
+with `!` in the pull request title; while a plugin is on `0.x`, this bumps its
+minor version. Other releasable changes bump the patch version.
+
+Each plugin has independent Releases. A Release consists of an npm version, a
+git tag, a GitHub Release, and an entry in that plugin's `CHANGELOG.md`. Pull
+requests that touch `packages/**` receive a comment with install commands for
+their Preview builds. Agents and maintainers should follow
+[the release guide](docs/agents/releases.md), including its recovery steps,
+instead of running a release manually.
 
 ## Validation
 

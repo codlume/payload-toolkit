@@ -43,3 +43,27 @@ _Avoid_: Any write, system change
 **Unattributed edit**:
 A change with no admin user behind it (scripts, scheduled jobs, other auth collections); it clears the recorded modifier instead of preserving a stale one.
 _Avoid_: Anonymous edit
+
+**Release**:
+A published version of one Payload plugin: its npm version, its git tag, its GitHub Release, and the matching entry in that plugin's changelog. Releases are per plugin; one plugin releasing says nothing about the other.
+_Avoid_: Deploy, version bump, lockstep release
+
+**Releasable merge**:
+A merge to the default branch that changes a Payload plugin's files with a feature, fix, performance improvement, revert, or breaking change. Other changes to a plugin (docs, tests, tooling) ride along with its next release instead of causing one.
+_Avoid_: Any merge, package-touching commit
+
+**Breaking change**:
+A releasable merge whose pull request title carries the `!` marker. While a plugin is on a `0.x` version it bumps the minor; every other releasable merge bumps the patch.
+_Avoid_: Major bump, BREAKING CHANGE footer
+
+**Preview build**:
+An installable build of a Payload plugin made from an open pull request, for trying the change before it merges. Not a release: no version, no tag, nothing on npm.
+_Avoid_: Prerelease, next channel, canary
+
+**Release run**:
+The single automatic job that turns releasable merges into releases. It is safe to re-run after any failure: each step skips what already exists, so re-running a failed run is the whole repair.
+_Avoid_: Deploy job, publish workflow, manual release
+
+**Skipped version**:
+A version whose release commit failed its own build. It keeps its changelog entry, tag and GitHub Release but never reaches npm; the fix ships as the next version.
+_Avoid_: Failed release, yanked version, broken release
