@@ -1,0 +1,3 @@
+# Maintainer-gated stable releases
+
+Several releasable pull requests can reach `main` before a Release run reads the branch, so publishing after every merge made release boundaries depend on workflow timing. release-please continues to open and update one Release pull request, but a maintainer now chooses the boundary by reviewing and merging it after its latest update from `main`. That merge authorizes the existing build, test, trusted publish, tag, and GitHub Release steps. This keeps the idempotent recovery path and avoids adding a separate `workflow_dispatch` release path. Independent plugin versions and the stable-only release policy from ADR 0001 remain unchanged.
