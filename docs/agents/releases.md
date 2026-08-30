@@ -23,6 +23,13 @@ names the Release pull request's base branch, regardless of how many feature
 pull requests or plugins it contains. Keep that recognized placeholder so
 release-please can parse the title after merge.
 
+Release-please refreshes only the body of an open Release pull request, never
+its title. After changing `group-pull-request-title-pattern`, retitle the open
+Release pull request by hand to match the new pattern. A merged Release pull
+request whose title does not match fails its Release run with
+`Bad pull request title` before anything reaches npm; retitle the merged pull
+request, then re-run the failed jobs.
+
 A Releasable merge is a merge to `main` that changes a plugin and has a
 `feat`, `fix`, `perf`, or `revert` title, or any accepted title marked with
 `!`. While a plugin is on `0.x`, a Breaking change bumps the minor version and
@@ -48,12 +55,12 @@ To choose a release boundary:
    at the same time.
 
 The merge authorizes publication and starts another Release run. It checks out
-the release pull request's merge commit, builds and tests it, and publishes each
-changed plugin to npm through trusted publishing. It then creates the plugin's
-git tag and GitHub Release from the matching changelog entry. If GitHub replaces
-that pending run or a maintainer retries a failure, a later Release run may
-finish the already-authorized publication. No run can publish without a merged,
-pending Release pull request.
+the release pull request's merge commit, builds and tests it, and creates each
+changed plugin's git tag and GitHub Release from the matching changelog entry.
+Publishing to npm through trusted publishing is the last step, so a GitHub
+Release can appear a minute or two before its version installs. If GitHub
+replaces that pending run, a later Release run finishes the already-authorized
+release. No run can publish without a merged Release pull request.
 
 A Release is one plugin's npm version, git tag, GitHub Release, and
 `CHANGELOG.md` entry. Plugins have independent versions, so releasing one says
@@ -102,6 +109,12 @@ Use "Re-run failed jobs" on the failed workflow run. The Release run checks
 which work already completed and resumes from GitHub and npm state. There is no
 `workflow_dispatch` entry point. Merging the Release pull request is the only
 approval step; never publish directly from a local checkout.
+
+A merged Release pull request labeled `autorelease: pending` still needs its
+GitHub Releases and its npm publish. Release-please relabels it
+`autorelease: tagged` when the GitHub Releases exist, before npm publish runs.
+From then on only a re-run publishes the versions npm still lacks; an ordinary
+push after a finished release leaves it alone.
 
 Two retries need another pass:
 
