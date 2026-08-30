@@ -62,6 +62,33 @@ nothing about the other.
 Never edit a plugin's `CHANGELOG.md` or version by hand. Do not edit
 `.release-please-manifest.json` by hand either. Release-please owns all three.
 
+## Contributor attribution
+
+After release-please prepares or refreshes the pending Release pull request,
+the workflow adds contributor mentions to its generated changelog entries. A
+change from a merged pull request ends with `by @login` when its author is a
+human GitHub user. The same entry becomes the plugin's GitHub Release body after
+approval, so GitHub renders its native Contributors avatar panel.
+
+The Release pull request stays in draft while the workflow resolves authors and
+updates its changelogs and body. The workflow verifies that the pull request
+still points at the exact enriched commit before marking it ready for review. A
+failed or stale run leaves the pull request in draft for a clean retry.
+
+Attribution follows each plugin's Release boundary. If one pull request ships
+in more than one plugin, each applicable Release credits its author. Bot pull
+request authors are excluded. Commit authors and co-authors, including Claude
+trailers, are not considered. Direct commits and pull requests whose author
+account no longer resolves stay unattributed; the workflow warns and continues.
+
+GitHub contributor lookups must succeed before Release pull request preparation
+completes. An API failure stops the run before maintainer approval, and re-running
+the failed jobs retries the enrichment. This step changes only the generated
+release-note text in the changelog files and Release pull request body.
+Release-please still decides release eligibility, versions, and which changes the
+pending Release pull request contains. Merging that pull request remains the only
+publication approval.
+
 ## Preview builds
 
 A pull request that touches `packages/**` publishes installable Preview builds

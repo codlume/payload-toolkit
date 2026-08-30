@@ -4,6 +4,7 @@
   "initial-version": "0.1.0",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
+  "draft-pull-request": true,
   "group-pull-request-title-pattern": "chore(release): prepare plugin releases from ${branch}",
   "packages": {
     "packages/payload-activity": {},
