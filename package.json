@@ -23,6 +23,7 @@
     "typecheck": "pnpm build:packages && vp check --no-fmt --no-lint"
   },
   "devDependencies": {
+    "pkg-pr-new": "0.0.88",
     "vite-plus": "0.2.2"
   },
   "engines": {

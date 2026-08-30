@@ -1,0 +1,41 @@
+name: Preview
+
+on:
+  pull_request:
+    paths:
+      - "packages/**"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish preview builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/setup@v2.0.2
+        with:
+          install: false
+
+      - name: Set up Vite+
+        uses: voidzero-dev/setup-vp@v1.17.0
+        with:
+          node-version-file: .node-version
+          cache: true
+          run-install: |
+            args:
+              - --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      # No npm version and no secrets: pkg.pr.new authenticates through its
+      # GitHub App and comments the install commands for each plugin on the
+      # pull request.
+      - name: Publish preview builds
+        run: pnpm exec pkg-pr-new publish --pnpm './packages/*'
