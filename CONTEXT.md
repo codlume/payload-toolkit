@@ -59,3 +59,11 @@ _Avoid_: Major bump, BREAKING CHANGE footer
 **Preview build**:
 An installable build of a Payload plugin made from an open pull request, for trying the change before it merges. Not a release: no version, no tag, nothing on npm.
 _Avoid_: Prerelease, next channel, canary
+
+**Release run**:
+The single automatic job that turns releasable merges into releases. It is safe to re-run after any failure: each step skips what already exists, so re-running a failed run is the whole repair.
+_Avoid_: Deploy job, publish workflow, manual release
+
+**Skipped version**:
+A version whose release commit failed its own build. It keeps its changelog entry, tag and GitHub Release but never reaches npm; the fix ships as the next version.
+_Avoid_: Failed release, yanked version, broken release
