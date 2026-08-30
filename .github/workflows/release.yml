@@ -28,6 +28,41 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      # Existing release PRs may predate draft-by-default configuration. Move
+      # one back to draft before release-please refreshes it so a maintainer
+      # cannot merge changelogs that have not been enriched yet.
+      - name: Hold the open release PR as draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prs=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
+            -f query='query($owner: String!, $name: String!) {
+              repository(owner: $owner, name: $name) {
+                pullRequests(states: OPEN, baseRefName: "main", labels: ["autorelease: pending"],
+                             first: 2, orderBy: {field: UPDATED_AT, direction: DESC}) {
+                  nodes { number isDraft }
+                }
+              }
+            }' --jq '.data.repository.pullRequests.nodes')
+
+          count=$(jq 'length' <<<"$prs")
+          if (( count > 1 )); then
+            echo "::error::Found $count open release PRs; expected at most one."
+            exit 1
+          fi
+          if (( count == 0 )); then
+            echo "No existing release PR to hold as draft."
+            exit 0
+          fi
+
+          pr=$(jq -c '.[0]' <<<"$prs")
+          number=$(jq -r '.number' <<<"$pr")
+          if [[ "$(jq -r '.isDraft' <<<"$pr")" == "true" ]]; then
+            echo "Release PR #$number is already a draft."
+          else
+            gh pr ready "$number" --repo "$GITHUB_REPOSITORY" --undo
+          fi
+
       # No checkout: release-please works through the API. Ordinary merges open
       # or update a release PR and then this run has nothing left to publish. If
       # a maintainer merged that PR, release-please logs "untagged, merged release
@@ -64,6 +99,153 @@ jobs:
             echo "Release commit: $sha"
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # release-please leaves its prs output empty when the pending PR did not
+      # change, so the live open PR is the source of truth for enrichment. Do
+      # not enrich while an already-merged Release PR is waiting to publish.
+      - name: Find the open release PR
+        id: open-release-pr
+        if: steps.release-commit.outputs.sha == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prs=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
+            -f query='query($owner: String!, $name: String!) {
+              repository(owner: $owner, name: $name) {
+                pullRequests(states: OPEN, baseRefName: "main", labels: ["autorelease: pending"],
+                             first: 2, orderBy: {field: UPDATED_AT, direction: DESC}) {
+                  nodes {
+                    number
+                    headRefName
+                    headRefOid
+                    headRepository { nameWithOwner }
+                    isCrossRepository
+                  }
+                }
+              }
+            }' --jq '.data.repository.pullRequests.nodes')
+
+          count=$(jq 'length' <<<"$prs")
+          if (( count > 1 )); then
+            echo "::error::Found $count open release PRs; expected at most one."
+            exit 1
+          fi
+          if (( count == 0 )); then
+            echo "No open release PR to enrich."
+            exit 0
+          fi
+
+          pr=$(jq -c '.[0]' <<<"$prs")
+          head_repository=$(jq -r '.headRepository.nameWithOwner // empty' <<<"$pr")
+          cross_repository=$(jq -r '.isCrossRepository' <<<"$pr")
+          if [[ "$cross_repository" != "false" || "$head_repository" != "$GITHUB_REPOSITORY" ]]; then
+            echo "::error::Release PR head is not in $GITHUB_REPOSITORY."
+            exit 1
+          fi
+
+          echo "number=$(jq -r '.number' <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$(jq -r '.headRefName' <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(jq -r '.headRefOid' <<<"$pr")" >> "$GITHUB_OUTPUT"
+
+      # The open release branch may predate this automation. Read the script
+      # from the triggering main commit and edit the exact PR head separately.
+      - name: Checkout contributor automation
+        if: steps.open-release-pr.outputs.number != ''
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: automation
+          persist-credentials: false
+
+      - name: Checkout the open release PR
+        if: steps.open-release-pr.outputs.number != ''
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ steps.open-release-pr.outputs.head_sha }}
+          path: release-pr
+
+      - name: Set up Node for contributor attribution
+        if: steps.open-release-pr.outputs.number != ''
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: automation/.node-version
+          package-manager-cache: false
+
+      - name: Add release contributors
+        if: steps.open-release-pr.outputs.number != ''
+        working-directory: release-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node "$GITHUB_WORKSPACE/automation/scripts/release-contributors.mjs" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr "${{ steps.open-release-pr.outputs.number }}" \
+            --body-file "$RUNNER_TEMP/release-pr-body.md"
+
+      - name: Commit release contributors
+        id: enriched-head
+        if: steps.open-release-pr.outputs.number != ''
+        working-directory: release-pr
+        env:
+          RELEASE_PR_HEAD: ${{ steps.open-release-pr.outputs.head_ref }}
+        run: |
+          unexpected=$(git status --porcelain --untracked-files=all -- \
+            . ':(exclude,glob)packages/*/CHANGELOG.md')
+          if [[ -n "$unexpected" ]]; then
+            echo "::error::Contributor enrichment changed unexpected files:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+          git add -- ':(glob)packages/*/CHANGELOG.md'
+          if git diff --cached --quiet; then
+            echo "Contributor changelogs are already current."
+          else
+            git diff --cached --check
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore(release): credit contributors"
+            git push origin "HEAD:refs/heads/$RELEASE_PR_HEAD"
+          fi
+
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Update and ready the release PR
+        if: steps.open-release-pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ steps.enriched-head.outputs.sha }}
+          RELEASE_PR: ${{ steps.open-release-pr.outputs.number }}
+        run: |
+          pr=$(gh pr view "$RELEASE_PR" --repo "$GITHUB_REPOSITORY" \
+            --json headRefOid,isDraft,state)
+          if [[ "$(jq -r '.state' <<<"$pr")" != "OPEN" || \
+                "$(jq -r '.isDraft' <<<"$pr")" != "true" ]]; then
+            echo "::error::Release PR #$RELEASE_PR is no longer an open draft."
+            exit 1
+          fi
+          if [[ "$(jq -r '.headRefOid' <<<"$pr")" != "$EXPECTED_HEAD" ]]; then
+            echo "::error::Release PR #$RELEASE_PR changed before its body could be updated."
+            exit 1
+          fi
+
+          gh pr edit "$RELEASE_PR" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body-file "$RUNNER_TEMP/release-pr-body.md"
+
+          pr=$(gh pr view "$RELEASE_PR" --repo "$GITHUB_REPOSITORY" \
+            --json headRefOid,isDraft,state)
+          if [[ "$(jq -r '.state' <<<"$pr")" != "OPEN" || \
+                "$(jq -r '.isDraft' <<<"$pr")" != "true" ]]; then
+            echo "::error::Release PR #$RELEASE_PR is no longer an open draft."
+            exit 1
+          fi
+          if [[ "$(jq -r '.headRefOid' <<<"$pr")" != "$EXPECTED_HEAD" ]]; then
+            echo "::error::Release PR #$RELEASE_PR changed while its body was updated."
+            exit 1
+          fi
+
+          gh pr ready "$RELEASE_PR" --repo "$GITHUB_REPOSITORY"
 
       - name: Checkout the release commit
         if: steps.release-commit.outputs.sha != ''

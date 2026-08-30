@@ -48,6 +48,10 @@ _Avoid_: Anonymous edit
 A published version of one Payload plugin: its npm version, its git tag, its GitHub Release, and the matching entry in that plugin's changelog. Releases are per plugin; one plugin releasing says nothing about the other.
 _Avoid_: Deploy, version bump, lockstep release
 
+**Release contributor**:
+A human GitHub user who authored a merged pull request whose change belongs to one Payload plugin's Release. Attribution follows the plugin's Release boundary, not the release run; bots and commit co-authors do not receive credit.
+_Avoid_: Commit author, bot author, repository contributor, release-run contributor
+
 **Releasable merge**:
 A merge to the default branch that changes a Payload plugin's files with a feature, fix, performance improvement, revert, or breaking change. Other changes to a plugin (docs, tests, tooling) ride along with its next release instead of causing one.
 _Avoid_: Any merge, package-touching commit
