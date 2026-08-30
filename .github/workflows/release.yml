@@ -1,0 +1,164 @@
+name: Release
+
+# The release run: every releasable merge to main becomes a stable release of
+# the touched plugin with no human step. npm's trusted publisher is bound to
+# this filename; do not rename it. The repair for any failure is "Re-run failed
+# jobs": every step checks the world before acting.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      # No checkout: release-please works through the API. If a merged release
+      # PR is still pending (a previous run failed after merging it), this logs
+      # "untagged, merged release PRs outstanding" and opens nothing; the steps
+      # below then pick that pending PR up.
+      - name: Open or update the release PR
+        id: release-pr
+        uses: googleapis/release-please-action@v5.0.0
+        with:
+          skip-github-release: true
+
+      # Events from GITHUB_TOKEN start no workflows, so the release PR runs no
+      # Validate and its merge triggers no second release run. Never --admin:
+      # main has no rulesets, and adding one is a separate decision.
+      - name: Merge the release PR
+        if: steps.release-pr.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ fromJSON(steps.release-pr.outputs.prs)[0].number }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash --delete-branch; then
+              echo "Merged release PR #$PR_NUMBER"
+              exit 0
+            fi
+            echo "Attempt $attempt: release PR #$PR_NUMBER is not mergeable yet; retrying in 15 s"
+            sleep 15
+          done
+          echo "::error::Could not merge release PR #$PR_NUMBER after 5 attempts"
+          exit 1
+
+      # The merge commit of the newest merged, still-pending release PR is the
+      # only commit the rest of the job may act on. Never github.sha: a human
+      # merge can land between the release PR's creation and its merge, and a
+      # re-run after a partial failure starts from an unrelated push. GraphQL
+      # rather than `gh pr list --label`, which goes through the search index
+      # and can lag behind a merge made seconds earlier.
+      - name: Find the release commit
+        id: release-commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
+            -f query='query($owner: String!, $name: String!) {
+              repository(owner: $owner, name: $name) {
+                pullRequests(states: MERGED, baseRefName: "main", labels: ["autorelease: pending"],
+                             first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+                  nodes { number mergeCommit { oid } }
+                }
+              }
+            }' --jq '.data.repository.pullRequests.nodes[0].mergeCommit.oid // empty')
+          if [[ -z "$sha" ]]; then
+            echo "Nothing to release: no merged release PR is pending."
+          else
+            echo "Release commit: $sha"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the release commit
+        if: steps.release-commit.outputs.sha != ''
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ steps.release-commit.outputs.sha }}
+
+      - name: Set up pnpm
+        if: steps.release-commit.outputs.sha != ''
+        uses: pnpm/setup@v2.0.2
+        with:
+          install: false
+
+      - name: Set up Vite+
+        if: steps.release-commit.outputs.sha != ''
+        uses: voidzero-dev/setup-vp@v1.17.0
+        with:
+          node-version-file: .node-version
+          cache: true
+          run-install: |
+            args:
+              - --frozen-lockfile
+
+      # No LocalStack: the build and pack tests make no S3 calls. A failure here
+      # is deterministic (the release commit is broken), so it is fixed forward:
+      # the tagging step still runs and the version becomes a Skipped version.
+      - name: Build and test the release commit
+        id: build
+        if: steps.release-commit.outputs.sha != ''
+        run: pnpm build:packages && pnpm test:build && pnpm test:pack
+
+      # Each plugin publishes independently; one failure does not block the
+      # other, and the step fails at the end if any failed. -r is required even
+      # for one package: only pnpm's recursive publish skips versions already on
+      # npm and skips private packages, which is what makes a re-run safe.
+      # --no-git-checks because HEAD is detached. No token: pnpm publishes with
+      # OIDC (id-token: write) and attaches provenance itself.
+      - name: Publish to npm
+        if: steps.release-commit.outputs.sha != ''
+        run: |
+          failed=()
+          for dir in packages/*/; do
+            name=$(node -p "require('./${dir}package.json').name")
+            if pnpm -r --filter "$name" publish --no-git-checks; then
+              echo "Published (or already on npm): $name"
+            else
+              failed+=("$name")
+            fi
+          done
+          if (( ${#failed[@]} > 0 )); then
+            echo "::error::Publish failed for: ${failed[*]}"
+            exit 1
+          fi
+
+      # Tags and GitHub Releases come last so nothing public exists until the
+      # version installs: a failed publish leaves the PR pending for the re-run.
+      # The exception is a release commit that failed its own build: it is
+      # tagged and released anyway (a Skipped version, never on npm), because an
+      # untagged pending PR would make every later run re-find it and fail again.
+      # paths_released is only set in the run that created a Release, so it is
+      # logged and never consulted for publishing.
+      - name: Create tags and GitHub Releases
+        id: github-release
+        if: steps.release-commit.outputs.sha != '' && (success() || steps.build.outcome == 'failure')
+        uses: googleapis/release-please-action@v5.0.0
+        with:
+          skip-github-pull-request: true
+
+      - name: Log release-please outputs
+        if: always()
+        env:
+          PRS: ${{ steps.release-pr.outputs.prs }}
+          RELEASES_CREATED: ${{ steps.github-release.outputs.releases_created }}
+          PATHS_RELEASED: ${{ steps.github-release.outputs.paths_released }}
+        run: |
+          echo "Release PRs:        ${PRS:-none}"
+          echo "Releases created:   ${RELEASES_CREATED:-none}"
+          echo "Paths released:     ${PATHS_RELEASED:-none}"
