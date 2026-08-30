@@ -10,7 +10,8 @@ Both plugins are `0.x` and live in one repo with squash-only merges and conventi
 
 ## Consequences
 
-- The release workflow merges its own release PR with `GITHUB_TOKEN` and runs release-please a second time in the same job to tag and publish. That commit never runs Validate; it only touches `CHANGELOG.md`, `package.json` and `.release-please-manifest.json`. Chosen over a GitHub App token to avoid a key to rotate and a ruleset to maintain.
+- The release workflow merges its own release PR with `GITHUB_TOKEN`, publishes to npm, then runs release-please a second time in the same job to tag and create the GitHub Releases. That commit never runs Validate; it only touches `CHANGELOG.md`, `package.json` and `.release-please-manifest.json`. Chosen over a GitHub App token to avoid a key to rotate and a ruleset to maintain.
+- Publish comes before tagging so nothing public exists until the version installs, and the publish step decides what to publish by comparing `package.json` against npm rather than by release-please's outputs, which are only set in the run that created the Release. Every step checks the world before acting, so the repair for a failed release run is to re-run it. The one exception is a release commit that fails its own build: the fix ships as the next version and the failed one stays a tag and Release with nothing on npm.
 - Release bodies come from the changelog entry, so they carry the PR link but not the author name.
 - GitHub's single "Latest" badge follows whichever plugin released most recently.
 - PR titles are enforced in CI and the squash title setting must be `PR_TITLE`, because bumps are derived from them.
