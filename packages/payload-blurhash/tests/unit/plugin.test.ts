@@ -151,6 +151,44 @@ describe("blurHashPlugin", () => {
     });
   });
 
+  test("uses Payload's condition to show the generated field only when it has a value", async () => {
+    const fieldName = "placeholder";
+    const config = await buildConfig({
+      collections: [{ fields: [], slug: "media", upload: true }],
+      db: sqliteAdapter({ client: { url: ":memory:" } }),
+      plugins: [blurHashPlugin({ collections: ["media"], fieldName })],
+      secret: "unit-test-secret",
+      sharp: hostSharp,
+    });
+    const field = config.collections[0]?.fields.find(
+      (candidate) => "name" in candidate && candidate.name === fieldName,
+    );
+    const condition = field?.admin?.condition;
+
+    if (!condition) {
+      throw new TypeError("Expected the generated field to have an Admin condition");
+    }
+
+    const isVisible = (value: unknown) =>
+      condition(
+        { [fieldName]: value },
+        { [fieldName]: value },
+        { blockData: {}, operation: "update", path: [fieldName], user: null },
+      );
+
+    expect({
+      empty: isVisible(""),
+      generated: isVisible("L~Lqe9|ldL|l~h|c_X|cfH|T|c|T"),
+      missing: isVisible(undefined),
+      null: isVisible(null),
+    }).toEqual({
+      empty: false,
+      generated: true,
+      missing: false,
+      null: false,
+    });
+  });
+
   test("makes the generated field read-only in Admin", async () => {
     const config = await buildPayloadConfig(
       [{ fields: [], slug: "media", upload: true }],
