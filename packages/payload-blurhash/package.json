@@ -1,6 +1,6 @@
 {
   "name": "@codlume/payload-blurhash",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A Payload CMS plugin that stores and previews BlurHash placeholders for uploaded images.",
   "keywords": [
     "blurhash",

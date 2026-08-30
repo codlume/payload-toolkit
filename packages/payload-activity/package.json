@@ -1,6 +1,6 @@
 {
   "name": "@codlume/payload-activity",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A Payload CMS plugin that records the admin user who last modified a document.",
   "keywords": [
     "activity",
