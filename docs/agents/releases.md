@@ -71,16 +71,19 @@ Never edit a plugin's `CHANGELOG.md` or version by hand. Do not edit
 
 ## Contributor attribution
 
-After release-please prepares or refreshes the pending Release pull request,
-the workflow adds contributor mentions to its generated changelog entries. A
-change from a merged pull request ends with `by @login` when its author is a
-human GitHub user. The same entry becomes the plugin's GitHub Release body after
-approval, so GitHub renders its native Contributors avatar panel.
+After release-please creates or refreshes the pending Release pull request,
+Release pull request preparation adds contributor mentions to its generated
+changelog entries. A change from a merged pull request ends with `by @login`
+when its author is a human GitHub user. The same entry becomes the plugin's
+GitHub Release body after approval, so GitHub renders its native Contributors
+avatar panel.
 
 The Release pull request stays in draft while the workflow resolves authors and
 updates its changelogs and body. The workflow verifies that the pull request
-still points at the exact enriched commit before marking it ready for review. A
-failed or stale run leaves the pull request in draft for a clean retry.
+still points at the exact prepared commit before and after marking it ready for
+review. If the head moves during the final readiness change, the workflow moves
+the pull request back to draft and fails. Any failed or stale run is safe to
+retry.
 
 Attribution follows each plugin's Release boundary. If one pull request ships
 in more than one plugin, each applicable Release credits its author. Bot pull

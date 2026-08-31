@@ -68,6 +68,10 @@ _Avoid_: Prerelease, next channel, canary
 The pending version bumps and changelog entries for one or more Payload plugins. Its merge sets the release boundary and authorizes publication.
 _Avoid_: Feature pull request, manual release
 
+**Release pull request preparation**:
+The operation that synchronizes a draft Release pull request's changelogs and body, verifies they belong to its current head, and only then makes it available for maintainer review.
+_Avoid_: Contributor enrichment, release pull request update
+
 **Release run**:
 The automatic job that prepares or completes a Release. A Releasable merge updates the Release pull request, while merging that pull request authorizes publication; failed work is safe to re-run.
 _Avoid_: Deploy job, manual npm publish

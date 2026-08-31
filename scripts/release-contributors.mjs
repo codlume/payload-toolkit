@@ -92,7 +92,12 @@ export function prepareReleaseContributors({ pullRequestBody, changelogs, pullRe
   };
 }
 
-async function loadReleaseContributorChanges({ repository, pullRequestNumber, github, readFile }) {
+export async function loadReleaseContributorChanges({
+  repository,
+  pullRequestNumber,
+  github,
+  readFile,
+}) {
   const [pullRequest, changedFiles] = await Promise.all([
     github.getPullRequest(repository, pullRequestNumber),
     github.listPullRequestFiles(repository, pullRequestNumber),
