@@ -32,6 +32,10 @@ _Avoid_: Image optimizer, thumbnail generator, logger package
 A newly uploaded or replaced static raster asset in a configured media collection that the BlurHash plugin supports.
 _Avoid_: Media file, all uploads, existing media
 
+**BlurHash generation**:
+The processing attempt for a newly uploaded or replaced asset that ends with a stored BlurHash, an expected skip, or a failure.
+_Avoid_: Eligible image generation, image processing
+
 **Activity plugin**:
 The Payload plugin that attributes changes to admin users, starting with a last-modified-by sidebar field on configured collections and globals.
 _Avoid_: Audit log, activity feed, logger

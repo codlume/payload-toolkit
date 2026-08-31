@@ -1,4 +1,3 @@
-import { readFile, stat } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 
 import type {
@@ -7,13 +6,11 @@ import type {
   Field,
   FieldHook,
   Plugin,
-  SharpDependency,
   TextField,
   UploadCollectionSlug,
 } from "payload";
 
-import { createBlurHashGenerator } from "./generate-blur-hash.ts";
-import { createGenerationDiagnostics } from "./generation-diagnostics.ts";
+import { createBlurHashGeneration } from "./blur-hash-generation.ts";
 
 export type BlurHashPluginOptions = {
   alphaBackground?: { b: number; g: number; r: number };
@@ -43,14 +40,6 @@ type ResolvedOptions = {
     maxInputSide: number;
     timeoutSeconds: number;
   };
-};
-
-type GenerationRuntime = {
-  diagnostics: ReturnType<typeof createGenerationDiagnostics>;
-  enabled: boolean;
-  generator: ReturnType<typeof createBlurHashGenerator> | undefined;
-  maxInputBytes: number;
-  sharp: SharpDependency | undefined;
 };
 
 const PLUGIN_SLUG = "@codlume/payload-blurhash";
@@ -341,83 +330,6 @@ const showWhenFieldHasValue = (fieldName: string) => (_data: unknown, siblingDat
   return typeof value === "string" && value.length > 0;
 };
 
-const isFileRemoval = (data: Record<string, unknown> | undefined) => data?.filename === null;
-
-const readEffectiveUpload = async (
-  file: NonNullable<Parameters<FieldHook>[0]["req"]["file"]>,
-  maxInputBytes: number,
-) => {
-  if (!file.tempFilePath) {
-    return { input: file.data, inputBytes: file.data.length } as const;
-  }
-
-  try {
-    const fileStats = await stat(file.tempFilePath);
-
-    if (fileStats.size > maxInputBytes) {
-      return { code: "input_too_large", inputBytes: fileStats.size } as const;
-    }
-
-    const input = await readFile(file.tempFilePath);
-    return { input, inputBytes: input.length } as const;
-  } catch {
-    return { code: "decode_failed", inputBytes: file.size } as const;
-  }
-};
-
-const createBlurHashLifecycleHook =
-  (runtime: GenerationRuntime, collectionSlug: string): FieldHook =>
-  async (args) => {
-    if (isFileRemoval(args.data)) {
-      return null;
-    }
-
-    if (!args.req.file) {
-      return args.previousValue ?? null;
-    }
-
-    const sharp = args.req.payload.config.sharp ?? runtime.sharp;
-
-    if (!runtime.enabled || !runtime.generator || !sharp) {
-      return null;
-    }
-
-    const effectiveUpload = await readEffectiveUpload(args.req.file, runtime.maxInputBytes);
-
-    const finishDiagnostics = runtime.diagnostics.start({
-      collection: collectionSlug,
-      height: args.data?.height,
-      inputBytes: effectiveUpload.inputBytes,
-      logger: args.req.payload.logger,
-      mimeType: args.data?.mimeType,
-      width: args.data?.width,
-    });
-
-    if ("code" in effectiveUpload) {
-      finishDiagnostics({ code: effectiveUpload.code, status: "failed" });
-      return null;
-    }
-
-    try {
-      const outcome = await runtime.generator.generate({
-        input: effectiveUpload.input,
-        mimeType: args.data?.mimeType,
-        sharp,
-      });
-
-      if (outcome.status === "generated") {
-        finishDiagnostics({ status: "generated" });
-        return outcome.value;
-      }
-
-      finishDiagnostics(outcome);
-      return null;
-    } catch {
-      finishDiagnostics({ code: "decode_failed", status: "failed" });
-      return null;
-    }
-  };
-
 const createBlurHashField = (options: ResolvedOptions, lifecycleHook: FieldHook) =>
   ({
     access: {
@@ -463,30 +375,19 @@ export const blurHashPlugin = (options: BlurHashPluginOptions): Plugin => {
     }
 
     const configuredCollections = new Set(resolvedOptions.collections);
-    const generator =
-      resolvedOptions.enabled && config.sharp
-        ? createBlurHashGenerator({
-            alphaBackground: resolvedOptions.alphaBackground,
-            limits: resolvedOptions.limits,
-          })
-        : undefined;
-    const runtime: GenerationRuntime = {
-      diagnostics: createGenerationDiagnostics(resolvedOptions.debug),
+    const createGenerationHook = createBlurHashGeneration({
+      alphaBackground: resolvedOptions.alphaBackground,
+      debug: resolvedOptions.debug,
       enabled: resolvedOptions.enabled,
-      generator,
-      maxInputBytes: resolvedOptions.limits.maxInputBytes,
+      limits: resolvedOptions.limits,
       sharp: config.sharp,
-    };
+    });
 
     return {
       ...config,
       collections: (config.collections ?? []).map((collection) =>
         configuredCollections.has(collection.slug)
-          ? addBlurHashField(
-              collection,
-              resolvedOptions,
-              createBlurHashLifecycleHook(runtime, collection.slug),
-            )
+          ? addBlurHashField(collection, resolvedOptions, createGenerationHook(collection.slug))
           : collection,
       ),
     };
