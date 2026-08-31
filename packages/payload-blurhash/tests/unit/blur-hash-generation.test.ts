@@ -594,17 +594,15 @@ describe("BlurHash generation", () => {
     }
   });
 
-  test("handles removal, missing files, and disabled generation before diagnostics", async () => {
-    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+  test("clears the value when generation is disabled", async () => {
     const logger = createLogger();
-    const enabledHook = createHook(input.length);
     const disabledHook = createBlurHashGeneration({
       alphaBackground: { b: 255, g: 255, r: 255 },
       debug: true,
       enabled: false,
       limits: {
         concurrency: 1,
-        maxInputBytes: input.length,
+        maxInputBytes: 1,
         maxInputPixels: 960,
         maxInputSide: 40,
         timeoutSeconds: 10,
@@ -612,32 +610,58 @@ describe("BlurHash generation", () => {
       sharp: undefined,
     })("media");
 
-    expect({
-      disabled: await invokeHook(disabledHook, {
-        data: { mimeType: "image/jpeg" },
-        file: { data: input },
-        logger,
-        previousValue: "old-hash",
-      }),
-      missingOnCreate: await invokeHook(enabledHook, { logger }),
-      removal: await invokeHook(enabledHook, {
-        data: { filename: null, mimeType: "image/jpeg" },
-        file: { data: input },
-        logger,
-        previousValue: "old-hash",
-      }),
-      updateWithoutFile: await invokeHook(enabledHook, {
-        logger,
-        previousValue: "old-hash",
-      }),
-      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
-    }).toEqual({
-      disabled: null,
-      logs: 0,
-      missingOnCreate: null,
-      removal: null,
-      updateWithoutFile: "old-hash",
+    const result = await invokeHook(disabledHook, {
+      data: { mimeType: "image/jpeg" },
+      file: { data: Buffer.alloc(1) },
+      logger,
+      previousValue: "old-hash",
     });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({
+      logs: 0,
+      result: null,
+    });
+  });
+
+  test("returns null when a create has no file", async () => {
+    const logger = createLogger();
+    const result = await invokeHook(createHook(1), { logger });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({ logs: 0, result: null });
+  });
+
+  test("clears the value when the file is explicitly removed", async () => {
+    const logger = createLogger();
+    const result = await invokeHook(createHook(1), {
+      data: { filename: null, mimeType: "image/jpeg" },
+      file: { data: Buffer.alloc(1) },
+      logger,
+      previousValue: "old-hash",
+    });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({ logs: 0, result: null });
+  });
+
+  test("preserves the value when an update has no file", async () => {
+    const logger = createLogger();
+    const result = await invokeHook(createHook(1), {
+      logger,
+      previousValue: "old-hash",
+    });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({ logs: 0, result: "old-hash" });
   });
 
   test("prefers the request Sharp adapter over the registration fallback", async () => {
@@ -662,16 +686,14 @@ describe("BlurHash generation", () => {
     expect(typeof result === "string" && isBlurhashValid(result).result).toBe(true);
   });
 
-  test("uses a temporary upload path and isolates a missing path", async () => {
+  test("uses a temporary upload path instead of stale in-memory data", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
     const testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-generation-"));
     const fixturePath = path.join(testDirectory, "upload.jpg");
-    const missingPath = path.join(testDirectory, "missing.jpg");
 
     try {
       await writeFile(fixturePath, input);
       const hook = createHook(input.length);
-      const logger = createLogger();
       const generated = await invokeHook(hook, {
         data: { mimeType: "image/jpeg" },
         file: {
@@ -679,21 +701,31 @@ describe("BlurHash generation", () => {
           size: input.length,
           tempFilePath: fixturePath,
         },
-        logger,
       });
-      const failed = await invokeHook(hook, {
+
+      expect(typeof generated === "string" && isBlurhashValid(generated).result).toBe(true);
+    } finally {
+      await rm(testDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("isolates a missing temporary upload path", async () => {
+    const testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-generation-"));
+    const logger = createLogger();
+
+    try {
+      const failed = await invokeHook(createHook(321), {
         data: { mimeType: "image/jpeg" },
-        file: { data: Buffer.alloc(0), size: 321, tempFilePath: missingPath },
+        file: {
+          data: Buffer.alloc(0),
+          size: 321,
+          tempFilePath: path.join(testDirectory, "missing.jpg"),
+        },
         logger,
       });
 
-      expect({
-        failed,
-        generated: typeof generated === "string" && isBlurhashValid(generated).result,
-        warning: logger.warn.mock.calls.at(-1)?.[0],
-      }).toMatchObject({
+      expect({ failed, warning: logger.warn.mock.calls[0]?.[0] }).toMatchObject({
         failed: null,
-        generated: true,
         warning: {
           code: "decode_failed",
           event: "generation_failed",
