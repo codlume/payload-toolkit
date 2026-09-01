@@ -44,6 +44,22 @@ _Avoid_: Any write, system change
 A change with no admin user behind it (scripts, scheduled jobs, other auth collections); it clears the recorded modifier instead of preserving a stale one.
 _Avoid_: Anonymous edit
 
+**Live Preview plugin**:
+The Payload plugin that links blocks in Payload Admin to the components rendering them in Payload's Live Preview, in both directions: selecting a component in the preview locates its block in the editor, and selecting a block in the editor locates its component in the preview.
+_Avoid_: Visual editor, preview replacement, Payload Live Preview
+
+**Linked block**:
+A block-field entry, at any nesting depth, whose rendering component carries a block marker so the Live Preview plugin can locate it from either side.
+_Avoid_: Block, component, editable
+
+**Block marker**:
+The attributes the Live Preview plugin's frontend helper places on a component so the preview bridge can identify the linked block it renders.
+_Avoid_: Data attribute, editable tag
+
+**Preview bridge**:
+The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It is inert on pages not shown inside Payload Admin.
+_Avoid_: Storyblok bridge, postMessage layer, live preview
+
 **Release**:
 A published version of one Payload plugin: its npm version, its git tag, its GitHub Release, and the matching entry in that plugin's changelog. Releases are per plugin; one plugin releasing says nothing about the other.
 _Avoid_: Deploy, version bump, lockstep release
