@@ -13,3 +13,8 @@ development and testing.
 - [`@codlume/payload-blurhash`](https://www.npmjs.com/package/@codlume/payload-blurhash)
   generates and previews BlurHash placeholders for uploaded images.
   [Documentation](packages/payload-blurhash/)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, test commands, and pull
+request requirements.
