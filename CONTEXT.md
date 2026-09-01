@@ -57,7 +57,7 @@ A human GitHub user who authored a merged pull request whose change belongs to o
 _Avoid_: Commit author, bot author, repository contributor, release-run contributor
 
 **Releasable merge**:
-A merge to the default branch that changes a Payload plugin's files with a feature, fix, performance improvement, revert, or breaking change. Other changes to a plugin (docs, tests, tooling) ride along with its next release instead of causing one.
+A merge to the default branch that changes a Payload plugin's files with a feature, fix, performance improvement, refactor, revert, or breaking change. Other changes to a plugin (docs, tests, tooling) ride along with its next release instead of causing one.
 _Avoid_: Any merge, package-touching commit
 
 **Breaking change**:

@@ -31,11 +31,11 @@ request whose title does not match fails its Release run with
 request, then re-run the failed jobs.
 
 A Releasable merge is a merge to `main` that changes a plugin and has a
-`feat`, `fix`, `perf`, or `revert` title, or any accepted title marked with
-`!`. While a plugin is on `0.x`, a Breaking change bumps the minor version and
-other Releasable merges bump the patch version. Changes such as documentation,
-tests, and tooling ride along with that plugin's next Release instead of
-starting one.
+`feat`, `fix`, `perf`, `refactor`, or `revert` title, or any accepted title
+marked with `!`. While a plugin is on `0.x`, a Breaking change bumps the minor
+version and other Releasable merges bump the patch version. Changes such as
+documentation, tests, and tooling ride along with that plugin's next Release
+instead of starting one.
 
 ## What the Release run does
 
