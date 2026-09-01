@@ -5,7 +5,7 @@
 
 ### Code Refactoring
 
-* **payload-blurhash:** deepen BlurHash generation ([#75](https://github.com/codlume/payload-toolkit/issues/75)) ([0764c5f](https://github.com/codlume/payload-toolkit/commit/0764c5f3882e5bc1900a51a025595d88fbbd3c36))
+* **payload-blurhash:** deepen BlurHash generation ([#75](https://github.com/codlume/payload-toolkit/issues/75)) ([0764c5f](https://github.com/codlume/payload-toolkit/commit/0764c5f3882e5bc1900a51a025595d88fbbd3c36)) by @hadrysm
 
 ## [0.1.1](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.0...payload-blurhash-v0.1.1) (2026-08-30)
 
