@@ -27,7 +27,9 @@ pnpm browsers:install
 Create a focused branch from `main` and keep each pull request to one concern.
 Published plugin code lives in `packages/*`. The private app in
 `apps/payload-cms` exercises the plugins through real Payload APIs and hosts
-their integration and end-to-end tests.
+their integration and end-to-end tests. Tooling that automates the repository
+itself, such as the release automation in `tools/release-tools`, lives in
+`tools/*` and is never published.
 
 Follow the [coding standards](docs/agents/CODING_STANDARDS.md). Add or update
 tests when behavior changes, and test through the plugin's public interface

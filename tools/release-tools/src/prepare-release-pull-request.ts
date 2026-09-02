@@ -1,9 +1,67 @@
-import { pathToFileURL } from "node:url";
+import { type ContributorSource, loadReleaseContributorChanges } from "./release-contributors.ts";
 
-import { createProductionAdapters } from "./prepare-release-pull-request-adapters.mjs";
-import { loadReleaseContributorChanges } from "./release-contributors.mjs";
+export type ReleasePullRequest = {
+  body: string;
+  headRef: string;
+  headRepository: string | undefined;
+  headSha: string;
+  isDraft: boolean;
+  number: number;
+  state: string;
+};
 
-function assertObservedPullRequest(pullRequest, expectedHead, expectedDraft) {
+export type ObservedPullRequest = Pick<ReleasePullRequest, "headSha" | "isDraft" | "state">;
+
+/** Everything preparation needs from GitHub; implemented by the GitHub adapter. */
+export interface ReleaseGitHub extends ContributorSource {
+  findOpenReleasePullRequests(repository: string): Promise<ReleasePullRequest[]>;
+  observePullRequest(
+    repository: string,
+    number: number,
+    headRef: string,
+    expectedHead: string,
+    expectedDraft: boolean,
+  ): Promise<ObservedPullRequest>;
+  updatePullRequestBody(repository: string, number: number, body: string): Promise<void>;
+  markReady(repository: string, number: number): Promise<void>;
+  markDraft(repository: string, number: number): Promise<void>;
+}
+
+/** A checkout of the Release pull request head that preparation may edit, commit, and push. */
+export interface WorkingCopy {
+  readFile(path: string, encoding: "utf8"): Promise<string>;
+  writeFile(path: string, contents: string, encoding: "utf8"): Promise<void>;
+  changedPaths(): Promise<string[]>;
+  stageChangelogs(): Promise<unknown>;
+  hasStagedChanges(): Promise<boolean>;
+  verifyStagedChanges(): Promise<unknown>;
+  commit(): Promise<unknown>;
+  push(headRef: string, selectedHead: string): Promise<unknown>;
+  head(): Promise<string>;
+}
+
+export interface WorkingCopies {
+  withExactHead<T>(
+    pullRequest: Pick<ReleasePullRequest, "headRef" | "headSha">,
+    prepare: (workingCopy: WorkingCopy) => Promise<T>,
+  ): Promise<T>;
+}
+
+export type ReleaseAdapters = {
+  github: ReleaseGitHub;
+  reportWarning?: (warning: string) => void;
+  workingCopies: WorkingCopies;
+};
+
+export type PreparationResult =
+  | { outcome: "no-release-pull-request" }
+  | { head: string; outcome: "prepared" | "already-prepared"; pullRequestNumber: number };
+
+function assertObservedPullRequest(
+  pullRequest: ObservedPullRequest,
+  expectedHead: string,
+  expectedDraft: boolean,
+) {
   if (pullRequest.state !== "OPEN" || pullRequest.isDraft !== expectedDraft) {
     throw new Error(
       `Release pull request is no longer ${expectedDraft ? "an open draft" : "open and ready"}.`,
@@ -16,15 +74,18 @@ function assertObservedPullRequest(pullRequest, expectedHead, expectedDraft) {
   }
 }
 
+/**
+ * Release pull request preparation: credits contributors in the draft Release
+ * pull request's changelogs and body, verifies the pull request still points
+ * at the prepared commit, and only then marks it ready for review. Safe to
+ * re-run; an already prepared pull request is readied without a new commit.
+ */
 export async function prepareReleasePullRequest(
-  { repository },
-  { github, reportWarning = console.warn, workingCopies },
-) {
+  { repository }: { repository: string },
+  { github, reportWarning = console.warn, workingCopies }: ReleaseAdapters,
+): Promise<PreparationResult> {
   const pullRequests = await github.findOpenReleasePullRequests(repository);
 
-  if (pullRequests.length === 0) {
-    return { outcome: "no-release-pull-request" };
-  }
   if (pullRequests.length > 1) {
     throw new Error(
       `Found ${pullRequests.length} open Release pull requests; expected at most one.`,
@@ -32,6 +93,9 @@ export async function prepareReleasePullRequest(
   }
 
   const [pullRequest] = pullRequests;
+  if (!pullRequest) {
+    return { outcome: "no-release-pull-request" };
+  }
   if (pullRequest.headRepository !== repository) {
     throw new Error(`Release pull request #${pullRequest.number} head is not in ${repository}.`);
   }
@@ -123,39 +187,5 @@ export async function prepareReleasePullRequest(
       outcome: changed ? "prepared" : "already-prepared",
       pullRequestNumber: pullRequest.number,
     };
-  });
-}
-
-export async function runCli({ env = process.env, log = console.log } = {}) {
-  const repository = env.GITHUB_REPOSITORY;
-  const token = env.GH_TOKEN ?? env.GITHUB_TOKEN;
-
-  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository)) {
-    throw new Error("Set GITHUB_REPOSITORY to owner/name.");
-  }
-  if (!token) throw new Error("Set GH_TOKEN or GITHUB_TOKEN.");
-
-  const result = await prepareReleasePullRequest(
-    { repository },
-    createProductionAdapters({ repository, token }),
-  );
-
-  if (result.outcome === "no-release-pull-request") {
-    log("No open Release pull request to prepare.");
-  } else {
-    log(
-      `Release pull request #${result.pullRequestNumber} ${
-        result.outcome === "prepared" ? "prepared at" : "already prepared at"
-      } ${result.head}.`,
-    );
-  }
-
-  return result;
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runCli().catch((error) => {
-    console.error(error.message);
-    process.exitCode = 1;
   });
 }

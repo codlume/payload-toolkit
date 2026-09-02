@@ -10,7 +10,7 @@
     "lint": "vp lint --deny-warnings --report-unused-disable-directives",
     "prelint": "pnpm build:packages",
     "prepare": "vp config --no-agent",
-    "ready": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test:release && pnpm test:unit && pnpm test:integration && pnpm test:e2e && pnpm test:build && pnpm test:pack",
+    "ready": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test:unit && pnpm test:integration && pnpm test:e2e && pnpm test:build && pnpm test:pack",
     "services:down": "docker compose -f compose.yaml down --remove-orphans",
     "services:up": "docker compose -f compose.yaml up -d --wait localstack",
     "test:build": "pnpm --filter './packages/*' --if-present test:build && pnpm --filter @codlume/payload-cms test:generated && pnpm --filter @codlume/payload-cms build",
@@ -19,7 +19,6 @@
     "test:integration": "vp run -r test:integration",
     "test:limits": "node tests/limits/run.mjs",
     "test:pack": "pnpm --filter @codlume/payload-blurhash test:pack",
-    "test:release": "node --test scripts/*.test.mjs",
     "test:unit": "vp run -r test:unit",
     "typecheck": "pnpm build:packages && vp check --no-fmt --no-lint"
   },

@@ -5,7 +5,7 @@ Payload Toolkit is a collection of plugins for Payload CMS. Its shared workspace
 ## Language
 
 **Workspace skeleton**:
-The operational repository foundation: root configuration and tracked `apps/` and `packages/` containers, without a runnable application or publishable package.
+The operational repository foundation: root configuration and tracked `apps/`, `packages/`, and `tools/` containers, without a runnable application or publishable package.
 _Avoid_: Empty monorepo, starter app
 
 **Validation baseline**:
@@ -23,6 +23,10 @@ _Avoid_: Payload plugin, production app
 **Internal library**:
 A non-published workspace package introduced only when multiple Payload plugins need to share an implementation.
 _Avoid_: Payload plugin, configuration package
+
+**Workspace tool**:
+A non-published workspace package that automates the repository itself, such as releasing, and is never imported by a Payload plugin.
+_Avoid_: Internal library, script, dev dependency
 
 **BlurHash plugin**:
 The Payload plugin that enriches eligible images with a compact placeholder representation and exposes a static preview in Payload Admin.
