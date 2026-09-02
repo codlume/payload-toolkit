@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import {
-  prepareReleasePullRequest,
-  type ReleaseGitHub,
-  type ReleasePullRequest,
-  type WorkingCopies,
-  type WorkingCopy,
-} from "../../src/prepare-release-pull-request.ts";
+import type {
+  ReleaseGitHub,
+  ReleasePullRequest,
+  WorkingCopies,
+  WorkingCopy,
+} from "../../src/ports.ts";
+import { prepareReleasePullRequest } from "../../src/prepare-release-pull-request.ts";
 
 const HEAD = "1111111111111111111111111111111111111111";
 const CHANGE_SHA = "2222222222222222222222222222222222222222";
@@ -38,6 +38,7 @@ function unexpected(name: string) {
 
 function githubStub(overrides: Partial<ReleaseGitHub>): ReleaseGitHub {
   return {
+    findNewestMergedReleasePullRequest: unexpected("findNewestMergedReleasePullRequest"),
     findOpenReleasePullRequests: unexpected("findOpenReleasePullRequests"),
     getPullRequest: unexpected("getPullRequest"),
     listPullRequestFiles: unexpected("listPullRequestFiles"),
@@ -45,6 +46,7 @@ function githubStub(overrides: Partial<ReleaseGitHub>): ReleaseGitHub {
     markDraft: unexpected("markDraft"),
     markReady: unexpected("markReady"),
     observePullRequest: unexpected("observePullRequest"),
+    pullRequestLabels: unexpected("pullRequestLabels"),
     updatePullRequestBody: unexpected("updatePullRequestBody"),
     ...overrides,
   };
