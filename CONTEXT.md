@@ -53,7 +53,7 @@ A block-field entry, at any nesting depth, whose rendering component carries a b
 _Avoid_: Block, component, editable
 
 **Block marker**:
-The attributes the Live Preview plugin's frontend helper places on a component so the preview bridge can identify the linked block it renders. It exists only in draft renders; published pages carry none.
+The attributes the Live Preview plugin's frontend helper places on a component so the preview bridge can identify the linked block it renders: the block's row id, which alone identifies it, and its block type, shown in the hover label. It exists only in draft renders; published pages carry none.
 _Avoid_: Data attribute, editable tag
 
 **Block renderer**:
