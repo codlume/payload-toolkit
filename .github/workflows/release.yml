@@ -147,7 +147,7 @@ jobs:
         if: steps.release-commit.outputs.sha == ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node automation/scripts/prepare-release-pull-request.mjs
+        run: node automation/tools/release-tools/src/cli.ts prepare-pull-request
 
       - name: Checkout the release commit
         if: steps.release-commit.outputs.sha != ''
