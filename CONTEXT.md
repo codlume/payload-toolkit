@@ -53,8 +53,12 @@ A block-field entry, at any nesting depth, whose rendering component carries a b
 _Avoid_: Block, component, editable
 
 **Block marker**:
-The attributes the Live Preview plugin's frontend helper places on a component so the preview bridge can identify the linked block it renders.
+The attributes the Live Preview plugin's frontend helper places on a component so the preview bridge can identify the linked block it renders. It exists only in draft renders; published pages carry none.
 _Avoid_: Data attribute, editable tag
+
+**Block renderer**:
+The Live Preview plugin's frontend component that maps each block in a document to the developer's registered component for its type, attaching the block marker and passing down draft state and parent props, at any nesting depth.
+_Avoid_: Block switch, layout component, RenderBlocks
 
 **Preview bridge**:
 The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It is inert on pages not shown inside Payload Admin.
