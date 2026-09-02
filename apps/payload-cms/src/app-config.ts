@@ -3,10 +3,11 @@ import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blu
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { s3Storage, type S3StorageOptions } from "@payloadcms/storage-s3";
 import path from "node:path";
-import { buildConfig, type CollectionBeforeChangeHook } from "payload";
+import { buildConfig, type CollectionBeforeChangeHook, type Config } from "payload";
 import sharp from "sharp";
 
 import { createMediaCollection } from "./collections/media.ts";
+import { createPagesCollection } from "./collections/pages.ts";
 import { Users } from "./collections/users.ts";
 import { SiteSettings } from "./globals/site-settings.ts";
 
@@ -28,6 +29,8 @@ type AppConfigOptions = {
   };
   mediaBeforeChangeHooks: CollectionBeforeChangeHook[];
   mode: "disabled-in-memory" | "enabled-in-memory" | "enabled-temporary-file";
+  onInit?: Config["onInit"];
+  serverURL?: string;
   storage: AppStorageOptions | false;
   uploadDirectory: string;
 };
@@ -38,6 +41,8 @@ export const createAppConfig = ({
   generatedFiles,
   mediaBeforeChangeHooks,
   mode,
+  onInit,
+  serverURL = "http://localhost:3000",
   storage,
   uploadDirectory,
 }: AppConfigOptions) =>
@@ -47,9 +52,14 @@ export const createAppConfig = ({
         importMapFile: generatedFiles.importMap,
       },
     },
-    collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users],
+    collections: [
+      createMediaCollection(uploadDirectory, mediaBeforeChangeHooks),
+      createPagesCollection(serverURL),
+      Users,
+    ],
     db: sqliteAdapter({ client: { url: databaseURL } }),
     globals: [SiteSettings],
+    ...(onInit ? { onInit } : {}),
     plugins: [
       activityPlugin({ collections: ["media"], globals: ["site-settings"] }),
       blurHashPlugin({

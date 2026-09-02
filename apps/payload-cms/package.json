@@ -10,7 +10,8 @@
     "generate:types": "payload generate:types --config src/payload.config.ts",
     "test:generated": "node --test tests/build/generated-artifacts.test.mjs",
     "test:e2e": "pnpm -w build:packages && node tests/e2e/run.mjs",
-    "test:integration": "pnpm -w build:packages && vitest run tests/integration --maxWorkers=1"
+    "test:integration": "pnpm -w build:packages && vitest run tests/integration --maxWorkers=1",
+    "prototype:live-preview": "PAYLOAD_LP_PROTOTYPE=1 next dev --port 3000"
   },
   "dependencies": {
     "@codlume/payload-activity": "workspace:*",

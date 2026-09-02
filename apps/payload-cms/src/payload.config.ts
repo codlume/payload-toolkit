@@ -2,6 +2,8 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { createAppConfig } from "./app-config.ts";
+import { seedLivePreviewPrototype } from "./prototype-live-preview-linking/seed.ts";
+import { serverURL } from "./prototype-live-preview-linking/server-url.ts";
 
 const stateDirectory = path.resolve(process.env.PAYLOAD_STATE_DIRECTORY ?? ".payload");
 // The state directory is gitignored, so fresh checkouts lack it and libsql
@@ -31,6 +33,9 @@ export default createAppConfig({
   },
   mediaBeforeChangeHooks: [],
   mode: configuredMode,
+  // PROTOTYPE — throwaway seed for the linking prototype (#85).
+  ...(process.env.PAYLOAD_LP_PROTOTYPE ? { onInit: seedLivePreviewPrototype } : {}),
+  serverURL,
   storage: {
     bucket: process.env.PAYLOAD_S3_BUCKET ?? "payload-blurhash",
     config: {
