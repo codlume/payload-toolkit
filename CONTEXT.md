@@ -61,8 +61,16 @@ The Live Preview plugin's frontend component that maps each block in a document 
 _Avoid_: Block switch, layout component, RenderBlocks
 
 **Preview bridge**:
-The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It is inert on pages not shown inside Payload Admin.
+The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It stays inert, with no listeners or styles, until the bridge handshake completes, so it does nothing on pages not shown inside Payload Admin.
 _Avoid_: Storyblok bridge, postMessage layer, live preview
+
+**Bridge handshake**:
+The exchange in which Payload Admin and the previewed page each learn that the other side runs the Live Preview plugin. Either side may start it; until it completes neither side sends or acts on a locate request.
+_Avoid_: Payload ready message, connection, ping
+
+**Locate request**:
+A message across the preview bridge naming the linked block to reveal, together with its enclosing linked blocks from innermost to outermost. The receiving side reveals the first block it can find and ignores the rest; a request that matches nothing is dropped.
+_Avoid_: Selection event, click event, scroll message
 
 **Release**:
 A published version of one Payload plugin: its npm version, its git tag, its GitHub Release, and the matching entry in that plugin's changelog. Releases are per plugin; one plugin releasing says nothing about the other.
