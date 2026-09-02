@@ -74,6 +74,8 @@ ${scope("A")} [data-payload-block][${HIGHLIGHT_ATTRIBUTE}] { outline: 3px solid 
 
 ${scope("B")} [data-payload-block] { cursor: pointer; }
 ${scope("B")} [${HOVER_ATTRIBUTE}] { position: relative; outline: 2px dashed rgb(${BLUE}); outline-offset: 2px; }
+${scope("B")} [${HOVER_ATTRIBUTE}]::after { content: ""; position: absolute; inset: 0; background: rgb(${BLUE}); pointer-events: none; opacity: 0.08; animation: lp-b-hover 150ms ease-out both; }
+@keyframes lp-b-hover { from { opacity: 0; } to { opacity: 0.08; } }
 ${scope("B")} [${HOVER_ATTRIBUTE}]::before { content: attr(${BLOCK_TYPE_ATTRIBUTE}); position: absolute; top: 0; left: 0; z-index: 1; padding: 2px 8px; font: 600 11px/1.4 system-ui, sans-serif; letter-spacing: 0.02em; text-transform: uppercase; color: white; background: rgb(${BLUE}); border-radius: 0 0 6px 0; pointer-events: none; }
 ${scope("B")} [data-payload-block][${HIGHLIGHT_ATTRIBUTE}] { position: relative; }
 ${scope("B")} [data-payload-block][${HIGHLIGHT_ATTRIBUTE}]::after { content: ""; position: absolute; inset: 0; background: rgb(${BLUE}); pointer-events: none; animation: lp-b-fade 1200ms ease-out both; }
