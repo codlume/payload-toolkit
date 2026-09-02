@@ -73,8 +73,9 @@ Never edit a plugin's `CHANGELOG.md` or version by hand. Do not edit
 
 After release-please creates or refreshes the pending Release pull request,
 Release pull request preparation adds contributor mentions to its generated
-changelog entries. The workflow runs it from `tools/release-tools`, the
-Workspace tool that holds the release automation. A change from a merged pull request ends with `by @login`
+changelog entries. Every step of the Release run that is not a third-party
+action is a command of `tools/release-tools`, the Workspace tool that holds
+the release automation. A change from a merged pull request ends with `by @login`
 when its author is a human GitHub user. The same entry becomes the plugin's
 GitHub Release body after approval, so GitHub renders its native Contributors
 avatar panel.

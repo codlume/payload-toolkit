@@ -17,6 +17,12 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  # The release automation (tools/release-tools) runs with bare Node: no
+  # install, no build. It is staged outside the workspace because
+  # actions/checkout empties the directory it checks the release commit into.
+  RELEASE_TOOLS: ${{ runner.temp }}/release-tools
+
 jobs:
   release:
     name: Release
@@ -28,43 +34,35 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      # The triggering main commit provides the automation for the whole run;
+      # the release commit, if any, is checked out separately below.
+      - name: Checkout the release automation
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: automation
+          persist-credentials: false
+
+      - name: Set up Node for the release automation
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: automation/.node-version
+          package-manager-cache: false
+
+      - name: Stage the release automation
+        run: mv automation/tools/release-tools "$RELEASE_TOOLS"
+
       # Existing release PRs may predate draft-by-default configuration. Move
       # one back to draft before release-please refreshes it so a maintainer
       # cannot merge changelogs that have not been enriched yet.
       - name: Hold the open release PR as draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          prs=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
-            -f query='query($owner: String!, $name: String!) {
-              repository(owner: $owner, name: $name) {
-                pullRequests(states: OPEN, baseRefName: "main", labels: ["autorelease: pending"],
-                             first: 2, orderBy: {field: UPDATED_AT, direction: DESC}) {
-                  nodes { number isDraft }
-                }
-              }
-            }' --jq '.data.repository.pullRequests.nodes')
+        run: node "$RELEASE_TOOLS/src/cli.ts" hold-draft
 
-          count=$(jq 'length' <<<"$prs")
-          if (( count > 1 )); then
-            echo "::error::Found $count open release PRs; expected at most one."
-            exit 1
-          fi
-          if (( count == 0 )); then
-            echo "No existing release PR to hold as draft."
-            exit 0
-          fi
-
-          pr=$(jq -c '.[0]' <<<"$prs")
-          number=$(jq -r '.number' <<<"$pr")
-          if [[ "$(jq -r '.isDraft' <<<"$pr")" == "true" ]]; then
-            echo "Release PR #$number is already a draft."
-          else
-            gh pr ready "$number" --repo "$GITHUB_REPOSITORY" --undo
-          fi
-
-      # No checkout: release-please works through the API. Ordinary merges open
-      # or update a release PR and then this run has nothing left to publish. If
+      # Release-please works through the API and never reads the checkout.
+      # Ordinary merges open or update a release PR and then this run has
+      # nothing left to publish. If
       # a maintainer merged that PR, release-please logs "untagged, merged release
       # PRs outstanding" and opens nothing; the steps below publish it.
       - name: Open or update the release PR
@@ -82,72 +80,22 @@ jobs:
       # the PR when it creates the GitHub Releases, before npm publish runs, so
       # an ordinary push after a finished release finds nothing to do. GraphQL
       # avoids the search-index lag of `gh pr list --label` immediately after a
-      # maintainer merges the release PR.
+      # maintainer merges the release PR. The command writes number, sha, and
+      # pending as step outputs; an empty sha means nothing to release.
       - name: Find the release commit
         id: release-commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          pr=$(gh api graphql -F owner="$GITHUB_REPOSITORY_OWNER" -F name="${GITHUB_REPOSITORY#*/}" \
-            -f query='query($owner: String!, $name: String!) {
-              repository(owner: $owner, name: $name) {
-                pullRequests(states: MERGED, baseRefName: "main",
-                             labels: ["autorelease: pending", "autorelease: tagged"],
-                             first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
-                  nodes { number mergeCommit { oid } labels(first: 20) { nodes { name } } }
-                }
-              }
-            }' --jq '.data.repository.pullRequests.nodes[0] // empty')
+        run: node "$RELEASE_TOOLS/src/cli.ts" find-release-commit
 
-          number=""
-          sha=""
-          pending=""
-          if [[ -z "$pr" ]]; then
-            echo "Nothing to release: no release PR has been merged."
-          else
-            number=$(jq -r '.number' <<<"$pr")
-            merge_sha=$(jq -r '.mergeCommit.oid' <<<"$pr")
-            if jq -e '.labels.nodes | any(.name == "autorelease: pending")' <<<"$pr" >/dev/null; then
-              sha=$merge_sha
-              pending=true
-              echo "Release commit: $sha (release PR #$number awaits its GitHub Releases and npm publish)"
-            elif (( GITHUB_RUN_ATTEMPT > 1 )); then
-              sha=$merge_sha
-              pending=false
-              echo "Release commit: $sha (re-run; release PR #$number is tagged, publishing whatever npm still lacks)"
-            else
-              echo "Nothing to release: the newest release PR #$number is already tagged."
-            fi
-          fi
-          {
-            echo "number=$number"
-            echo "sha=$sha"
-            echo "pending=$pending"
-          } >> "$GITHUB_OUTPUT"
-
-      # The open release branch may predate this automation. Run preparation
-      # from the triggering main commit; the command checks out and updates the
-      # exact release PR head in an isolated temporary working copy.
-      - name: Checkout release PR preparation
-        if: steps.release-commit.outputs.sha == ''
-        uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          path: automation
-          persist-credentials: false
-
-      - name: Set up Node for release PR preparation
-        if: steps.release-commit.outputs.sha == ''
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version-file: automation/.node-version
-          package-manager-cache: false
-
+      # The open release branch may predate this automation, so preparation
+      # never runs from it: the command checks out and updates the exact
+      # release PR head in an isolated temporary working copy.
       - name: Prepare the release PR
         if: steps.release-commit.outputs.sha == ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node automation/tools/release-tools/src/cli.ts prepare-pull-request
+        run: node "$RELEASE_TOOLS/src/cli.ts" prepare-pull-request
 
       - name: Checkout the release commit
         if: steps.release-commit.outputs.sha != ''
@@ -206,14 +154,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_PR: ${{ steps.release-commit.outputs.number }}
-        run: |
-          if gh pr view "$RELEASE_PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' \
-               | grep -qx 'autorelease: tagged'; then
-            echo "Release PR #$RELEASE_PR is tagged."
-          else
-            echo "::error::release-please created no GitHub Release for release PR #$RELEASE_PR; see its log above. If it reported a bad pull request title, retitle the merged PR to match group-pull-request-title-pattern in release-please-config.json, then re-run the failed jobs."
-            exit 1
-          fi
+        run: node "$RELEASE_TOOLS/src/cli.ts" verify-tagged
 
       # npm is the last step and runs only for a release commit that built and
       # is tagged (either in this run or, on a re-run, earlier). Each plugin
@@ -225,20 +166,7 @@ jobs:
       # OIDC (id-token: write) and attaches provenance itself.
       - name: Publish to npm
         if: steps.build.outcome == 'success' && (steps.release-commit.outputs.pending == 'false' || steps.release-tagged.outcome == 'success')
-        run: |
-          failed=()
-          for dir in packages/*/; do
-            name=$(node -p "require('./${dir}package.json').name")
-            if pnpm -r --filter "$name" publish --no-git-checks; then
-              echo "Published (or already on npm): $name"
-            else
-              failed+=("$name")
-            fi
-          done
-          if (( ${#failed[@]} > 0 )); then
-            echo "::error::Publish failed for: ${failed[*]}"
-            exit 1
-          fi
+        run: node "$RELEASE_TOOLS/src/cli.ts" publish
 
       - name: Log release-please outputs
         if: always()
