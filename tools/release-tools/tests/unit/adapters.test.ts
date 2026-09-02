@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { createGitHubAdapter, createWorkingCopiesAdapter } from "../../src/adapters.ts";
+import {
+  createGitHubAdapter,
+  createWorkingCopiesAdapter,
+  createWorkspaceAdapter,
+} from "../../src/adapters.ts";
 
 const HEAD = "1111111111111111111111111111111111111111";
 const PREPARED_HEAD = "2222222222222222222222222222222222222222";
@@ -212,4 +216,101 @@ test("reports every changed path from porcelain output", async () => {
   );
 
   assert.deepEqual(paths, ["packages/example/CHANGELOG.md", "unexpected.txt"]);
+});
+
+test("reads the newest merged Release pull request with its labels", async () => {
+  const github = createGitHubAdapter({
+    token: "secret",
+    fetchImpl: async () =>
+      Response.json({
+        data: {
+          repository: {
+            pullRequests: {
+              nodes: [
+                {
+                  labels: { nodes: [{ name: "autorelease: tagged" }] },
+                  mergeCommit: { oid: PREPARED_HEAD },
+                  number: 7,
+                },
+              ],
+            },
+          },
+        },
+      }),
+  });
+
+  assert.deepEqual(await github.findNewestMergedReleasePullRequest("acme/toolkit"), {
+    labels: ["autorelease: tagged"],
+    mergeCommitSha: PREPARED_HEAD,
+    number: 7,
+  });
+});
+
+test("reads a pull request's label names", async () => {
+  const github = createGitHubAdapter({
+    token: "secret",
+    fetchImpl: async () =>
+      Response.json({
+        body: null,
+        draft: false,
+        head: { ref: "release-please--branches--main", repo: null, sha: HEAD },
+        labels: [{ name: "autorelease: pending" }],
+        node_id: "PR_7",
+        number: 7,
+        state: "closed",
+      }),
+  });
+
+  assert.deepEqual(await github.pullRequestLabels("acme/toolkit", 7), ["autorelease: pending"]);
+});
+
+test("lists package names from the packages directories only, in order", async () => {
+  const workspace = createWorkspaceAdapter({
+    cwd: "/release",
+    fs: {
+      async readdir() {
+        return [
+          { isDirectory: () => true, name: "payload-blurhash" },
+          { isDirectory: () => false, name: ".DS_Store" },
+          { isDirectory: () => true, name: "payload-activity" },
+        ];
+      },
+      async readFile(path) {
+        return JSON.stringify({ name: `@codlume/${path.split("/").at(-2)}` });
+      },
+    },
+    run: async () => 0,
+  });
+
+  assert.deepEqual(await workspace.listPackageNames(), [
+    "@codlume/payload-activity",
+    "@codlume/payload-blurhash",
+  ]);
+});
+
+test("publishes through pnpm's recursive publish and reports a non-zero exit", async () => {
+  const commands: string[][] = [];
+  const workspace = createWorkspaceAdapter({
+    cwd: "/release",
+    run: async (command, args) => {
+      commands.push([command, ...args]);
+      return args.includes("@codlume/payload-activity") ? 1 : 0;
+    },
+  });
+
+  const results = [
+    await workspace.publish("@codlume/payload-activity"),
+    await workspace.publish("@codlume/payload-blurhash"),
+  ];
+
+  assert.deepEqual(
+    { commands, results },
+    {
+      commands: [
+        ["pnpm", "-r", "--filter", "@codlume/payload-activity", "publish", "--no-git-checks"],
+        ["pnpm", "-r", "--filter", "@codlume/payload-blurhash", "publish", "--no-git-checks"],
+      ],
+      results: [false, true],
+    },
+  );
 });

@@ -1,16 +1,18 @@
-import { execFile as execFileWithCallback } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile as execFileWithCallback, spawn } from "node:child_process";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import type {
+  MergedReleasePullRequest,
   ReleaseAdapters,
   ReleaseGitHub,
   ReleasePullRequest,
   WorkingCopies,
   WorkingCopy,
-} from "./prepare-release-pull-request.ts";
+  Workspace,
+} from "./ports.ts";
 import type { AssociatedPullRequest } from "./release-contributors.ts";
 
 const API_ROOT = "https://api.github.com";
@@ -31,9 +33,16 @@ type RestPullRequest = {
   body: string | null;
   draft: boolean;
   head: { ref: string; repo: { full_name: string } | null; sha: string };
+  labels: { name: string }[];
   node_id: string;
   number: number;
   state: string;
+};
+
+type MergedGraphqlPullRequest = {
+  labels: { nodes: { name: string }[] };
+  mergeCommit: { oid: string } | null;
+  number: number;
 };
 
 function splitRepository(repository: string) {
@@ -179,7 +188,57 @@ export function createGitHubAdapter({
       return pulls;
     },
 
+    async findNewestMergedReleasePullRequest(repository) {
+      const { owner, name } = splitRepository(repository);
+      const data = await graphql<{
+        repository: { pullRequests: { nodes: MergedGraphqlPullRequest[] } };
+      }>(
+        `
+          query MergedReleasePullRequest($owner: String!, $name: String!) {
+            repository(owner: $owner, name: $name) {
+              pullRequests(
+                first: 1
+                states: MERGED
+                baseRefName: "main"
+                labels: ["autorelease: pending", "autorelease: tagged"]
+                orderBy: { field: CREATED_AT, direction: DESC }
+              ) {
+                nodes {
+                  number
+                  mergeCommit {
+                    oid
+                  }
+                  labels(first: 20) {
+                    nodes {
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        { owner, name },
+      );
+      const [merged] = data.repository.pullRequests.nodes;
+      if (!merged) return undefined;
+      if (!merged.mergeCommit) {
+        throw new Error(`Release pull request #${merged.number} has no merge commit.`);
+      }
+      const result: MergedReleasePullRequest = {
+        labels: merged.labels.nodes.map(({ name: label }) => label),
+        mergeCommitSha: merged.mergeCommit.oid,
+        number: merged.number,
+      };
+      return result;
+    },
+
     getPullRequest: pullRequest,
+
+    async pullRequestLabels(repository, number) {
+      const pull = await pullRequest(repository, number);
+      return pull.labels.map(({ name }) => name);
+    },
 
     async listPullRequestFiles(repository, number) {
       async function listPage(page: number): Promise<string[]> {
@@ -389,6 +448,72 @@ export function createWorkingCopiesAdapter({
       } finally {
         await fs.rm(directory, { force: true, recursive: true });
       }
+    },
+  };
+}
+
+type RunCommand = (command: string, args: string[]) => Promise<number>;
+
+type WorkspaceFs = {
+  readdir(
+    path: string,
+    options: { withFileTypes: true },
+  ): Promise<{ isDirectory(): boolean; name: string }[]>;
+  readFile(path: string, encoding: "utf8"): Promise<string>;
+};
+
+// Streams the command's output into the job log and resolves with its exit code.
+const runFromSystem: RunCommand = (command, args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: "inherit" });
+    child.on("error", reject);
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+
+function packageName(manifest: string, path: string) {
+  const parsed: unknown = JSON.parse(manifest);
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "name" in parsed &&
+    typeof parsed.name === "string"
+  ) {
+    return parsed.name;
+  }
+  throw new Error(`${path} has no package name.`);
+}
+
+/**
+ * The packages of the checked-out release commit. Publishing goes through
+ * pnpm's recursive publish: only it skips versions already on npm and private
+ * packages, which is what makes a re-run safe.
+ */
+export function createWorkspaceAdapter({
+  cwd = process.cwd(),
+  fs = { readdir, readFile },
+  run = runFromSystem,
+}: {
+  cwd?: string;
+  fs?: WorkspaceFs;
+  run?: RunCommand;
+}): Workspace {
+  return {
+    async listPackageNames() {
+      const entries = await fs.readdir(join(cwd, "packages"), { withFileTypes: true });
+      const names = await Promise.all(
+        entries
+          .filter((entry) => entry.isDirectory())
+          .map(async (entry) => {
+            const path = join("packages", entry.name, "package.json");
+            return packageName(await fs.readFile(join(cwd, path), "utf8"), path);
+          }),
+      );
+      return names.toSorted();
+    },
+
+    async publish(name) {
+      const code = await run("pnpm", ["-r", "--filter", name, "publish", "--no-git-checks"]);
+      return code === 0;
     },
   };
 }
