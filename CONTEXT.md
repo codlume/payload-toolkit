@@ -49,7 +49,7 @@ The Payload plugin that links blocks in Payload Admin to the components renderin
 _Avoid_: Visual editor, preview replacement, Payload Live Preview
 
 **Linked block**:
-A block-field entry, at any nesting depth, whose rendering component carries a block marker so the Live Preview plugin can locate it from either side.
+A block-field entry, at any nesting depth, rendered by one or more components carrying its block marker so the Live Preview plugin can locate it from either side.
 _Avoid_: Block, component, editable
 
 **Block marker**:
@@ -61,7 +61,7 @@ The Live Preview plugin's frontend component that maps each block in a document 
 _Avoid_: Block switch, layout component, RenderBlocks
 
 **Preview bridge**:
-The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It stays inert, with no listeners or styles, until the bridge handshake completes, so it does nothing on pages not shown inside Payload Admin.
+The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It has no interaction listeners or styles until the bridge handshake completes, so it does nothing on pages not shown inside Payload Admin.
 _Avoid_: Storyblok bridge, postMessage layer, live preview
 
 **Bridge handshake**:
