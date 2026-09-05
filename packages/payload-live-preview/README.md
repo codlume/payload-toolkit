@@ -93,9 +93,15 @@ import { livePreviewPlugin } from "@codlume/payload-live-preview";
 plugins: [livePreviewPlugin()];
 ```
 
-Configure `admin.livePreview` on the collection using Payload's own URL and breakpoint options. The plugin appends `@codlume/payload-live-preview/client#PreviewBridgeAdmin` to existing edit controls. Regenerate the Payload import map after adding the plugin.
+Configure `admin.livePreview` on each collection or global, or include its slug in the root `admin.livePreview.collections` or `admin.livePreview.globals` list. A root URL alone does not enable entities. The plugin uses Payload's own URL and breakpoint options and needs no separate slug lists.
+
+The plugin appends `@codlume/payload-live-preview/client#PreviewBridgeAdmin` to collection `admin.components.edit.beforeDocumentControls` and global `admin.components.elements.beforeDocumentControls`. It preserves existing controls and preview components. Regenerate the Payload import map after adding the plugin.
+
+Conditional URL functions run through Payload for the current document and locale. The plugin never evaluates them during configuration. Returning `null` or `undefined` leaves linking inactive until native Live Preview becomes available.
 
 `enabled` defaults to `true`. With `enabled: false`, the plugin returns the original configuration unchanged. `debug` defaults to `false` and controls Admin diagnostics. The bridge renders no DOM and activates only in native iframe preview mode.
+
+Linking follows Payload's active locale. Changing locale cancels pending Admin locates and clears the previous block selection, even when the preview URL stays the same. Subsequent selections use current form fields. If the iframe navigates, the bridge reconnects. Preview URLs and frontend data reads must use the active locale, as with native Live Preview. There is no cross-locale id mapping or selection replay.
 
 ## Render blocks
 

@@ -45,6 +45,7 @@ export const createE2EPayload = async (mode: "disabled" | "enabled") => {
     },
     mediaBeforeChangeHooks: [],
     mode: mode === "enabled" ? "enabled-in-memory" : "disabled-in-memory",
+    previewTestContext: mode === "enabled",
     storage: createS3TestStorage(`${s3Prefix}/${mode}`),
     uploadDirectory: path.join(stateDirectory, "media"),
   });

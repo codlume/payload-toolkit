@@ -1,5 +1,5 @@
 "use client";
-import { useDocumentInfo, useForm, useLivePreviewContext } from "@payloadcms/ui";
+import { useDocumentInfo, useForm, useLivePreviewContext, useLocale } from "@payloadcms/ui";
 import { useEffect, useRef } from "react";
 import { connect, diagnostics } from "./channel.ts";
 import { createLocateWork } from "./locate.ts";
@@ -9,12 +9,14 @@ import { createVisuals } from "./visuals.ts";
 export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
   const preview = useLivePreviewContext();
   const form = useForm();
+  const { code: locale } = useLocale();
   const { setDocFieldPreferences } = useDocumentInfo();
   const current = useRef({ form, setDocFieldPreferences });
   current.current = { form, setDocFieldPreferences };
   const { iframeRef, isLivePreviewing, previewWindowType, url, loadedURL } = preview;
   const iframeElement = iframeRef.current;
   useEffect(() => {
+    const log = diagnostics("admin", debug);
     const iframe = iframeRef.current;
     const formElement = current.current.form.formRef.current;
     if (
@@ -24,15 +26,17 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
       !url ||
       !iframe?.contentWindow ||
       !formElement
-    )
+    ) {
+      log("unavailable preview context");
       return undefined;
+    }
     let origin: string;
     try {
       origin = new URL(url, window.location.href).origin;
     } catch {
+      log("unavailable preview URL");
       return undefined;
     }
-    const log = diagnostics("admin", debug);
     const work = createLocateWork(log);
     let visuals: ReturnType<typeof createVisuals> | undefined;
     let selected: string | undefined;
@@ -147,6 +151,15 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
       reset();
       iframe.removeEventListener("load", reload);
     };
-  }, [debug, iframeRef, iframeElement, isLivePreviewing, previewWindowType, url, loadedURL]);
+  }, [
+    debug,
+    iframeRef,
+    iframeElement,
+    isLivePreviewing,
+    previewWindowType,
+    url,
+    loadedURL,
+    locale,
+  ]);
   return null;
 };

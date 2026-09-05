@@ -11,6 +11,7 @@ import { createMediaCollection } from "./collections/media.ts";
 import { Pages } from "./collections/pages.ts";
 import { Users } from "./collections/users.ts";
 import { SiteSettings } from "./globals/site-settings.ts";
+import { previewTestConfig } from "../tests/fixtures/live-preview-config.ts";
 
 type AppStorageOptions = {
   bucket: string;
@@ -30,6 +31,7 @@ type AppConfigOptions = {
   };
   mediaBeforeChangeHooks: CollectionBeforeChangeHook[];
   mode: "disabled-in-memory" | "enabled-in-memory" | "enabled-temporary-file";
+  previewTestContext?: boolean;
   storage: AppStorageOptions | false;
   uploadDirectory: string;
 };
@@ -40,18 +42,21 @@ export const createAppConfig = ({
   generatedFiles,
   mediaBeforeChangeHooks,
   mode,
+  previewTestContext = false,
   storage,
   uploadDirectory,
 }: AppConfigOptions) =>
   buildConfig({
+    ...(previewTestContext ? { localization: previewTestConfig.localization } : {}),
     admin: {
+      ...(previewTestContext ? { livePreview: previewTestConfig.livePreview } : {}),
       importMap: {
         importMapFile: generatedFiles.importMap,
       },
     },
     collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users, Pages],
     db: sqliteAdapter({ client: { url: databaseURL } }),
-    globals: [SiteSettings],
+    globals: [previewTestContext ? previewTestConfig.global : SiteSettings],
     plugins: [
       livePreviewPlugin({
         enabled: mode !== "disabled-in-memory",
