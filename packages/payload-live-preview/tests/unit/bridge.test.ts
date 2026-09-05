@@ -5,11 +5,16 @@ import { createPreviewBridge } from "../../src/core.ts";
 const disposers: (() => void)[] = [];
 afterEach(() => {
   disposers.splice(0).forEach((dispose) => dispose());
+  vi.useRealTimers();
   vi.restoreAllMocks();
   document.body.innerHTML = "";
 });
 
 const setupPeer = (debug = false) => {
+  // jsdom has no layout; browser scenarios exercise real visibility and scrolling.
+  vi.spyOn(Element.prototype, "getClientRects").mockReturnValue(
+    Object.assign([new DOMRect()], { item: () => null }),
+  );
   const frame = document.createElement("iframe");
   document.body.append(frame);
   const parent = Object.assign(frame.contentWindow!, { postMessage: vi.fn() });
@@ -114,4 +119,94 @@ test("standalone pages never send a handshake or install styles", () => {
   disposers.push(createPreviewBridge({ serverURL: "https://admin.example" }));
   expect(post).not.toHaveBeenCalled();
   expect(document.documentElement.hasAttribute("data-payload-linking")).toBe(false);
+});
+
+test("locates wait for rendering, replace older requests and expire after two seconds", async () => {
+  vi.useFakeTimers();
+  const log = vi.spyOn(console, "debug");
+  const { message, dispose } = setupPeer(true);
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["old"] });
+  message({ ...ready, event: "locate", ids: ["new"] });
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    '<p data-payload-block="old">Old</p><p data-payload-block="new">New</p>',
+  );
+  await Promise.resolve();
+  expect(
+    document
+      .querySelector('[data-payload-block="new"]')
+      ?.hasAttribute("data-payload-block-highlight"),
+  ).toBe(true);
+  expect(
+    document
+      .querySelector('[data-payload-block="old"]')
+      ?.hasAttribute("data-payload-block-highlight"),
+  ).toBe(false);
+  message({ ...ready, event: "locate", ids: ["late"] });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(log).toHaveBeenCalledWith("[@codlume/payload-live-preview:preview] target timeout", [
+    "late",
+  ]);
+  document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="late">Late</p>');
+  await Promise.resolve();
+  expect(
+    document
+      .querySelector('[data-payload-block="late"]')
+      ?.hasAttribute("data-payload-block-highlight"),
+  ).toBe(false);
+  message({ ...ready, event: "locate", ids: ["disposed"] });
+  dispose();
+  document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="disposed">Disposed</p>');
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(
+    document
+      .querySelector('[data-payload-block="disposed"]')
+      ?.hasAttribute("data-payload-block-highlight"),
+  ).toBe(false);
+});
+
+test("hidden inner markers fall back to an enclosing block and clicks send innermost-first ids", () => {
+  const { message, parent, element } = setupPeer();
+  element.innerHTML = '<span data-payload-block="inner" style="visibility:hidden">Inner</span>';
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["inner", "one"] });
+  expect(element.hasAttribute("data-payload-block-highlight")).toBe(true);
+  element.querySelector("span")!.click();
+  expect(parent.postMessage).toHaveBeenLastCalledWith(
+    { ...ready, event: "locate", ids: ["inner", "one"] },
+    "https://admin.example",
+  );
+});
+
+test("hover and repeated highlights restore inline positioning only after both treatments finish", async () => {
+  vi.useFakeTimers();
+  const { message, element, dispose } = setupPeer();
+  element.style.setProperty("position", "static", "important");
+  element.innerHTML = '<span data-payload-block="inner" style="position:static">Inner</span>';
+  const inner = element.querySelector("span")!;
+  message(ready);
+  inner.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  expect(inner.hasAttribute("data-payload-block-hover")).toBe(true);
+  expect(element.hasAttribute("data-payload-block-hover")).toBe(false);
+  message({ ...ready, event: "locate", ids: ["inner", "one"] });
+  await vi.advanceTimersByTimeAsync(1100);
+  message({ ...ready, event: "locate", ids: ["inner", "one"] });
+  await vi.advanceTimersByTimeAsync(100);
+  expect(inner.hasAttribute("data-payload-block-highlight")).toBe(true);
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(inner.hasAttribute("data-payload-block-highlight")).toBe(false);
+  expect(inner.style.position).toBe("relative");
+  element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  expect(inner.style.position).toBe("static");
+  expect(element.style.position).toBe("relative");
+  message({ ...ready, event: "locate", ids: ["one"] });
+  document.body.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  expect(element.style.position).toBe("relative");
+  dispose();
+  expect(element.style.position).toBe("static");
+  expect(element.style.getPropertyPriority("position")).toBe("important");
+  expect(
+    document.querySelector("[data-payload-block-hover], [data-payload-block-highlight]"),
+  ).toBeNull();
 });

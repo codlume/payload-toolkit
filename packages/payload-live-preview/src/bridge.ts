@@ -1,4 +1,5 @@
 import { connect, diagnostics } from "./channel.ts";
+import { createLocateWork } from "./locate.ts";
 import { createVisuals } from "./visuals.ts";
 
 export type BridgeOptions = { serverURL: string; debug?: boolean };
@@ -26,6 +27,7 @@ export const createPreviewBridge = ({ serverURL, debug = false }: BridgeOptions)
   }
   if (!active) {
     const log = diagnostics("preview", debug);
+    const work = createLocateWork(log);
     let visuals: ReturnType<typeof createVisuals> | undefined;
     const click = (event: MouseEvent) => {
       const ids = markedAncestors(event.target)
@@ -49,22 +51,33 @@ export const createPreviewBridge = ({ serverURL, debug = false }: BridgeOptions)
         document.addEventListener("pointerout", pointerout);
       },
       onLocate(ids) {
-        for (const [index, id] of ids.entries()) {
-          const target = Array.from(
-            document.querySelectorAll<HTMLElement>("[data-payload-block]"),
-          ).find((element) => element.dataset.payloadBlock === id);
-          if (target) {
-            if (index) log("ancestor fallback", ids);
-            visuals?.reveal(target);
-            return;
+        visuals?.cancelReveal();
+        work.locate(ids, () => {
+          for (const [index, id] of ids.entries()) {
+            const target = Array.from(
+              document.querySelectorAll<HTMLElement>("[data-payload-block]"),
+            ).find(
+              (element) =>
+                element.dataset.payloadBlock === id &&
+                element.getClientRects().length > 0 &&
+                getComputedStyle(element).visibility === "visible" &&
+                (!element.checkVisibility ||
+                  element.checkVisibility({ opacityProperty: true, visibilityProperty: true })),
+            );
+            if (target) {
+              if (index) log("ancestor fallback", ids);
+              visuals?.reveal(target);
+              return true;
+            }
           }
-        }
-        log("missing target", ids);
+          return false;
+        });
       },
     });
     active = {
       count: 0,
       dispose() {
+        work.cancel();
         channel.dispose();
         visuals?.dispose();
         document.removeEventListener("click", click, true);

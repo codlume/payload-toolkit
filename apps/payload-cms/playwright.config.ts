@@ -53,6 +53,7 @@ export default defineConfig({
       command: `pnpm exec next dev --hostname 127.0.0.1 --port ${enabledPort}`,
       env: {
         PAYLOAD_APP_MODE: "enabled-in-memory",
+        PAYLOAD_LIVE_PREVIEW_DEBUG: "true",
         PAYLOAD_PUBLIC_SERVER_URL: `http://127.0.0.1:${enabledPort}`,
         PAYLOAD_NEXT_DIST_DIRECTORY: enabledDistDirectory,
         PAYLOAD_NEXT_TSCONFIG_PATH: enabledTsconfigPath,

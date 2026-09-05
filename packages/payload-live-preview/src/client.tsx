@@ -2,6 +2,7 @@
 import { useDocumentInfo, useForm, useLivePreviewContext } from "@payloadcms/ui";
 import { useEffect, useRef } from "react";
 import { connect, diagnostics } from "./channel.ts";
+import { createLocateWork } from "./locate.ts";
 import { createVisuals } from "./visuals.ts";
 
 /** Mounted by the plugin in native edit controls. Reads fields only on selection. */
@@ -31,6 +32,7 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
       return undefined;
     }
     const log = diagnostics("admin", debug);
+    const work = createLocateWork(log);
     let visuals: ReturnType<typeof createVisuals> | undefined;
     let selected: string | undefined;
     const rows = () =>
@@ -50,7 +52,7 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
       if (event.type === "focusin" && target.closest(".collapsible__toggle")) return;
       const matches = rows()
         .filter(({ element }) => element?.contains(target))
-        .toReversed();
+        .toSorted((a, b) => b.path.split(".").length - a.path.split(".").length);
       const ids = matches.map(({ row }) => row.id);
       const id = ids[0];
       const header = event.type === "click" && !!target.closest(".collapsible__toggle-wrap");
@@ -67,34 +69,57 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
           formElement.addEventListener("click", select);
         },
         onLocate(ids) {
-          const available = rows();
-          for (const [index, id] of ids.entries()) {
-            const target = available.find(({ row, element }) => row.id === id && element);
-            if (!target?.element) continue;
-            if (index) log("ancestor fallback", ids);
-            if (target.row.collapsed) {
-              const field = current.current.form.getFields()[target.path];
-              // oxlint-disable-next-line oxc/no-map-spread -- Payload reducers require immutable row updates
-              const updatedRows = (field?.rows ?? []).map((row) =>
-                row.id === id ? { ...row, collapsed: false } : row,
-              );
-              current.current.form.dispatchFields({
-                type: "SET_ROW_COLLAPSED",
-                path: target.path,
-                updatedRows,
-              });
-              current.current.setDocFieldPreferences(target.path, {
-                collapsed: updatedRows.filter((row) => row.collapsed).map((row) => row.id),
-              });
+          visuals?.cancelReveal();
+          const visited = new Set<string>();
+          let fallbackLogged = false;
+          work.locate(ids, () => {
+            const available = rows();
+            const id = ids.find((candidate) => available.some(({ row }) => row.id === candidate));
+            const target = available.find(({ row }) => row.id === id);
+            if (!target) return false;
+            if (id !== ids[0] && !fallbackLogged) {
+              log("ancestor fallback", ids);
+              fallbackLogged = true;
             }
+            const targetPath = `${target.path}.${target.index}`;
+            const ancestors = available
+              .filter(({ path, index }) => {
+                const rowPath = `${path}.${index}`;
+                return targetPath === rowPath || targetPath.startsWith(`${rowPath}.`);
+              })
+              .toSorted((a, b) => a.path.split(".").length - b.path.split(".").length);
+            for (const ancestor of ancestors) {
+              if (!ancestor.element) return false;
+              if (!visited.has(ancestor.row.id)) {
+                visuals?.scroll(ancestor.element);
+                visited.add(ancestor.row.id);
+              }
+              if (ancestor.row.collapsed) {
+                const field = current.current.form.getFields()[ancestor.path];
+                // oxlint-disable-next-line oxc/no-map-spread -- Payload reducers require immutable row updates
+                const updatedRows = (field?.rows ?? []).map((row) =>
+                  row.id === ancestor.row.id ? { ...row, collapsed: false } : row,
+                );
+                current.current.form.dispatchFields({
+                  type: "SET_ROW_COLLAPSED",
+                  path: ancestor.path,
+                  updatedRows,
+                });
+                current.current.setDocFieldPreferences(ancestor.path, {
+                  collapsed: updatedRows.filter((row) => row.collapsed).map((row) => row.id),
+                });
+                return 300;
+              }
+            }
+            if (!target.element) return false;
             visuals?.reveal(target.element);
-            return;
-          }
-          log("missing target", ids);
+            return true;
+          });
         },
       });
     let channel = start();
     const reset = () => {
+      work.cancel();
       channel.dispose();
       visuals?.dispose();
       visuals = undefined;

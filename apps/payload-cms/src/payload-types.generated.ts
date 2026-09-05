@@ -179,7 +179,7 @@ export interface Page {
   id: number;
   title: string;
   slug: string;
-  layout?: TextBlock[] | null;
+  layout?: (TextBlock | SectionBlock)[] | null;
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
@@ -193,6 +193,28 @@ export interface TextBlock {
   id?: string | null;
   blockName?: string | null;
   blockType: 'text';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "SectionBlock".
+ */
+export interface SectionBlock {
+  heading: string;
+  content?: (TextBlock | NestedSectionBlock)[] | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'section';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "NestedSectionBlock".
+ */
+export interface NestedSectionBlock {
+  heading: string;
+  content?: TextBlock[] | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'section';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -327,6 +349,7 @@ export interface PagesSelect<T extends boolean = true> {
     | T
     | {
         text?: T | TextBlockSelect<T>;
+        section?: T | SectionBlockSelect<T>;
       };
   updatedAt?: T;
   createdAt?: T;
@@ -338,6 +361,35 @@ export interface PagesSelect<T extends boolean = true> {
  */
 export interface TextBlockSelect<T extends boolean = true> {
   content?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "SectionBlock_select".
+ */
+export interface SectionBlockSelect<T extends boolean = true> {
+  heading?: T;
+  content?:
+    | T
+    | {
+        text?: T | TextBlockSelect<T>;
+        section?: T | NestedSectionBlockSelect<T>;
+      };
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "NestedSectionBlock_select".
+ */
+export interface NestedSectionBlockSelect<T extends boolean = true> {
+  heading?: T;
+  content?:
+    | T
+    | {
+        text?: T | TextBlockSelect<T>;
+      };
   id?: T;
   blockName?: T;
 }

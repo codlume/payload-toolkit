@@ -1,4 +1,15 @@
 const noop = () => {};
+const onScreen = (element: HTMLElement) => {
+  const rect = element.getBoundingClientRect();
+  return (
+    rect.top >= 0 &&
+    rect.left >= 0 &&
+    rect.bottom <= window.innerHeight &&
+    rect.right <= window.innerWidth
+  );
+};
+const scroll = (element: HTMLElement) =>
+  element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
 const root = "data-payload-linking";
 const hover = "data-payload-block-hover";
 const highlight = "data-payload-block-highlight";
@@ -69,16 +80,17 @@ export const createVisuals = () => {
         element.setAttribute(hover, "");
       }
     },
+    cancelReveal() {
+      cancelScroll();
+      clearHighlight();
+    },
+    scroll(element: HTMLElement) {
+      if (!onScreen(element)) scroll(element);
+    },
     reveal(element: HTMLElement) {
       cancelScroll();
       clearHighlight();
-      const rect = element.getBoundingClientRect();
-      if (
-        rect.top >= 0 &&
-        rect.left >= 0 &&
-        rect.bottom <= window.innerHeight &&
-        rect.right <= window.innerWidth
-      ) {
+      if (onScreen(element)) {
         flash(element);
         return;
       }
@@ -96,7 +108,7 @@ export const createVisuals = () => {
         document.removeEventListener("scrollend", finish, true);
         cancelScroll = noop;
       };
-      element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      scroll(element);
     },
     dispose() {
       cancelScroll();

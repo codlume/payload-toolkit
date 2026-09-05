@@ -1,4 +1,28 @@
-import type { CollectionConfig } from "payload";
+import type { Block, CollectionConfig } from "payload";
+
+const Text: Block = {
+  slug: "text",
+  interfaceName: "TextBlock",
+  fields: [{ name: "content", type: "textarea", required: true }],
+};
+
+const NestedSection: Block = {
+  slug: "section",
+  interfaceName: "NestedSectionBlock",
+  fields: [
+    { name: "heading", type: "text", required: true },
+    { name: "content", type: "blocks", blocks: [Text] },
+  ],
+};
+
+const Section: Block = {
+  slug: "section",
+  interfaceName: "SectionBlock",
+  fields: [
+    { name: "heading", type: "text", required: true },
+    { name: "content", type: "blocks", blocks: [Text, NestedSection] },
+  ],
+};
 
 export const Pages: CollectionConfig = {
   slug: "pages",
@@ -31,13 +55,7 @@ export const Pages: CollectionConfig = {
     {
       name: "layout",
       type: "blocks",
-      blocks: [
-        {
-          slug: "text",
-          interfaceName: "TextBlock",
-          fields: [{ name: "content", type: "textarea", required: true }],
-        },
-      ],
+      blocks: [Text, Section],
     },
   ],
 };

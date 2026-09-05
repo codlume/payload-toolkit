@@ -20,11 +20,14 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   return (
     <main>
       <h1 style={{ padding: "32px" }}>{page.title}</h1>
-      <PageBlocks blocks={page.layout} draft={draft} />
+      <PageBlocks blocks={page.layout} draft={draft} parentProps={{ textClass: "page-text" }} />
       {draft && (
         <>
           <PreviewRefresh serverURL={serverURL} />
-          <PreviewBridge serverURL={serverURL} />
+          <PreviewBridge
+            serverURL={serverURL}
+            debug={process.env.PAYLOAD_LIVE_PREVIEW_DEBUG === "true"}
+          />
         </>
       )}
     </main>

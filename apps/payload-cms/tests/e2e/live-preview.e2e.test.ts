@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { createE2EPayload } from "./e2e-context.ts";
-import { openLinkedPreview, seedLinkedPage } from "./live-preview-context.ts";
+import {
+  openLinkedPreview,
+  seedLinkedPage,
+  seedNestedPage,
+  previewRoutes,
+} from "./live-preview-context.ts";
 import { login } from "./login.ts";
 
 let payload: Awaited<ReturnType<typeof createE2EPayload>>;
@@ -151,3 +156,201 @@ test("row-header repeats, collapsed rows and native actions keep working", async
   await expect(first).not.toHaveAttribute("data-payload-block-highlight", "", { timeout: 3000 });
   expect(await first.evaluate((element) => element.style.position)).toBe("");
 });
+
+for (const route of previewRoutes) {
+  test(`${route} reveals three depths through collapsed ancestors and preserves nested identity`, async ({
+    page,
+  }) => {
+    const nested = await seedNestedPage(payload);
+    const outer = nested.layout![6]!;
+    if (outer.blockType !== "section") throw new Error("Missing outer section");
+    const inner = outer.content![0]!;
+    if (inner.blockType !== "section") throw new Error("Missing inner section");
+    const deep = inner.content![0]!;
+    await login(page);
+    const key = `collection-pages-${nested.id}`;
+    expect(
+      (
+        await page.request.post(`/api/payload-preferences/${key}`, {
+          data: {
+            value: {
+              fields: {
+                layout: { collapsed: [outer.id] },
+                "layout.6.content": { collapsed: [inner.id] },
+              },
+            },
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+    const preview = await openLinkedPreview(page, nested.id, route);
+    await expect(preview.locator("body")).toContainText("Deep target");
+    const field = page.locator("#field-layout__6__content__0__content__0__content");
+    await expect(field).not.toBeVisible();
+    // The second locate replaces the first while its collapsed ancestors are opening.
+    await preview.locator("html").evaluate(
+      (_element, requests) => {
+        for (const ids of requests)
+          window.parent.postMessage(
+            {
+              type: "@codlume/payload-live-preview",
+              event: "locate",
+              ids,
+            },
+            window.location.origin,
+          );
+      },
+      [[deep.id, inner.id, outer.id], [nested.layout![0]!.id]],
+    );
+    const siblingRow = page.locator("#layout-row-0 > .blocks-field__row");
+    await expect(siblingRow).toHaveAttribute("data-payload-block-highlight", "");
+    await expect(siblingRow).not.toHaveAttribute("data-payload-block-highlight", "", {
+      timeout: 3000,
+    });
+    await expect(field).not.toBeVisible();
+    const target = preview.locator(`[data-payload-block="${deep.id}"]`);
+    await expect(target).toHaveClass("page-text");
+    await target.hover();
+    await expect(preview.locator("[data-payload-block-hover]")).toHaveCount(1);
+    await expect(target).toHaveAttribute("data-payload-block-hover", "");
+    await target.click();
+    await expect(field).toBeVisible();
+    await expect(field).toBeInViewport();
+    const row = page.locator("#layout-6-content-0-content-row-0 > .blocks-field__row");
+    await expect(row).toHaveAttribute("data-payload-block-highlight", "");
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/payload-preferences/${key}`)).json()).value.fields,
+      )
+      .toMatchObject({
+        layout: { collapsed: [] },
+        "layout.6.content": { collapsed: [] },
+      });
+    await field.focus();
+    await expect(target).toHaveAttribute("data-payload-block-highlight", "");
+    await expect(field).toBeFocused();
+    // An unsaved or removed inner rendering falls back to its real enclosing block.
+    await target.evaluate((element) => element.removeAttribute("data-payload-block"));
+    await page
+      .locator("#layout-6-content-0-content-row-0")
+      .getByRole("button", { name: "Toggle block", exact: true })
+      .click({ position: { x: 10, y: 10 } });
+    await expect(preview.locator(`[data-payload-block="${inner.id}"]`)).toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+  });
+
+  test(`${route} repeated markers skip hidden copies, scroll to the first rendered copy and expire`, async ({
+    page,
+  }) => {
+    await login(page);
+    const preview = await openLinkedPreview(page, seededPage.id, route);
+    const id = seededPage.layout![5]!.id!;
+    const copies = preview.locator(`[data-payload-block="${id}"]`);
+    await copies.evaluateAll((elements) => {
+      const original = elements[0]!;
+      const hidden = original.cloneNode(true);
+      if (!(hidden instanceof HTMLElement)) throw new Error("Missing copy");
+      hidden.hidden = true;
+      original.before(hidden);
+      const repeated = original.cloneNode(true);
+      if (!(repeated instanceof HTMLElement)) throw new Error("Missing repeated copy");
+      repeated.style.marginTop = "100vh";
+      original.after(repeated);
+    });
+    await expect(copies).toHaveCount(3);
+    await copies.nth(2).scrollIntoViewIfNeeded();
+    await expect(copies.nth(2)).toBeInViewport();
+    await expect(copies.nth(1)).not.toBeInViewport();
+    await page.locator("#field-layout__5__content").focus();
+    await expect(copies.nth(1)).toBeInViewport();
+    await expect(copies.nth(1)).toHaveAttribute("data-payload-block-highlight", "");
+    await expect(copies.nth(0)).not.toHaveAttribute("data-payload-block-highlight", "");
+    await expect(copies.nth(2)).not.toHaveAttribute("data-payload-block-highlight", "");
+    await copies.nth(2).click();
+    await expect(page.locator("#layout-row-5 > .blocks-field__row")).toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+    await copies.evaluateAll((elements) =>
+      elements.forEach((element) => {
+        if (element instanceof HTMLElement) element.hidden = true;
+      }),
+    );
+    const header = page
+      .locator("#layout-row-5")
+      .getByRole("button", { name: "Toggle block", exact: true });
+    await header.click();
+    await copies.nth(2).evaluate((element) => {
+      if (element instanceof HTMLElement) element.hidden = false;
+    });
+    await expect(copies.nth(2)).toHaveAttribute("data-payload-block-highlight", "");
+    const timeouts: string[] = [];
+    page.on("console", (message) => {
+      if (message.text().includes("target timeout")) timeouts.push(message.text());
+    });
+    await copies.nth(2).evaluate((element) => {
+      if (element instanceof HTMLElement) element.hidden = true;
+    });
+    await header.click();
+    await expect.poll(() => timeouts.length).toBe(1);
+    expect(timeouts[0]).toContain(id);
+    await copies.nth(2).evaluate((element) => {
+      if (element instanceof HTMLElement) element.hidden = false;
+    });
+    await expect(copies.nth(2)).not.toHaveAttribute("data-payload-block-highlight", "");
+    await header.click();
+    await expect(copies.nth(2)).toHaveAttribute("data-payload-block-highlight", "");
+  });
+
+  test(`${route} reordering and removing rows use current identities and ancestor fallback`, async ({
+    page,
+  }) => {
+    const nested = await seedNestedPage(payload);
+    const outer = nested.layout![6]!;
+    if (outer.blockType !== "section") throw new Error("Missing outer section");
+    const inner = outer.content![0]!;
+    if (inner.blockType !== "section") throw new Error("Missing inner section");
+    const deep = inner.content![0]!;
+    await login(page);
+    const preview = await openLinkedPreview(page, nested.id, route);
+    await page.locator("#layout-row-6 > .blocks-field__row .array-actions__button").first().click();
+    await page.getByRole("button", { name: "Move Up", exact: true }).click();
+    const field = page.locator("#field-layout__5__content__0__content__0__content");
+    await expect(field).toHaveValue("Deep target");
+    const target = preview.locator(`[data-payload-block="${deep.id}"]`);
+    await target.click();
+    await expect(
+      page.locator("#layout-5-content-0-content-row-0 > .blocks-field__row"),
+    ).toHaveAttribute("data-payload-block-highlight", "");
+    await field.focus();
+    await expect(target).toHaveAttribute("data-payload-block-highlight", "");
+    await expect(field).toBeFocused();
+    await page.locator("#layout-5-content-0-content-row-0 .array-actions__button").click();
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(field).toHaveCount(0);
+    // Preserve the stale preview's id chain while native autosave refreshes its content.
+    await preview.locator("html").evaluate(
+      (_element, ids) =>
+        window.parent.postMessage(
+          {
+            type: "@codlume/payload-live-preview",
+            event: "locate",
+            ids,
+          },
+          window.location.origin,
+        ),
+      [deep.id, inner.id, outer.id],
+    );
+    await expect(page.locator("#layout-5-content-row-0 > .blocks-field__row")).toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+    await expect(page.locator("#layout-row-5 > .blocks-field__row")).not.toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+  });
+}
