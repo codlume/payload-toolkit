@@ -50,6 +50,7 @@
   "scripts": {
     "build": "vp pack",
     "test:build": "pnpm build && node --test tests/build/package-contract.test.mjs",
+    "test:pack": "node --test tests/pack/run.mjs",
     "test:unit": "pnpm build && vitest run tests/unit"
   },
   "devDependencies": {

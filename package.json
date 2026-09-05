@@ -18,7 +18,7 @@
     "test:e2e": "vp run -r test:e2e",
     "test:integration": "vp run -r test:integration",
     "test:limits": "node tests/limits/run.mjs",
-    "test:pack": "pnpm --filter @codlume/payload-blurhash test:pack",
+    "test:pack": "pnpm --filter './packages/*' --if-present test:pack",
     "test:release": "node --test scripts/*.test.mjs",
     "test:unit": "vp run -r test:unit",
     "typecheck": "pnpm build:packages && vp check --no-fmt --no-lint"

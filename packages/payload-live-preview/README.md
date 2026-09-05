@@ -2,7 +2,7 @@
 
 Link blocks in Payload Admin with their rendered components in native Live Preview. Click a preview component to reveal its Admin row, or focus an Admin field to reveal its component. Linking preserves focus and native click behavior.
 
-Collections with per-collection Live Preview support nested blocks and repeated renderings. Update/restart coverage, globals, root configuration, locale handling, and isolated packed consumers are tracked in [#97–#99](https://github.com/codlume/payload-toolkit/issues/94).
+Collections with per-collection Live Preview support nested blocks and repeated renderings. Update/restart coverage is tracked in [#97](https://github.com/codlume/payload-toolkit/issues/97); globals, root configuration, and locale handling are tracked in [#98](https://github.com/codlume/payload-toolkit/issues/98).
 
 ## Run the server example
 
@@ -29,6 +29,35 @@ Example sources:
 - [Native refresh component](../../apps/payload-cms/src/preview/refresh.tsx)
 
 Set `PAYLOAD_PUBLIC_SERVER_URL` to the application's public origin when it differs from the incoming request origin.
+
+## Install in your application
+
+Add the package to your existing Payload application:
+
+```sh
+pnpm add @codlume/payload-live-preview
+```
+
+The package has four public entries. Install the peers used by the entries you import.
+
+| Import                                 | Exports                                                   | Required peers                                            |
+| -------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| `@codlume/payload-live-preview`        | `livePreviewPlugin`, type `LivePreviewPluginOptions`      | `payload >=3.88.0 <4`                                     |
+| `@codlume/payload-live-preview/core`   | `blockMarker`, `createPreviewBridge`                      | None                                                      |
+| `@codlume/payload-live-preview/react`  | `PreviewBridge`, `createBlockRenderer`, type `BlockProps` | `react ^19.0.1 \|\| ^19.1.2 \|\| ^19.2.1`                 |
+| `@codlume/payload-live-preview/client` | `PreviewBridgeAdmin`                                      | Payload, matching `@payloadcms/ui >=3.88.0 <4`, and React |
+
+Payload's generated import map imports the Admin entry. The plugin registers it for you. Implementation modules under `dist/` and `src/` are private.
+
+For a separate React frontend, install the package and React in that frontend:
+
+```sh
+pnpm add @codlume/payload-live-preview 'react@^19.2.1'
+```
+
+Import only `/react` and, if needed, `/core` there. These entries do not depend on Payload or Payload UI. Keep the root configuration import in the CMS application. Your framework supplies its own dependencies, such as Next and React DOM; the plugin does not declare them as peers.
+
+A frontend using only `/core` needs just `@codlume/payload-live-preview`, with no React or Payload installation. All package peers are optional so each application can install only those it uses. Optional does not mean an imported integration works without its peers. Supported Node versions are `>=22.12.0 <23 || >=24.0.0 <25`; the packed Payload consumer checks the 3.88.0 compatibility baseline.
 
 ## Configure Payload
 
@@ -91,7 +120,7 @@ cleanup();
 
 The marker uses Payload's existing block-row `id`. It adds `data-payload-block` and the display-only `data-payload-block-type` only when draft is true and an id exists. The required second argument prevents accidental published markers. Core imports are inert without a browser. Standalone draft pages can have markers but never activate linking.
 
-The configuration entry requires Payload `>=3.88.0 <4`. The Admin entry requires matching Payload UI `>=3.88.0 <4` and React. React consumers need `react ^19.0.1 || ^19.1.2 || ^19.2.1`; core consumers need none of these peers. Optional peer metadata lets each consumer install only the dependencies its entry requires. Supported Node versions are `>=22.12.0 <23 || >=24.0.0 <25`.
+`serverURL` is required for both bridge APIs and identifies the expected Payload Admin origin, such as `https://cms.example.com` when the frontend lives on a different origin. It does not select the preview route or stream document data. Continue using Payload's native preview integration for updates.
 
 ## Diagnostics and validation
 
@@ -100,6 +129,9 @@ Enable `debug` separately on the plugin and frontend bridge. Console lines use `
 ```sh
 pnpm --filter @codlume/payload-live-preview test:unit
 pnpm --filter @codlume/payload-live-preview test:build
+pnpm --filter @codlume/payload-live-preview test:pack
 pnpm --filter @codlume/payload-cms exec vitest run tests/integration/pages-preview.test.ts
 pnpm --filter @codlume/payload-cms test:e2e
 ```
+
+The packed-consumer suite installs a real tarball into temporary core-only, React, and Payload projects outside the workspace. It checks declarations, private imports, peer isolation, rendered Next server/client routes, and the generated Admin import map. The root `pnpm test:pack` runs this suite and the BlurHash packed-consumer suite; `pnpm ready` includes that gate.
