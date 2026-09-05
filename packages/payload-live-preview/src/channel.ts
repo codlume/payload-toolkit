@@ -12,12 +12,14 @@ export const connect = ({
   peer,
   origin,
   onConnect,
+  onPeerReady,
   onLocate,
   log,
 }: {
   peer: Window;
   origin: string;
   onConnect: () => void;
+  onPeerReady: () => void;
   onLocate: (ids: string[]) => void;
   log: ReturnType<typeof diagnostics>;
 }) => {
@@ -52,6 +54,9 @@ export const connect = ({
         connected = true;
         log("connected");
         onConnect();
+      } else if (!message.ack) {
+        log("reset");
+        onPeerReady();
       }
       if (!message.ack) post({ type, event: "ready", ack: true });
     } else if (connected) {

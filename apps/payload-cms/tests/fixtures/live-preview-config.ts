@@ -17,7 +17,9 @@ export const previewTestConfig = {
     url: ({ data, locale, req }) => {
       if (!data.siteName) return null;
       const origin = process.env.PAYLOAD_PUBLIC_SERVER_URL ?? req.origin ?? "http://localhost:3000";
-      return `${origin}/preview-global?locale=${encodeURIComponent(locale.code)}&mode=${data.previewMode === "client" ? "client" : "server"}`;
+      // Client tests start in English and keep the iframe URL stable as native streaming changes locale.
+      const previewLocale = data.previewMode === "client" ? "en" : locale.code;
+      return `${origin}/preview-global?locale=${encodeURIComponent(previewLocale)}&mode=${data.previewMode === "client" ? "client" : "server"}`;
     },
   } satisfies NonNullable<Config["admin"]>["livePreview"],
   global: {

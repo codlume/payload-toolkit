@@ -101,7 +101,7 @@ Conditional URL functions run through Payload for the current document and local
 
 `enabled` defaults to `true`. With `enabled: false`, the plugin returns the original configuration unchanged. `debug` defaults to `false` and controls Admin diagnostics. The bridge renders no DOM and activates only in native iframe preview mode.
 
-Linking follows Payload's active locale. Changing locale cancels pending Admin locates and clears the previous block selection, even when the preview URL stays the same. Subsequent selections use current form fields. If the iframe navigates, the bridge reconnects. Preview URLs and frontend data reads must use the active locale, as with native Live Preview. There is no cross-locale id mapping or selection replay.
+Linking follows Payload's active locale. Changing locale cancels pending locates on both sides through a renewed handshake and clears the previous block selection, even when the preview URL stays the same. Subsequent selections use current form fields. If the iframe navigates, the bridge reconnects. Preview URLs and frontend data reads must use the active locale, as with native Live Preview. There is no cross-locale id mapping or selection replay.
 
 ## Render blocks
 

@@ -69,6 +69,7 @@ for (const mode of ["server", "client"]) {
     await field.focus();
     await expect(target).toHaveAttribute("data-payload-block-highlight", "");
     await expect(field).toBeFocused();
+    const originalURL = await preview.locator("html").evaluate(() => location.href);
 
     // Wait for an English-locale request whose row exists only in Polish.
     await preview.locator("html").evaluate(
@@ -90,6 +91,24 @@ for (const mode of ["server", "client"]) {
         ),
       )
       .toBe(true);
+    await page.locator("iframe").evaluate((iframe, id) => {
+      if (!(iframe instanceof HTMLIFrameElement)) throw new Error("Missing preview iframe");
+      iframe.contentWindow!.postMessage(
+        {
+          type: "@codlume/payload-live-preview",
+          event: "locate",
+          ids: [id],
+        },
+        location.origin,
+      );
+    }, pendingID);
+    await expect
+      .poll(() =>
+        events.some(
+          (event) => event.includes("preview] missing target") && event.includes(pendingID),
+        ),
+      )
+      .toBe(true);
     const previousResets = events.filter((event) => event.endsWith("admin] reset")).length;
     await page.getByRole("button", { name: "Locale", exact: true }).click();
     await page.getByRole("button", { name: /Polish/ }).click();
@@ -99,6 +118,12 @@ for (const mode of ["server", "client"]) {
       .toBeGreaterThan(previousResets);
     await expect(preview.locator("h1")).toHaveText("Polish global");
     await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "");
+    if (mode === "client")
+      expect(await preview.locator("html").evaluate(() => location.href)).toBe(originalURL);
+    await expect(preview.locator(`[data-payload-block="${pendingID}"]`)).not.toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
     await expect(page.locator("#layout-row-1 .blocks-field__row")).not.toHaveAttribute(
       "data-payload-block-highlight",
       "",

@@ -50,6 +50,10 @@ export const createPreviewBridge = ({ serverURL, debug = false }: BridgeOptions)
         document.addEventListener("pointerover", pointerover);
         document.addEventListener("pointerout", pointerout);
       },
+      onPeerReady() {
+        work.cancel();
+        visuals?.cancelReveal();
+      },
       onLocate(ids) {
         visuals?.cancelReveal();
         work.locate(ids, () => {

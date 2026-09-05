@@ -144,6 +144,28 @@ test("a newer locate replaces the pending rendering request", async () => {
   ).toBe(false);
 });
 
+test("a renewed Admin handshake cancels pending preview locates before new locale markers render", async () => {
+  vi.useFakeTimers();
+  const { message, parent } = setupPeer();
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["translated"] });
+  message(ready);
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    '<p data-payload-block="translated">Translated</p>',
+  );
+  await Promise.resolve();
+  const translated = document.querySelector<HTMLElement>('[data-payload-block="translated"]')!;
+  expect(translated.hasAttribute("data-payload-block-highlight")).toBe(false);
+  parent.postMessage.mockClear();
+  translated.click();
+  expect(parent.postMessage.mock.calls).toEqual([
+    [{ ...ready, event: "locate", ids: ["translated"] }, "https://admin.example"],
+  ]);
+  message({ ...ready, event: "locate", ids: ["translated"] });
+  expect(translated.hasAttribute("data-payload-block-highlight")).toBe(true);
+});
+
 test("missing targets expire after two seconds instead of locating a later rendering", async () => {
   vi.useFakeTimers();
   const log = vi.spyOn(console, "debug");

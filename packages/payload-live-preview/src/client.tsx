@@ -83,6 +83,11 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
           formElement.addEventListener("focusin", select);
           formElement.addEventListener("click", select);
         },
+        onPeerReady() {
+          work.cancel();
+          visuals?.cancelReveal();
+          selected = undefined;
+        },
         onLocate(ids) {
           visuals?.cancelReveal();
           const visited = new Set<string>();
