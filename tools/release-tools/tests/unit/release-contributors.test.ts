@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
-import { prepareReleaseContributors, runCli } from "./release-contributors.mjs";
+import {
+  loadReleaseContributorChanges,
+  prepareReleaseContributors,
+} from "../../src/release-contributors.ts";
 
 const SHA = "abc123456789abc123456789abc123456789abcd";
 
@@ -9,7 +12,7 @@ function releaseBullet(sha = SHA) {
   return `* fix the preview ([#12](https://github.com/acme/toolkit/issues/12)) ([${sha.slice(0, 7)}](https://github.com/acme/toolkit/commit/${sha}))`;
 }
 
-void test("credits a contributor in the release body and current changelog version", () => {
+test("credits a contributor in the release body and current changelog version", () => {
   const pullRequestBody = ["<details>", "", releaseBullet(), "", "</details>"].join("\n");
   const currentVersion = ["## 1.1.0", "", releaseBullet()].join("\n");
   const previousVersion = ["## 1.0.0", "", releaseBullet()].join("\n");
@@ -45,7 +48,7 @@ void test("credits a contributor in the release body and current changelog versi
   );
 });
 
-void test("excludes bots and reports changes without a human PR author", () => {
+test("excludes bots and reports changes without a human PR author", () => {
   const botSha = "2222222222222222222222222222222222222222";
   const claudeSha = "3333333333333333333333333333333333333333";
   const missingAccountSha = "4444444444444444444444444444444444444444";
@@ -100,7 +103,7 @@ void test("excludes bots and reports changes without a human PR author", () => {
   );
 });
 
-void test("does not duplicate existing attribution or change prose commit links", () => {
+test("does not duplicate existing attribution or change prose commit links", () => {
   const commitLink = `([${SHA.slice(0, 7)}](https://github.com/acme/toolkit/commit/${SHA}))`;
   const pullRequestBody = [
     `Implementation details: ${commitLink}`,
@@ -128,83 +131,36 @@ void test("does not duplicate existing attribution or change prose commit links"
   );
 });
 
-void test("the CLI writes the complete prepared release contributor changes", async () => {
+test("loads the body and every touched changelog, then credits both", async () => {
   const changelogPath = "packages/example/CHANGELOG.md";
-  const bodyFile = "/tmp/release-pr-body.md";
-  const pullRequestBody = releaseBullet();
   const changelog = ["# Changelog", "", "## 1.1.0", "", releaseBullet()].join("\n");
-  const writes = [];
-  const warnings = [];
 
-  await runCli({
-    argv: ["--repo", "acme/toolkit", "--pr", "42", "--body-file", bodyFile],
-    env: { GH_TOKEN: "secret" },
-    fetchImpl: async (url) => {
-      const { pathname } = new URL(url);
-
-      if (pathname.endsWith(`/commits/${SHA}/pulls`)) {
-        return Response.json([
+  const changes = await loadReleaseContributorChanges({
+    repository: "acme/toolkit",
+    pullRequestNumber: 42,
+    github: {
+      async getPullRequest() {
+        return { body: releaseBullet() };
+      },
+      async listPullRequestFiles() {
+        return [changelogPath, "packages/example/package.json"];
+      },
+      async listPullRequestsForCommit() {
+        return [
           {
             merge_commit_sha: SHA,
             merged_at: "2026-08-30T12:00:00Z",
             user: { login: "octocat", type: "User" },
           },
-        ]);
-      }
-      if (pathname.endsWith("/pulls/42/files")) {
-        return Response.json([{ filename: changelogPath }]);
-      }
-      return Response.json({ body: pullRequestBody });
+        ];
+      },
     },
     readFile: async () => changelog,
-    writeFile: async (...write) => writes.push(write),
-    warn: (warning) => warnings.push(warning),
   });
 
-  assert.deepEqual(
-    { writes, warnings },
-    {
-      writes: [
-        [bodyFile, `${releaseBullet()} by @octocat`, "utf8"],
-        [changelogPath, `${changelog} by @octocat`, "utf8"],
-      ],
-      warnings: [],
-    },
-  );
-});
-
-void test("an API failure leaves the release body and changelog untouched", async () => {
-  const changelogPath = "packages/example/CHANGELOG.md";
-  const writes = [];
-  let failure;
-
-  try {
-    await runCli({
-      argv: ["--repo", "acme/toolkit", "--pr", "42", "--body-file", "/tmp/body.md"],
-      env: { GH_TOKEN: "secret" },
-      fetchImpl: async (url) => {
-        const { pathname } = new URL(url);
-        if (pathname.endsWith(`/commits/${SHA}/pulls`)) {
-          return new Response("GitHub is unavailable", { status: 503 });
-        }
-        if (pathname.endsWith("/pulls/42/files")) {
-          return Response.json([{ filename: changelogPath }]);
-        }
-        return Response.json({ body: releaseBullet() });
-      },
-      readFile: async () => ["# Changelog", "", "## 1.1.0", "", releaseBullet()].join("\n"),
-      writeFile: async (...write) => writes.push(write),
-      warn() {},
-    });
-  } catch (error) {
-    failure = error;
-  }
-
-  assert.deepEqual(
-    { message: failure?.message, writes },
-    {
-      message: `GitHub API GET /repos/acme/toolkit/commits/${SHA}/pulls?per_page=100 failed with 503: GitHub is unavailable`,
-      writes: [],
-    },
-  );
+  assert.deepEqual(changes, {
+    pullRequestBody: `${releaseBullet()} by @octocat`,
+    changelogs: [{ path: changelogPath, contents: `${changelog} by @octocat` }],
+    warnings: [],
+  });
 });

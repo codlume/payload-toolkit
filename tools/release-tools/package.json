@@ -1,0 +1,15 @@
+{
+  "name": "@codlume/release-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Release automation for Payload Toolkit, run by the Release workflow with bare Node.",
+  "type": "module",
+  "scripts": {
+    "test:unit": "vitest run tests/unit"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

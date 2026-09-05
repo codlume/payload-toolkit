@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
-import { prepareReleasePullRequest } from "./prepare-release-pull-request.mjs";
+import type {
+  ReleaseGitHub,
+  ReleasePullRequest,
+  WorkingCopies,
+  WorkingCopy,
+} from "../../src/ports.ts";
+import { prepareReleasePullRequest } from "../../src/prepare-release-pull-request.ts";
 
 const HEAD = "1111111111111111111111111111111111111111";
 const CHANGE_SHA = "2222222222222222222222222222222222222222";
@@ -11,61 +17,110 @@ function releaseBullet() {
   return `* fix preview ([${CHANGE_SHA.slice(0, 7)}](https://github.com/acme/toolkit/commit/${CHANGE_SHA})) by @octocat`;
 }
 
-function preparedSystem() {
-  const events = [];
-  let bodyUpdated = false;
-  let bodyVerified = false;
-  const pullRequest = {
+function releasePullRequest(overrides: Partial<ReleasePullRequest> = {}): ReleasePullRequest {
+  return {
+    body: "",
     headRef: "release-please--branches--main",
     headRepository: "acme/toolkit",
     headSha: HEAD,
     isDraft: true,
     number: 42,
+    state: "OPEN",
+    ...overrides,
   };
+}
+
+function unexpected(name: string) {
+  return async (): Promise<never> => {
+    throw new Error(`Unexpected ${name} call.`);
+  };
+}
+
+function githubStub(overrides: Partial<ReleaseGitHub>): ReleaseGitHub {
+  return {
+    findNewestMergedReleasePullRequest: unexpected("findNewestMergedReleasePullRequest"),
+    findOpenReleasePullRequests: unexpected("findOpenReleasePullRequests"),
+    getPullRequest: unexpected("getPullRequest"),
+    listPullRequestFiles: unexpected("listPullRequestFiles"),
+    listPullRequestsForCommit: unexpected("listPullRequestsForCommit"),
+    markDraft: unexpected("markDraft"),
+    markReady: unexpected("markReady"),
+    observePullRequest: unexpected("observePullRequest"),
+    pullRequestLabels: unexpected("pullRequestLabels"),
+    updatePullRequestBody: unexpected("updatePullRequestBody"),
+    ...overrides,
+  };
+}
+
+function workingCopyStub(overrides: Partial<WorkingCopy>): WorkingCopy {
+  return {
+    changedPaths: unexpected("changedPaths"),
+    commit: unexpected("commit"),
+    hasStagedChanges: unexpected("hasStagedChanges"),
+    head: unexpected("head"),
+    push: unexpected("push"),
+    readFile: unexpected("readFile"),
+    stageChangelogs: unexpected("stageChangelogs"),
+    verifyStagedChanges: unexpected("verifyStagedChanges"),
+    writeFile: unexpected("writeFile"),
+    ...overrides,
+  };
+}
+
+function withWorkingCopy(workingCopy: WorkingCopy): WorkingCopies {
+  return {
+    withExactHead: (_pullRequest, prepare) => prepare(workingCopy),
+  };
+}
+
+function preparedSystem() {
+  const events: string[] = [];
+  let bodyUpdated = false;
+  let bodyVerified = false;
   const changelog = ["# Changelog", "", "## 1.1.0", "", releaseBullet()].join("\n");
 
-  return {
-    events,
-    github: {
-      async findOpenReleasePullRequests() {
-        return [pullRequest];
-      },
-      async getPullRequest() {
-        return { body: releaseBullet() };
-      },
-      async listPullRequestFiles() {
-        return ["packages/example/CHANGELOG.md"];
-      },
-      async listPullRequestsForCommit() {
-        return [
-          {
-            merge_commit_sha: CHANGE_SHA,
-            merged_at: "2026-08-30T12:00:00Z",
-            user: { login: "octocat", type: "User" },
-          },
-        ];
-      },
-      async markDraft() {
-        events.push("draft");
-      },
-      async markReady() {
-        assert.equal(bodyUpdated && bodyVerified, true);
-        events.push("ready");
-      },
-      async observePullRequest() {
-        if (bodyUpdated) bodyVerified = true;
-        events.push("observe");
-        return { headSha: HEAD, isDraft: !events.includes("ready"), state: "OPEN" };
-      },
-      async updatePullRequestBody(_repository, _number, body) {
-        bodyUpdated = true;
-        events.push(`body:${body}`);
-      },
+  const github = githubStub({
+    async findOpenReleasePullRequests() {
+      return [releasePullRequest()];
     },
-    workingCopies: {
-      async withExactHead(_pullRequest, prepare) {
-        events.push("checkout");
-        return prepare({
+    async getPullRequest() {
+      return { body: releaseBullet() };
+    },
+    async listPullRequestFiles() {
+      return ["packages/example/CHANGELOG.md"];
+    },
+    async listPullRequestsForCommit() {
+      return [
+        {
+          merge_commit_sha: CHANGE_SHA,
+          merged_at: "2026-08-30T12:00:00Z",
+          user: { login: "octocat", type: "User" },
+        },
+      ];
+    },
+    async markDraft() {
+      events.push("draft");
+    },
+    async markReady() {
+      assert.equal(bodyUpdated && bodyVerified, true);
+      events.push("ready");
+    },
+    async observePullRequest() {
+      if (bodyUpdated) bodyVerified = true;
+      events.push("observe");
+      return { headSha: HEAD, isDraft: !events.includes("ready"), state: "OPEN" };
+    },
+    async updatePullRequestBody(_repository, _number, body) {
+      bodyUpdated = true;
+      events.push(`body:${body}`);
+    },
+  });
+
+  const workingCopies: WorkingCopies = {
+    async withExactHead(_pullRequest, prepare) {
+      events.push("checkout");
+      return prepare(
+        workingCopyStub({
           async changedPaths() {
             return [];
           },
@@ -94,114 +149,99 @@ function preparedSystem() {
             assert.equal(contents, changelog);
             events.push("write");
           },
-        });
-      },
+        }),
+      );
     },
   };
+
+  return { events, github, workingCopies };
 }
 
-void test("reports when there is no Release pull request to prepare", async () => {
+test("reports when there is no Release pull request to prepare", async () => {
   const result = await prepareReleasePullRequest(
     { repository: "acme/toolkit" },
     {
-      github: {
+      github: githubStub({
         async findOpenReleasePullRequests() {
           return [];
         },
-      },
+      }),
+      workingCopies: withWorkingCopy(workingCopyStub({})),
     },
   );
 
   assert.deepEqual(result, { outcome: "no-release-pull-request" });
 });
 
-void test("rejects multiple open Release pull requests", async () => {
+test("rejects multiple open Release pull requests", async () => {
   await assert.rejects(
     prepareReleasePullRequest(
       { repository: "acme/toolkit" },
       {
-        github: {
+        github: githubStub({
           async findOpenReleasePullRequests() {
-            return [{ number: 41 }, { number: 42 }];
+            return [releasePullRequest({ number: 41 }), releasePullRequest({ number: 42 })];
           },
-        },
+        }),
+        workingCopies: withWorkingCopy(workingCopyStub({})),
       },
     ),
     { message: "Found 2 open Release pull requests; expected at most one." },
   );
 });
 
-void test("rejects a Release pull request from another repository", async () => {
+test("rejects a Release pull request from another repository", async () => {
   await assert.rejects(
     prepareReleasePullRequest(
       { repository: "acme/toolkit" },
       {
-        github: {
+        github: githubStub({
           async findOpenReleasePullRequests() {
-            return [
-              {
-                headRepository: "someone/fork",
-                headSha: "1111111111111111111111111111111111111111",
-                isDraft: true,
-                number: 42,
-              },
-            ];
+            return [releasePullRequest({ headRepository: "someone/fork" })];
           },
-        },
+        }),
+        workingCopies: withWorkingCopy(workingCopyStub({})),
       },
     ),
     { message: "Release pull request #42 head is not in acme/toolkit." },
   );
 });
 
-void test("rejects a Release pull request that is no longer a draft", async () => {
+test("rejects a Release pull request that is no longer a draft", async () => {
   await assert.rejects(
     prepareReleasePullRequest(
       { repository: "acme/toolkit" },
       {
-        github: {
+        github: githubStub({
           async findOpenReleasePullRequests() {
-            return [
-              {
-                headRepository: "acme/toolkit",
-                headSha: "1111111111111111111111111111111111111111",
-                isDraft: false,
-                number: 42,
-              },
-            ];
+            return [releasePullRequest({ isDraft: false })];
           },
-        },
+        }),
+        workingCopies: withWorkingCopy(workingCopyStub({})),
       },
     ),
     { message: "Release pull request #42 is no longer an open draft." },
   );
 });
 
-void test("rejects a Release pull request with a malformed head", async () => {
+test("rejects a Release pull request with a malformed head", async () => {
   await assert.rejects(
     prepareReleasePullRequest(
       { repository: "acme/toolkit" },
       {
-        github: {
+        github: githubStub({
           async findOpenReleasePullRequests() {
-            return [
-              {
-                headRef: "release-please--branches--main",
-                headRepository: "acme/toolkit",
-                headSha: "not-a-commit",
-                isDraft: true,
-                number: 42,
-              },
-            ];
+            return [releasePullRequest({ headSha: "not-a-commit" })];
           },
-        },
+        }),
+        workingCopies: withWorkingCopy(workingCopyStub({})),
       },
     ),
     { message: "Release pull request #42 has an invalid head." },
   );
 });
 
-void test("readies an already-prepared Release pull request without a new commit", async () => {
+test("readies an already-prepared Release pull request without a new commit", async () => {
   const system = preparedSystem();
 
   const result = await prepareReleasePullRequest(
@@ -220,12 +260,12 @@ void test("readies an already-prepared Release pull request without a new commit
   assert.equal(system.events.includes("push"), false);
 });
 
-void test("commits, pushes, and readies prepared changelogs and body", async () => {
+test("commits, pushes, and readies prepared changelogs and body", async () => {
   const system = preparedSystem();
   const uncreditedBullet = releaseBullet().replace(" by @octocat", "");
   const uncreditedChangelog = ["# Changelog", "", "## 1.1.0", "", uncreditedBullet].join("\n");
-  system.workingCopies.withExactHead = async (_pullRequest, prepare) =>
-    prepare({
+  system.workingCopies = withWorkingCopy(
+    workingCopyStub({
       async changedPaths() {
         return ["packages/example/CHANGELOG.md"];
       },
@@ -261,7 +301,8 @@ void test("commits, pushes, and readies prepared changelogs and body", async () 
         assert.match(contents, /by @octocat/);
         system.events.push("write");
       },
-    });
+    }),
+  );
   system.github.getPullRequest = async () => ({ body: uncreditedBullet });
   system.github.observePullRequest = async () => {
     system.events.push("observe");
@@ -287,11 +328,11 @@ void test("commits, pushes, and readies prepared changelogs and body", async () 
   assert.equal(system.events.includes("ready"), true);
 });
 
-void test("rejects an unexpected file mutation before committing", async () => {
+test("rejects an unexpected file mutation before committing", async () => {
   const system = preparedSystem();
   let commitAttempted = false;
-  system.workingCopies.withExactHead = async (_pullRequest, prepare) =>
-    prepare({
+  system.workingCopies = withWorkingCopy(
+    workingCopyStub({
       async changedPaths() {
         return ["README.md"];
       },
@@ -302,7 +343,8 @@ void test("rejects an unexpected file mutation before committing", async () => {
         return ["# Changelog", "", "## 1.1.0", "", releaseBullet()].join("\n");
       },
       async writeFile() {},
-    });
+    }),
+  );
 
   await assert.rejects(
     prepareReleasePullRequest(
@@ -314,14 +356,14 @@ void test("rejects an unexpected file mutation before committing", async () => {
   assert.equal(commitAttempted, false);
 });
 
-void test("leaves the Release pull request draft when pushing fails", async () => {
+test("leaves the Release pull request draft when pushing fails", async () => {
   const system = preparedSystem();
   let readyAttempted = false;
   system.github.markReady = async () => {
     readyAttempted = true;
   };
-  system.workingCopies.withExactHead = async (_pullRequest, prepare) =>
-    prepare({
+  system.workingCopies = withWorkingCopy(
+    workingCopyStub({
       async changedPaths() {
         return ["packages/example/CHANGELOG.md"];
       },
@@ -338,7 +380,8 @@ void test("leaves the Release pull request draft when pushing fails", async () =
       async stageChangelogs() {},
       async verifyStagedChanges() {},
       async writeFile() {},
-    });
+    }),
+  );
 
   await assert.rejects(
     prepareReleasePullRequest(
@@ -350,7 +393,7 @@ void test("leaves the Release pull request draft when pushing fails", async () =
   assert.equal(readyAttempted, false);
 });
 
-void test("does not ready the Release pull request when its body update fails", async () => {
+test("does not ready the Release pull request when its body update fails", async () => {
   const system = preparedSystem();
   let readyAttempted = false;
   system.github.updatePullRequestBody = async () => {
@@ -370,7 +413,7 @@ void test("does not ready the Release pull request when its body update fails", 
   assert.equal(readyAttempted, false);
 });
 
-void test("reports a readiness failure without claiming success", async () => {
+test("reports a readiness failure without claiming success", async () => {
   const system = preparedSystem();
   let ready = false;
   system.github.markReady = async () => {
@@ -387,7 +430,7 @@ void test("reports a readiness failure without claiming success", async () => {
   assert.equal(ready, false);
 });
 
-void test("does not ready a Release pull request that stops being a draft", async () => {
+test("does not ready a Release pull request that stops being a draft", async () => {
   const system = preparedSystem();
   let observations = 0;
   let readyAttempted = false;
@@ -405,7 +448,7 @@ void test("does not ready a Release pull request that stops being a draft", asyn
   assert.equal(readyAttempted, false);
 });
 
-void test("does not ready a Release pull request changed by another writer", async () => {
+test("does not ready a Release pull request changed by another writer", async () => {
   const system = preparedSystem();
   let readyAttempted = false;
   system.github.observePullRequest = async () => ({
@@ -429,7 +472,7 @@ void test("does not ready a Release pull request changed by another writer", asy
   assert.equal(readyAttempted, false);
 });
 
-void test("returns a concurrently changed Release pull request to draft after readiness", async () => {
+test("returns a concurrently changed Release pull request to draft after readiness", async () => {
   const system = preparedSystem();
   let observations = 0;
   system.github.observePullRequest = async () => {

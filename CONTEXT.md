@@ -5,7 +5,7 @@ Payload Toolkit is a collection of plugins for Payload CMS. Its shared workspace
 ## Language
 
 **Workspace skeleton**:
-The operational repository foundation: root configuration and tracked `apps/` and `packages/` containers, without a runnable application or publishable package.
+The operational repository foundation: root configuration and tracked `apps/`, `packages/`, and `tools/` containers, without a runnable application or publishable package.
 _Avoid_: Empty monorepo, starter app
 
 **Validation baseline**:
@@ -24,6 +24,10 @@ _Avoid_: Payload plugin, production app
 A non-published workspace package introduced only when multiple Payload plugins need to share an implementation.
 _Avoid_: Payload plugin, configuration package
 
+**Workspace tool**:
+A non-published workspace package that automates the repository itself, such as releasing, and is never imported by a Payload plugin.
+_Avoid_: Internal library, script, dev dependency
+
 **BlurHash plugin**:
 The Payload plugin that enriches eligible images with a compact placeholder representation and exposes a static preview in Payload Admin.
 _Avoid_: Image optimizer, thumbnail generator, logger package
@@ -31,6 +35,10 @@ _Avoid_: Image optimizer, thumbnail generator, logger package
 **Eligible image**:
 A newly uploaded or replaced static raster asset in a configured media collection that the BlurHash plugin supports.
 _Avoid_: Media file, all uploads, existing media
+
+**BlurHash generation**:
+The processing attempt for a newly uploaded or replaced asset that ends with a stored BlurHash, an expected skip, or a failure.
+_Avoid_: Eligible image generation, image processing
 
 **Activity plugin**:
 The Payload plugin that attributes changes to admin users, starting with a last-modified-by sidebar field on configured collections and globals.
@@ -81,7 +89,7 @@ A human GitHub user who authored a merged pull request whose change belongs to o
 _Avoid_: Commit author, bot author, repository contributor, release-run contributor
 
 **Releasable merge**:
-A merge to the default branch that changes a Payload plugin's files with a feature, fix, performance improvement, revert, or breaking change. Other changes to a plugin (docs, tests, tooling) ride along with its next release instead of causing one.
+A merge to the default branch that changes a Payload plugin's files with a feature, fix, performance improvement, refactor, revert, or breaking change. Other changes to a plugin (docs, tests, tooling) ride along with its next release instead of causing one.
 _Avoid_: Any merge, package-touching commit
 
 **Breaking change**:

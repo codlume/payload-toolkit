@@ -2,11 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { SharpDependency } from "payload";
+import { isBlurhashValid } from "blurhash";
+import type { FieldHook, PayloadLogger, SharpDependency } from "payload";
 import hostSharp from "sharp";
 import { describe, expect, test, vi } from "vitest";
 
-import { createBlurHashGenerator } from "../../src/generate-blur-hash.ts";
+import { createBlurHashGeneration } from "../../src/blur-hash-generation.ts";
 import { createConcurrencySharp, createHangingSharp } from "./sharp-test-helpers.ts";
 
 const fixtureDirectory = new URL(
@@ -182,19 +183,15 @@ const createMetadataSharp = (width: number, height: number): SharpDependency =>
     return pipeline;
   }) satisfies SharpDependency;
 
-const createTestGenerator = ({
+const createTestHook = ({
   sharp,
   ...options
-}: Parameters<typeof createBlurHashGenerator>[0] & { sharp: SharpDependency }) => {
-  const generator = createBlurHashGenerator(options);
+}: Omit<Parameters<typeof createBlurHashGeneration>[0], "debug" | "enabled"> & {
+  sharp: SharpDependency;
+}) => createBlurHashGeneration({ ...options, debug: true, enabled: true, sharp })("media");
 
-  return {
-    generate: (input: Buffer, mimeType: unknown) => generator.generate({ input, mimeType, sharp }),
-  };
-};
-
-const createGenerator = (maxInputBytes: number) =>
-  createTestGenerator({
+const createHook = (maxInputBytes: number) =>
+  createTestHook({
     alphaBackground: { b: 255, g: 255, r: 255 },
     limits: {
       concurrency: 2,
@@ -206,7 +203,63 @@ const createGenerator = (maxInputBytes: number) =>
     sharp: createSharp(),
   });
 
-describe("createBlurHashGenerator", () => {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const createLogger = () => ({ debug: vi.fn(), warn: vi.fn() });
+
+const invokeHook = (
+  hook: FieldHook,
+  {
+    data,
+    file,
+    logger = createLogger(),
+    previousValue,
+    sharp,
+  }: {
+    data?: Record<string, unknown>;
+    file?: { data: Buffer; name?: string; size?: number; tempFilePath?: string };
+    logger?: Pick<PayloadLogger, "debug" | "warn">;
+    previousValue?: unknown;
+    sharp?: SharpDependency;
+  },
+) =>
+  Reflect.apply(hook, undefined, [
+    {
+      data,
+      previousValue,
+      req: {
+        file,
+        payload: {
+          config: sharp ? { sharp } : {},
+          logger,
+        },
+      },
+    },
+  ]);
+
+const runGeneration = async (hook: FieldHook, input: Buffer, mimeType: unknown) => {
+  const logger = createLogger();
+  const value = await invokeHook(hook, {
+    data: { mimeType },
+    file: { data: input },
+    logger,
+  });
+  const diagnostic = [...logger.debug.mock.calls, ...logger.warn.mock.calls]
+    .map(([entry]) => entry)
+    .find((entry) => isRecord(entry) && typeof entry.code === "string");
+
+  if (isRecord(diagnostic) && typeof diagnostic.code === "string") {
+    return {
+      code: diagnostic.code,
+      status: diagnostic.event === "generation_skipped" ? "skipped" : "failed",
+    };
+  }
+
+  return typeof value === "string" ? { status: "generated", value } : value;
+};
+
+describe("BlurHash generation", () => {
   test("generates when input is exactly at its byte, pixel, and side limits", async () => {
     const source = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
     const testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-limit-"));
@@ -215,25 +268,33 @@ describe("createBlurHashGenerator", () => {
     try {
       await writeFile(fixturePath, padJpeg(source, DEFAULT_MAX_INPUT_BYTES));
       const input = await readFile(fixturePath);
-      const outcome = await createGenerator(DEFAULT_MAX_INPUT_BYTES).generate(input, "image/jpeg");
+      const outcome = await runGeneration(createHook(DEFAULT_MAX_INPUT_BYTES), input, "image/jpeg");
 
-      expect(outcome).toMatchObject({ status: "generated", value: expect.any(String) });
+      expect(
+        isRecord(outcome) && outcome.status === "generated" && typeof outcome.value === "string"
+          ? {
+              length: outcome.value.length,
+              sizeFlag: outcome.value[0],
+              valid: isBlurhashValid(outcome.value).result,
+            }
+          : outcome,
+      ).toEqual({ length: 28, sizeFlag: "L", valid: true });
     } finally {
       await rm(testDirectory, { force: true, recursive: true });
     }
   });
 
   test("rejects compressed input over the configured byte limit", async () => {
-    const generator = createGenerator(DEFAULT_MAX_INPUT_BYTES);
+    const hook = createHook(DEFAULT_MAX_INPUT_BYTES);
 
     expect(
-      await generator.generate(Buffer.alloc(DEFAULT_MAX_INPUT_BYTES + 1), "image/jpeg"),
+      await runGeneration(hook, Buffer.alloc(DEFAULT_MAX_INPUT_BYTES + 1), "image/jpeg"),
     ).toEqual({ code: "input_too_large", status: "failed" });
   });
 
   test("rejects decoded dimensions over the configured side limit", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -245,7 +306,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createSharp(),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toEqual({
+    expect(await runGeneration(hook, input, "image/jpeg")).toEqual({
       code: "input_too_large",
       status: "failed",
     });
@@ -253,7 +314,7 @@ describe("createBlurHashGenerator", () => {
 
   test("rejects decoded dimensions over the configured pixel limit", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -265,7 +326,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createSharp(),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toEqual({
+    expect(await runGeneration(hook, input, "image/jpeg")).toEqual({
       code: "input_too_large",
       status: "failed",
     });
@@ -275,7 +336,7 @@ describe("createBlurHashGenerator", () => {
     const source = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
     const overrideLimit = 40_000_001;
     const input = padJpeg(source, DEFAULT_MAX_INPUT_BYTES + 1);
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 3,
@@ -287,7 +348,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createMetadataSharp(overrideLimit, 1),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toMatchObject({
+    expect(await runGeneration(hook, input, "image/jpeg")).toMatchObject({
       status: "generated",
       value: expect.any(String),
     });
@@ -295,7 +356,7 @@ describe("createBlurHashGenerator", () => {
 
   test("settles decoder errors as decode failures", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -307,7 +368,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createFailingSharp(),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toEqual({
+    expect(await runGeneration(hook, input, "image/jpeg")).toEqual({
       code: "decode_failed",
       status: "failed",
     });
@@ -315,7 +376,7 @@ describe("createBlurHashGenerator", () => {
 
   test("settles decoded multi-page input as an animation skip", async () => {
     const input = await readFile(new URL("webp-lossy.webp", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -327,7 +388,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createAnimatedMetadataSharp(),
     });
 
-    expect(await generator.generate(input, "image/webp")).toEqual({
+    expect(await runGeneration(hook, input, "image/webp")).toEqual({
       code: "animated_input",
       status: "skipped",
     });
@@ -335,7 +396,7 @@ describe("createBlurHashGenerator", () => {
 
   test("settles a missing format decoder without calling it", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -347,7 +408,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createSharpWithoutJpeg(),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toEqual({
+    expect(await runGeneration(hook, input, "image/jpeg")).toEqual({
       code: "decoder_unavailable",
       status: "failed",
     });
@@ -356,7 +417,7 @@ describe("createBlurHashGenerator", () => {
   test("a missing decoder does not prevent another format from generating", async () => {
     const jpeg = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
     const png = await readFile(new URL("png-opaque.png", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -370,8 +431,8 @@ describe("createBlurHashGenerator", () => {
 
     expect(
       await Promise.all([
-        generator.generate(jpeg, "image/jpeg"),
-        generator.generate(png, "image/png"),
+        runGeneration(hook, jpeg, "image/jpeg"),
+        runGeneration(hook, png, "image/png"),
       ]),
     ).toEqual([
       { code: "decoder_unavailable", status: "failed" },
@@ -381,7 +442,7 @@ describe("createBlurHashGenerator", () => {
 
   test("settles normalization errors as decode failures", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -393,7 +454,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createFailingNormalizationSharp(),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toEqual({
+    expect(await runGeneration(hook, input, "image/jpeg")).toEqual({
       code: "decode_failed",
       status: "failed",
     });
@@ -401,7 +462,7 @@ describe("createBlurHashGenerator", () => {
 
   test("settles encoder errors as encode failures", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -413,7 +474,7 @@ describe("createBlurHashGenerator", () => {
       sharp: createInvalidPixelsSharp(),
     });
 
-    expect(await generator.generate(input, "image/jpeg")).toEqual({
+    expect(await runGeneration(hook, input, "image/jpeg")).toEqual({
       code: "encode_failed",
       status: "failed",
     });
@@ -422,7 +483,7 @@ describe("createBlurHashGenerator", () => {
   test("settles work that exceeds the configured timeout", async () => {
     vi.useFakeTimers();
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 1,
@@ -435,12 +496,12 @@ describe("createBlurHashGenerator", () => {
     });
     let observed: unknown;
 
-    void generator.generate(input, "image/jpeg").then((outcome) => {
+    void runGeneration(hook, input, "image/jpeg").then((outcome) => {
       observed = outcome;
     });
     await vi.advanceTimersByTimeAsync(1_000);
     let queuedObserved: unknown;
-    void generator.generate(input, "image/jpeg").then((outcome) => {
+    void runGeneration(hook, input, "image/jpeg").then((outcome) => {
       queuedObserved = outcome;
     });
     await vi.advanceTimersByTimeAsync(1_000);
@@ -455,7 +516,7 @@ describe("createBlurHashGenerator", () => {
   test("never starts more than the configured number of generations", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
     let maximumActive = 0;
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 2,
@@ -470,9 +531,9 @@ describe("createBlurHashGenerator", () => {
     });
 
     await Promise.all([
-      generator.generate(input, "image/jpeg"),
-      generator.generate(input, "image/jpeg"),
-      generator.generate(input, "image/jpeg"),
+      runGeneration(hook, input, "image/jpeg"),
+      runGeneration(hook, input, "image/jpeg"),
+      runGeneration(hook, input, "image/jpeg"),
     ]);
 
     expect(maximumActive).toBe(2);
@@ -480,7 +541,7 @@ describe("createBlurHashGenerator", () => {
 
   test("continues queued work after a failed generation", async () => {
     const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-    const generator = createTestGenerator({
+    const hook = createTestHook({
       alphaBackground: { b: 255, g: 255, r: 255 },
       limits: {
         concurrency: 1,
@@ -494,8 +555,8 @@ describe("createBlurHashGenerator", () => {
 
     expect(
       await Promise.all([
-        generator.generate(input, "image/jpeg"),
-        generator.generate(input, "image/jpeg"),
+        runGeneration(hook, input, "image/jpeg"),
+        runGeneration(hook, input, "image/jpeg"),
       ]),
     ).toEqual([
       { code: "decode_failed", status: "failed" },
@@ -508,7 +569,7 @@ describe("createBlurHashGenerator", () => {
 
     try {
       const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
-      const generator = createTestGenerator({
+      const hook = createTestHook({
         alphaBackground: { b: 255, g: 255, r: 255 },
         limits: {
           concurrency: 1,
@@ -519,9 +580,9 @@ describe("createBlurHashGenerator", () => {
         },
         sharp: createSlowThenSuccessfulSharp(),
       });
-      const first = generator.generate(input, "image/jpeg");
+      const first = runGeneration(hook, input, "image/jpeg");
       await vi.advanceTimersByTimeAsync(1_000);
-      const second = generator.generate(input, "image/jpeg");
+      const second = runGeneration(hook, input, "image/jpeg");
       await vi.advanceTimersByTimeAsync(500);
 
       expect({ first: await first, second: await second }).toEqual({
@@ -533,6 +594,273 @@ describe("createBlurHashGenerator", () => {
     }
   });
 
+  test("clears the value when generation is disabled", async () => {
+    const logger = createLogger();
+    const disabledHook = createBlurHashGeneration({
+      alphaBackground: { b: 255, g: 255, r: 255 },
+      debug: true,
+      enabled: false,
+      limits: {
+        concurrency: 1,
+        maxInputBytes: 1,
+        maxInputPixels: 960,
+        maxInputSide: 40,
+        timeoutSeconds: 10,
+      },
+      sharp: undefined,
+    })("media");
+
+    const result = await invokeHook(disabledHook, {
+      data: { mimeType: "image/jpeg" },
+      file: { data: Buffer.alloc(1) },
+      logger,
+      previousValue: "old-hash",
+    });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({
+      logs: 0,
+      result: null,
+    });
+  });
+
+  test("returns null when a create has no file", async () => {
+    const logger = createLogger();
+    const result = await invokeHook(createHook(1), { logger });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({ logs: 0, result: null });
+  });
+
+  test("clears the value when the file is explicitly removed", async () => {
+    const logger = createLogger();
+    const result = await invokeHook(createHook(1), {
+      data: { filename: null, mimeType: "image/jpeg" },
+      file: { data: Buffer.alloc(1) },
+      logger,
+      previousValue: "old-hash",
+    });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({ logs: 0, result: null });
+  });
+
+  test("preserves the value when an update has no file", async () => {
+    const logger = createLogger();
+    const result = await invokeHook(createHook(1), {
+      logger,
+      previousValue: "old-hash",
+    });
+
+    expect({
+      logs: logger.debug.mock.calls.length + logger.warn.mock.calls.length,
+      result,
+    }).toEqual({ logs: 0, result: "old-hash" });
+  });
+
+  test("prefers the request Sharp adapter over the registration fallback", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    const hook = createTestHook({
+      alphaBackground: { b: 255, g: 255, r: 255 },
+      limits: {
+        concurrency: 1,
+        maxInputBytes: input.length,
+        maxInputPixels: 960,
+        maxInputSide: 40,
+        timeoutSeconds: 10,
+      },
+      sharp: createFailingSharp(),
+    });
+    const result = await invokeHook(hook, {
+      data: { mimeType: "image/jpeg" },
+      file: { data: input },
+      sharp: hostSharp,
+    });
+
+    expect(typeof result === "string" && isBlurhashValid(result).result).toBe(true);
+  });
+
+  test("uses a temporary upload path instead of stale in-memory data", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    const testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-generation-"));
+    const fixturePath = path.join(testDirectory, "upload.jpg");
+
+    try {
+      await writeFile(fixturePath, input);
+      const hook = createHook(input.length);
+      const generated = await invokeHook(hook, {
+        data: { mimeType: "image/jpeg" },
+        file: {
+          data: Buffer.from("stale invalid bytes"),
+          size: input.length,
+          tempFilePath: fixturePath,
+        },
+      });
+
+      expect(typeof generated === "string" && isBlurhashValid(generated).result).toBe(true);
+    } finally {
+      await rm(testDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("isolates a missing temporary upload path", async () => {
+    const testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-generation-"));
+    const logger = createLogger();
+
+    try {
+      const failed = await invokeHook(createHook(321), {
+        data: { mimeType: "image/jpeg" },
+        file: {
+          data: Buffer.alloc(0),
+          size: 321,
+          tempFilePath: path.join(testDirectory, "missing.jpg"),
+        },
+        logger,
+      });
+
+      expect({ failed, warning: logger.warn.mock.calls[0]?.[0] }).toMatchObject({
+        failed: null,
+        warning: {
+          code: "decode_failed",
+          event: "generation_failed",
+          inputBytes: 321,
+          stage: "decode",
+        },
+      });
+    } finally {
+      await rm(testDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("rejects an oversized temporary upload before reading it", async () => {
+    const testDirectory = await mkdtemp(path.join(tmpdir(), "payload-blurhash-generation-limit-"));
+    const fixturePath = path.join(testDirectory, "oversized.jpg");
+    const logger = createLogger();
+
+    try {
+      await writeFile(fixturePath, Buffer.alloc(5));
+      const hook = createHook(4);
+      const result = await invokeHook(hook, {
+        data: { mimeType: "image/jpeg" },
+        file: { data: Buffer.alloc(0), size: 1, tempFilePath: fixturePath },
+        logger,
+      });
+
+      expect({ result, warning: logger.warn.mock.calls[0]?.[0] }).toMatchObject({
+        result: null,
+        warning: {
+          code: "input_too_large",
+          event: "generation_failed",
+          inputBytes: 5,
+          stage: "limits",
+        },
+      });
+    } finally {
+      await rm(testDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("bounds skipped diagnostics and omits private upload data", async () => {
+    const input = Buffer.from("private upload bytes");
+    const mimeType = `text/${"x".repeat(200)}`;
+    const logger = createLogger();
+    const hook = createHook(input.length);
+    const result = await invokeHook(hook, {
+      data: { height: 20, metadata: "private metadata", mimeType, width: 30 },
+      file: { data: input, name: "private-name.txt" },
+      logger,
+    });
+    const serialized = JSON.stringify(logger.debug.mock.calls);
+
+    expect({
+      leaked: [input.toString(), "private-name.txt", "private metadata"].filter((value) =>
+        serialized.includes(value),
+      ),
+      result,
+      skipped: logger.debug.mock.calls.at(-1)?.[0],
+    }).toMatchObject({
+      leaked: [],
+      result: null,
+      skipped: {
+        code: "not_eligible",
+        event: "generation_skipped",
+        height: 20,
+        mimeType: mimeType.slice(0, 128),
+        stage: "inspect",
+        width: 30,
+      },
+    });
+  });
+
+  test("warns once per unavailable decoder across collection hooks", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    const createHookForCollection = createBlurHashGeneration({
+      alphaBackground: { b: 255, g: 255, r: 255 },
+      debug: false,
+      enabled: true,
+      limits: {
+        concurrency: 1,
+        maxInputBytes: input.length,
+        maxInputPixels: 960,
+        maxInputSide: 40,
+        timeoutSeconds: 10,
+      },
+      sharp: createSharpWithoutJpeg(),
+    });
+    const firstLogger = createLogger();
+    const secondLogger = createLogger();
+
+    await invokeHook(createHookForCollection("media"), {
+      data: { mimeType: "image/jpeg" },
+      file: { data: input },
+      logger: firstLogger,
+    });
+    await invokeHook(createHookForCollection("assets"), {
+      data: { mimeType: "image/jpeg" },
+      file: { data: input },
+      logger: secondLogger,
+    });
+
+    expect({
+      first: firstLogger.warn.mock.calls.map(([entry]) => entry),
+      second: secondLogger.warn.mock.calls,
+    }).toMatchObject({
+      first: [
+        {
+          code: "decoder_unavailable",
+          event: "generation_failed",
+          stage: "decode",
+        },
+      ],
+      second: [],
+    });
+  });
+
+  test("keeps BlurHash generation working when the logger throws", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+    const hook = createHook(input.length);
+    const result = await invokeHook(hook, {
+      data: { mimeType: "image/jpeg" },
+      file: { data: input },
+      logger: {
+        debug: () => {
+          throw new Error("logger unavailable");
+        },
+        warn: () => {
+          throw new Error("logger unavailable");
+        },
+      },
+    });
+
+    expect(typeof result === "string" && isBlurhashValid(result).result).toBe(true);
+  });
+
   test.each([
     ["jpeg-baseline.jpg", "image/jpg", { code: "not_eligible", status: "skipped" }],
     ["png-apng-two-frame.png", "image/png", { code: "animated_input", status: "skipped" }],
@@ -541,6 +869,6 @@ describe("createBlurHashGenerator", () => {
   ])("settles %s with the stable outcome for %s", async (fixture, mimeType, expected) => {
     const input = await readFile(new URL(fixture, fixtureDirectory));
 
-    expect(await createGenerator(input.length).generate(input, mimeType)).toEqual(expected);
+    expect(await runGeneration(createHook(input.length), input, mimeType)).toEqual(expected);
   });
 });

@@ -7,7 +7,7 @@ await runCommand({
     "exec",
     "vitest",
     "run",
-    "tests/unit/generate-blur-hash.test.ts",
+    "tests/unit/blur-hash-generation.test.ts",
     "tests/unit/plugin.test.ts",
     "--maxWorkers=1",
   ],
