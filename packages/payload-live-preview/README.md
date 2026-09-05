@@ -2,7 +2,7 @@
 
 Link blocks in Payload Admin with their rendered components in native Live Preview. Click a preview component to reveal its Admin row, or focus an Admin field to reveal its component. Linking preserves focus and native click behavior.
 
-Collections with per-collection Live Preview support nested blocks and repeated renderings. Linking recovers after saves, iframe reloads, closing and reopening preview, and bridge remounts. Globals, root configuration, and locale handling are tracked in [#98](https://github.com/codlume/payload-toolkit/issues/98).
+Collections and globals configured for native Live Preview support nested blocks and repeated renderings. Linking follows the active locale and recovers after saves, iframe reloads, closing and reopening preview, and bridge remounts.
 
 ## Run the server example
 
