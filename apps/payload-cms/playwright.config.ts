@@ -27,7 +27,7 @@ export default defineConfig({
   projects: [
     {
       name: "enabled",
-      testMatch: "preview.e2e.test.ts",
+      testMatch: ["preview.e2e.test.ts", "live-preview.e2e.test.ts", "preview-context.e2e.test.ts"],
       use: {
         ...devices["Desktop Chrome"],
         baseURL: `http://127.0.0.1:${enabledPort}`,
@@ -53,10 +53,14 @@ export default defineConfig({
       command: `pnpm exec next dev --hostname 127.0.0.1 --port ${enabledPort}`,
       env: {
         PAYLOAD_APP_MODE: "enabled-in-memory",
+        PAYLOAD_LIVE_PREVIEW_DEBUG: "true",
+        PAYLOAD_LIVE_PREVIEW_TEST_CONTEXT: "true",
+        PAYLOAD_PUBLIC_SERVER_URL: `http://127.0.0.1:${enabledPort}`,
         PAYLOAD_NEXT_DIST_DIRECTORY: enabledDistDirectory,
         PAYLOAD_NEXT_TSCONFIG_PATH: enabledTsconfigPath,
         PAYLOAD_S3_PREFIX: `${s3Prefix}/enabled`,
         PAYLOAD_STATE_DIRECTORY: path.join(stateDirectory, "enabled"),
+        PAYLOAD_TS_OUTPUT_PATH: path.join(stateDirectory, "enabled", "payload-types.generated.ts"),
       },
       reuseExistingServer: false,
       timeout: 120_000,
@@ -70,6 +74,7 @@ export default defineConfig({
         PAYLOAD_NEXT_TSCONFIG_PATH: disabledTsconfigPath,
         PAYLOAD_S3_PREFIX: `${s3Prefix}/disabled`,
         PAYLOAD_STATE_DIRECTORY: path.join(stateDirectory, "disabled"),
+        PAYLOAD_TS_OUTPUT_PATH: path.join(stateDirectory, "disabled", "payload-types.generated.ts"),
       },
       reuseExistingServer: false,
       timeout: 120_000,

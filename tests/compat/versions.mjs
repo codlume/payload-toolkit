@@ -4,6 +4,7 @@ export const dependencyVersions = Object.freeze({
   "@aws-sdk/client-s3": "3.1112.0",
   "@aws-sdk/lib-storage": "3.1112.0",
   "@payloadcms/db-sqlite": "3.88.0",
+  "@payloadcms/live-preview-react": "3.88.0",
   "@payloadcms/next": "3.88.0",
   "@payloadcms/storage-s3": "3.88.0",
   "@payloadcms/ui": "3.88.0",
