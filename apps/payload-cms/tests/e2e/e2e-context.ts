@@ -1,7 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { getPayload } from "payload";
+import { BasePayload } from "payload";
 
 import { createAppConfig } from "../../src/app-config.ts";
 import { createS3TestStorage } from "../s3-test-context.ts";
@@ -49,7 +49,8 @@ export const createE2EPayload = async (mode: "disabled" | "enabled") => {
     uploadDirectory: path.join(stateDirectory, "media"),
   });
 
-  return getPayload({ config });
+  // Give each test file its own instance so teardown cannot invalidate another file's cached client.
+  return new BasePayload().init({ config });
 };
 
 export const seedAdminUser = async (payload: Awaited<ReturnType<typeof createE2EPayload>>) => {
