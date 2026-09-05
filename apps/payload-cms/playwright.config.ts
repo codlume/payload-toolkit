@@ -27,7 +27,7 @@ export default defineConfig({
   projects: [
     {
       name: "enabled",
-      testMatch: "preview.e2e.test.ts",
+      testMatch: ["preview.e2e.test.ts", "live-preview.e2e.test.ts"],
       use: {
         ...devices["Desktop Chrome"],
         baseURL: `http://127.0.0.1:${enabledPort}`,
@@ -53,6 +53,7 @@ export default defineConfig({
       command: `pnpm exec next dev --hostname 127.0.0.1 --port ${enabledPort}`,
       env: {
         PAYLOAD_APP_MODE: "enabled-in-memory",
+        PAYLOAD_PUBLIC_SERVER_URL: `http://127.0.0.1:${enabledPort}`,
         PAYLOAD_NEXT_DIST_DIRECTORY: enabledDistDirectory,
         PAYLOAD_NEXT_TSCONFIG_PATH: enabledTsconfigPath,
         PAYLOAD_S3_PREFIX: `${s3Prefix}/enabled`,
