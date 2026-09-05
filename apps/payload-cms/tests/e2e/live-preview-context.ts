@@ -41,7 +41,9 @@ export const openLinkedPreview = async (page: Page, id: number, route = "/pages/
   const open = page.getByRole("button", { name: "Live Preview", exact: true });
   if (await open.isVisible()) await open.click();
   const preview = page.frameLocator("iframe");
-  await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "", { timeout: 15000 });
+  await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "", {
+    timeout: 15000,
+  });
   const path = await preview.locator("html").evaluate(() => window.location.pathname);
   if (!path.startsWith(route)) {
     await preview
@@ -53,7 +55,9 @@ export const openLinkedPreview = async (page: Page, id: number, route = "/pages/
     await expect
       .poll(() => preview.locator("html").evaluate(() => window.location.pathname))
       .toContain(route);
-    await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "", { timeout: 15000 });
+    await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "", {
+      timeout: 15000,
+    });
   }
   return preview;
 };

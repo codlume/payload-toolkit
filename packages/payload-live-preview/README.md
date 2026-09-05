@@ -70,7 +70,7 @@ const Blocks = createBlockRenderer<TextBlock | SectionBlock, { theme: string }>(
 
 `draft` defaults to `false`. When declaring parent props, the renderer requires them; otherwise omit `parentProps`. Components receive `block`, `marker`, `draft`, and `parentProps` separately. The public `BlockProps` type describes that contract. Unknown runtime block types render nothing.
 
-Forward both `draft` and `parentProps` when rendering nested content. The workspace example supports section → section → text with generated Payload types. Its schema uses finite nesting because the SQLite adapter in Payload 3.88 cannot build a self-referencing block schema.
+Forward both `draft` and `parentProps` when rendering nested content. The workspace example supports section → section → text with generated Payload types. In the outer section, enter a heading to show its nested content fields. Its schema uses finite nesting because the SQLite adapter in Payload 3.88 cannot build a self-referencing block schema.
 
 A preview click selects the innermost marked block. Admin expands collapsed ancestors from the outside inward and saves their expanded state. If an inner block is unavailable, linking tries its enclosing blocks. Missing targets can appear within a two-second wait; a new selection cancels the previous wait.
 

@@ -20,7 +20,12 @@ const Section: Block = {
   interfaceName: "SectionBlock",
   fields: [
     { name: "heading", type: "text", required: true },
-    { name: "content", type: "blocks", blocks: [Text, NestedSection] },
+    {
+      name: "content",
+      type: "blocks",
+      blocks: [Text, NestedSection],
+      admin: { condition: (_data, siblingData) => Boolean(siblingData.heading) },
+    },
   ],
 };
 

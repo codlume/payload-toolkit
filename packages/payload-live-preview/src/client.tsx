@@ -35,16 +35,26 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
     const work = createLocateWork(log);
     let visuals: ReturnType<typeof createVisuals> | undefined;
     let selected: string | undefined;
-    const rows = () =>
-      Object.entries(current.current.form.getFields()).flatMap(([path, field]) =>
-        (field.rows ?? []).flatMap((row, index) => {
+    const rows = () => {
+      const fields = current.current.form.getFields();
+      return Object.entries(fields).flatMap(([path, field]) => {
+        if (!field.rows) return [];
+        // Payload can retain descendant state after a parent condition becomes false.
+        let ancestor = path;
+        while (ancestor) {
+          if (fields[ancestor]?.passesCondition === false) return [];
+          const separator = ancestor.lastIndexOf(".");
+          ancestor = separator === -1 ? "" : ancestor.slice(0, separator);
+        }
+        return field.rows.flatMap((row, index) => {
           if (!row.blockType || !row.id) return [];
           const element = document
             .getElementById(`${path.replaceAll(".", "-")}-row-${index}`)
             ?.querySelector<HTMLElement>(".blocks-field__row");
           return [{ row, path, index, element }];
-        }),
-      );
+        });
+      });
+    };
     const select = (event: Event) => {
       if (!(event.target instanceof Element)) return;
       const target = event.target;

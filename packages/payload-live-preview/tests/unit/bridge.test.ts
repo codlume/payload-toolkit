@@ -121,10 +121,9 @@ test("standalone pages never send a handshake or install styles", () => {
   expect(document.documentElement.hasAttribute("data-payload-linking")).toBe(false);
 });
 
-test("locates wait for rendering, replace older requests and expire after two seconds", async () => {
+test("a newer locate replaces the pending rendering request", async () => {
   vi.useFakeTimers();
-  const log = vi.spyOn(console, "debug");
-  const { message, dispose } = setupPeer(true);
+  const { message } = setupPeer();
   message(ready);
   message({ ...ready, event: "locate", ids: ["old"] });
   message({ ...ready, event: "locate", ids: ["new"] });
@@ -143,6 +142,13 @@ test("locates wait for rendering, replace older requests and expire after two se
       .querySelector('[data-payload-block="old"]')
       ?.hasAttribute("data-payload-block-highlight"),
   ).toBe(false);
+});
+
+test("missing targets expire after two seconds instead of locating a later rendering", async () => {
+  vi.useFakeTimers();
+  const log = vi.spyOn(console, "debug");
+  const { message } = setupPeer(true);
+  message(ready);
   message({ ...ready, event: "locate", ids: ["late"] });
   await vi.advanceTimersByTimeAsync(2000);
   expect(log).toHaveBeenCalledWith("[@codlume/payload-live-preview:preview] target timeout", [
@@ -155,6 +161,12 @@ test("locates wait for rendering, replace older requests and expire after two se
       .querySelector('[data-payload-block="late"]')
       ?.hasAttribute("data-payload-block-highlight"),
   ).toBe(false);
+});
+
+test("cleanup cancels pending rendering requests", async () => {
+  vi.useFakeTimers();
+  const { message, dispose } = setupPeer();
+  message(ready);
   message({ ...ready, event: "locate", ids: ["disposed"] });
   dispose();
   document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="disposed">Disposed</p>');
@@ -166,12 +178,18 @@ test("locates wait for rendering, replace older requests and expire after two se
   ).toBe(false);
 });
 
-test("hidden inner markers fall back to an enclosing block and clicks send innermost-first ids", () => {
-  const { message, parent, element } = setupPeer();
+test("hidden inner markers fall back to an enclosing block", () => {
+  const { message, element } = setupPeer();
   element.innerHTML = '<span data-payload-block="inner" style="visibility:hidden">Inner</span>';
   message(ready);
   message({ ...ready, event: "locate", ids: ["inner", "one"] });
   expect(element.hasAttribute("data-payload-block-highlight")).toBe(true);
+});
+
+test("clicks send block ids in innermost-first order", () => {
+  const { message, parent, element } = setupPeer();
+  element.innerHTML = '<span data-payload-block="inner">Inner</span>';
+  message(ready);
   element.querySelector("span")!.click();
   expect(parent.postMessage).toHaveBeenLastCalledWith(
     { ...ready, event: "locate", ids: ["inner", "one"] },

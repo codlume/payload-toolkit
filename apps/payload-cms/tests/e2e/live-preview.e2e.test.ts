@@ -235,7 +235,7 @@ for (const route of previewRoutes) {
     await page
       .locator("#layout-6-content-0-content-row-0")
       .getByRole("button", { name: "Toggle block", exact: true })
-      .click({ position: { x: 10, y: 10 } });
+      .press("Enter");
     await expect(preview.locator(`[data-payload-block="${inner.id}"]`)).toHaveAttribute(
       "data-payload-block-highlight",
       "",
@@ -349,6 +349,43 @@ for (const route of previewRoutes) {
       "",
     );
     await expect(page.locator("#layout-row-5 > .blocks-field__row")).not.toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+  });
+
+  test(`${route} hidden Admin fields fall back through stale descendant form state`, async ({
+    page,
+  }) => {
+    const nested = await seedNestedPage(payload);
+    const outer = nested.layout![6]!;
+    if (outer.blockType !== "section") throw new Error("Missing outer section");
+    const inner = outer.content![0]!;
+    if (inner.blockType !== "section") throw new Error("Missing inner section");
+    const deep = inner.content![0]!;
+    await login(page);
+    const preview = await openLinkedPreview(page, nested.id, route);
+    await preview.locator(`[data-payload-block="${deep.id}"]`).click();
+    await expect(page.locator("#field-layout__6__content__0__content__0__content")).toHaveValue(
+      "Deep target",
+    );
+    await page.locator("#field-layout__6__heading").fill("");
+    await expect(
+      page.locator("#field-layout__6__content__0__content__0__content"),
+    ).not.toBeVisible();
+    await preview.locator("html").evaluate(
+      (_element, ids) =>
+        window.parent.postMessage(
+          {
+            type: "@codlume/payload-live-preview",
+            event: "locate",
+            ids,
+          },
+          window.location.origin,
+        ),
+      [deep.id, inner.id, outer.id],
+    );
+    await expect(page.locator("#layout-row-6 > .blocks-field__row")).toHaveAttribute(
       "data-payload-block-highlight",
       "",
     );
