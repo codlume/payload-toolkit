@@ -55,6 +55,17 @@ test("standalone authenticated drafts stay inert and draft cookies alone cannot 
   browser,
 }) => {
   await login(page);
+  const unpublished = await payload.create({
+    collection: "pages",
+    draft: true,
+    data: {
+      title: "Unpublished",
+      slug: `unpublished-${crypto.randomUUID()}`,
+      _status: "draft",
+      layout: [],
+    },
+  });
+  expect((await page.goto(`/pages/${unpublished.slug}`))?.status()).toBe(404);
   await page.goto(`/preview?slug=${seededPage.slug}`);
   await expect(page.locator("[data-payload-block]").first()).toHaveText("Draft block 1");
   await expect(page.locator("html")).not.toHaveAttribute("data-payload-linking", "");
@@ -96,9 +107,11 @@ test("row-header repeats, collapsed rows and native actions keep working", async
   const first = preview.locator(`[data-payload-block="${seededPage.layout![0]!.id}"]`);
   const count = () =>
     preview.locator("html").evaluate(() => Number(Reflect.get(window, "pluginLocates")));
-  const header = page.locator("#layout-row-0 .collapsible__header");
+  const header = page
+    .locator("#layout-row-0")
+    .getByRole("button", { name: "Toggle block", exact: true });
   await header.click();
-  await expect.poll(count).toBeGreaterThan(0);
+  await expect.poll(count).toBe(1);
   const afterHeader = await count();
   await header.click();
   await expect.poll(count).toBe(afterHeader + 1);

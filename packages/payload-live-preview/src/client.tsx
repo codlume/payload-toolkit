@@ -46,12 +46,14 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
     const select = (event: Event) => {
       if (!(event.target instanceof Element)) return;
       const target = event.target;
+      // The toggle gets focus before its click; the click sends the single row-header locate.
+      if (event.type === "focusin" && target.closest(".collapsible__toggle")) return;
       const matches = rows()
         .filter(({ element }) => element?.contains(target))
         .toReversed();
       const ids = matches.map(({ row }) => row.id);
       const id = ids[0];
-      const header = event.type === "click" && !!target.closest(".collapsible__header");
+      const header = event.type === "click" && !!target.closest(".collapsible__toggle-wrap");
       if (id && (id !== selected || header) && channel.locate(ids)) selected = id;
     };
     const start = () =>

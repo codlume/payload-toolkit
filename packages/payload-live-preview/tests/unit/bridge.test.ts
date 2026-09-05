@@ -9,40 +9,6 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("iframe interaction stays inactive until an origin/source-validated ready request", () => {
-  const frame = document.createElement("iframe");
-  document.body.append(frame);
-  const parent = Object.assign(frame.contentWindow!, { postMessage: vi.fn() });
-  vi.spyOn(window, "parent", "get").mockReturnValue(parent);
-  document.body.insertAdjacentHTML(
-    "beforeend",
-    '<p data-payload-block="one" data-payload-block-type="text">Hello</p>',
-  );
-  disposers.push(createPreviewBridge({ serverURL: "https://admin.example/admin" }));
-  expect(parent.postMessage).toHaveBeenCalledWith(
-    { type: "@codlume/payload-live-preview", event: "ready" },
-    "https://admin.example",
-  );
-  const element = document.querySelector("p")!;
-  element.click();
-  expect(parent.postMessage).toHaveBeenCalledTimes(1);
-  window.dispatchEvent(
-    new MessageEvent("message", {
-      data: { type: "@codlume/payload-live-preview", event: "ready" },
-      origin: "https://admin.example",
-      source: parent,
-    }),
-  );
-  element.click();
-  expect(parent.postMessage.mock.calls.slice(1)).toEqual([
-    [{ type: "@codlume/payload-live-preview", event: "ready", ack: true }, "https://admin.example"],
-    [
-      { type: "@codlume/payload-live-preview", event: "locate", ids: ["one"] },
-      "https://admin.example",
-    ],
-  ]);
-});
-
 const setupPeer = (debug = false) => {
   const frame = document.createElement("iframe");
   document.body.append(frame);
@@ -59,6 +25,26 @@ const setupPeer = (debug = false) => {
     window.dispatchEvent(new MessageEvent("message", { data, origin, source: source }));
   return { parent, dispose, message, element: document.querySelector("p")! };
 };
+
+test("iframe interaction stays inactive until an origin/source-validated ready request", () => {
+  const { parent, element, message } = setupPeer();
+  expect(parent.postMessage).toHaveBeenCalledWith(
+    { type: "@codlume/payload-live-preview", event: "ready" },
+    "https://admin.example",
+  );
+  element.click();
+  expect(parent.postMessage).toHaveBeenCalledTimes(1);
+  message({ type: "@codlume/payload-live-preview", event: "ready" });
+  element.click();
+  expect(parent.postMessage.mock.calls.slice(1)).toEqual([
+    [{ type: "@codlume/payload-live-preview", event: "ready", ack: true }, "https://admin.example"],
+    [
+      { type: "@codlume/payload-live-preview", event: "locate", ids: ["one"] },
+      "https://admin.example",
+    ],
+  ]);
+});
+
 const ready = { type: "@codlume/payload-live-preview", event: "ready" };
 
 test("invalid plugin messages and unrelated native traffic never activate linking", () => {

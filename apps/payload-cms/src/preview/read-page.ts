@@ -8,7 +8,7 @@ export const readPage = async (slug: string, draftRequested: boolean, requestHea
   const draft = draftRequested && Boolean(user);
   const result = await payload.find({
     collection: "pages",
-    where: { slug: { equals: slug } },
+    where: { slug: { equals: slug }, ...(!draft ? { _status: { equals: "published" } } : {}) },
     draft,
     overrideAccess: false,
     user,
