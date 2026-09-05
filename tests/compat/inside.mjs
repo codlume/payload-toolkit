@@ -13,6 +13,7 @@ const applicationSourceDirectory = path.join(repositoryDirectory, "apps/payload-
 const packageDirectories = Object.freeze({
   "@codlume/payload-activity": path.join(repositoryDirectory, "packages/payload-activity"),
   "@codlume/payload-blurhash": path.join(repositoryDirectory, "packages/payload-blurhash"),
+  "@codlume/payload-live-preview": path.join(repositoryDirectory, "packages/payload-live-preview"),
 });
 const maximumPackOutputBytes = 10 * 1024 * 1024;
 
@@ -109,6 +110,7 @@ const createConsumerPackageJSON = (tarballPaths, consumerDirectory) => ({
       ]),
     ),
     "@payloadcms/db-sqlite": dependencyVersions["@payloadcms/db-sqlite"],
+    "@payloadcms/live-preview-react": dependencyVersions["@payloadcms/live-preview-react"],
     "@payloadcms/next": dependencyVersions["@payloadcms/next"],
     "@payloadcms/storage-s3": dependencyVersions["@payloadcms/storage-s3"],
     "@payloadcms/ui": dependencyVersions["@payloadcms/ui"],

@@ -69,6 +69,8 @@ try {
       "@codlume/payload-activity",
       "--filter",
       "@codlume/payload-blurhash",
+      "--filter",
+      "@codlume/payload-live-preview",
       "build",
     ],
     command: "pnpm",
