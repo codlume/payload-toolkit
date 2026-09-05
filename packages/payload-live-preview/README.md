@@ -2,7 +2,7 @@
 
 Link blocks in Payload Admin with their rendered components in native Live Preview. Click a preview component to reveal its Admin row, or focus an Admin field to reveal its component. Linking preserves focus and native click behavior.
 
-Collections with per-collection Live Preview support nested blocks and repeated renderings. Update/restart coverage is tracked in [#97](https://github.com/codlume/payload-toolkit/issues/97); globals, root configuration, and locale handling are tracked in [#98](https://github.com/codlume/payload-toolkit/issues/98).
+Collections with per-collection Live Preview support nested blocks and repeated renderings. Linking recovers after saves, iframe reloads, closing and reopening preview, and bridge remounts. Globals, root configuration, and locale handling are tracked in [#98](https://github.com/codlume/payload-toolkit/issues/98).
 
 ## Run the server example
 
@@ -17,7 +17,7 @@ pnpm --filter @codlume/payload-cms dev
 
 Open `http://localhost:3000/admin`, create an Admin user, then create a Page with a title, unique slug, text blocks and sections. Publish it, change some content, and open Live Preview. The workspace uses drafts and autosave. The preview entry authenticates the Payload user, enables Next draft mode, and redirects to `/pages/[slug]`.
 
-The server route reads the latest draft only when both draft mode and Payload authentication are present. Ordinary requests read published content without block markers. Native `RefreshRouteOnSave` refreshes the route after saves and autosaves. Unsaved form data does not stream into this server route. A new block becomes available after save or autosave.
+The server route reads the latest draft only when both draft mode and Payload authentication are present. Ordinary requests read published content without block markers. Native `RefreshRouteOnSave` refreshes the route after draft saves, autosaves, and publishing. Unsaved form data does not stream into this server route. A new block becomes available after save or autosave.
 
 Example sources:
 
@@ -29,6 +29,31 @@ Example sources:
 - [Native refresh component](../../apps/payload-cms/src/preview/refresh.tsx)
 
 Set `PAYLOAD_PUBLIC_SERVER_URL` to the application's public origin when it differs from the incoming request origin.
+
+## Use client preview
+
+The alternative [`/pages-client/[slug]` route](<../../apps/payload-cms/src/app/(frontend)/pages-client/[slug]/page.tsx>) authenticates and fetches initial data on the server, then renders [`ClientPage`](../../apps/payload-cms/src/preview/client-page.tsx) in draft mode. It uses Payload's native `useLivePreview` hook and the same block components to show unsaved form changes, including new blocks. Ordinary requests still render published content without markers or a bridge.
+
+Set `PAYLOAD_LIVE_PREVIEW_MODE=client` when starting the workspace application to open this route from native Live Preview. Omit it to use the server route. The authenticated entry accepts `/preview?slug=your-page&mode=client`; other mode values select the server route. Route selection belongs to this example application.
+
+```tsx
+import { useLivePreview } from "@payloadcms/live-preview-react";
+import { PreviewBridge } from "@codlume/payload-live-preview/react";
+
+// Inside an authenticated draft client component:
+const { data } = useLivePreview<Page>({ initialData, serverURL, depth: 0 });
+
+return (
+  <>
+    <PageBlocks blocks={data.layout} draft={true} parentProps={{ textClass: "page-text" }} />
+    <PreviewBridge serverURL={serverURL} />
+  </>
+);
+```
+
+The client alternative needs `@payloadcms/live-preview-react` in the frontend in addition to the plugin's React peer. Payload owns document streaming in both modes. Linking uses row ids and never streams document content itself. In server preview, a new block can only be located once save or autosave renders it; an available ancestor can be located sooner, and missing targets expire after two seconds.
+
+Both peers reconnect through the plugin's ready handshake. Admin cancels pending selections and clears selection deduplication when the preview URL or iframe changes, on iframe load, and on close/reopen. Disconnected locates are dropped without replay. Multiple frontend bridge registrations share one connection; dispose each registration on unmount. Final disposal removes interaction listeners, target waits, styles, temporary attributes, and positioning. A later mount starts a fresh handshake.
 
 ## Install in your application
 
@@ -124,7 +149,7 @@ The marker uses Payload's existing block-row `id`. It adds `data-payload-block` 
 
 ## Diagnostics and validation
 
-Enable `debug` separately on the plugin and frontend bridge. Console lines use `[@codlume/payload-live-preview:admin]` or `[@codlume/payload-live-preview:preview]` and report connection/reset, sent/received locate ids, fallback, missing targets, timeouts, and rejected plugin messages. They exclude document content, URL query strings, hover and typing. Debug-off failures are silent.
+Enable `debug` separately on the plugin and frontend bridge. Console lines use `[@codlume/payload-live-preview:admin]` or `[@codlume/payload-live-preview:preview]` and report connection/reset, sent/received locate ids, fallback, missing targets, timeouts, disconnected drops, and rejected plugin messages. They exclude document content, URL query strings, hover and typing. Debug-off failures are silent.
 
 ```sh
 pnpm --filter @codlume/payload-live-preview test:unit

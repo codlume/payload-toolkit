@@ -44,7 +44,8 @@ export const Pages: CollectionConfig = {
         if (!data.slug) return null;
         const origin =
           process.env.PAYLOAD_PUBLIC_SERVER_URL ?? req.origin ?? "http://localhost:3000";
-        return `${origin}/preview?slug=${encodeURIComponent(String(data.slug))}`;
+        const mode = process.env.PAYLOAD_LIVE_PREVIEW_MODE === "client" ? "&mode=client" : "";
+        return `${origin}/preview?slug=${encodeURIComponent(String(data.slug))}${mode}`;
       },
       breakpoints: [
         { label: "Mobile", name: "mobile", width: 375, height: 667 },
@@ -53,7 +54,7 @@ export const Pages: CollectionConfig = {
       ],
     },
   },
-  versions: { drafts: { autosave: { interval: 800 } } },
+  versions: { drafts: { autosave: { interval: 800, showSaveDraftButton: true } } },
   fields: [
     { name: "title", type: "text", required: true },
     { name: "slug", type: "text", required: true, unique: true },

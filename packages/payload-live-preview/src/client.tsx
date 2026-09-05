@@ -13,6 +13,7 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
   const current = useRef({ form, setDocFieldPreferences });
   current.current = { form, setDocFieldPreferences };
   const { iframeRef, isLivePreviewing, previewWindowType, url, loadedURL } = preview;
+  const iframeElement = iframeRef.current;
   useEffect(() => {
     const iframe = iframeRef.current;
     const formElement = current.current.form.formRef.current;
@@ -146,6 +147,6 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
       reset();
       iframe.removeEventListener("load", reload);
     };
-  }, [debug, iframeRef, isLivePreviewing, previewWindowType, url, loadedURL]);
+  }, [debug, iframeRef, iframeElement, isLivePreviewing, previewWindowType, url, loadedURL]);
   return null;
 };

@@ -228,3 +228,54 @@ test("hover and repeated highlights restore inline positioning only after both t
     document.querySelector("[data-payload-block-hover], [data-payload-block-highlight]"),
   ).toBeNull();
 });
+
+test("final disposal and remount start a fresh handshake without replay or duplicate locates", async () => {
+  vi.useFakeTimers();
+  const { parent, message, element, dispose } = setupPeer();
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["late"] });
+  dispose();
+  dispose();
+  parent.postMessage.mockClear();
+  const remount = createPreviewBridge({ serverURL: "https://admin.example" });
+  disposers.push(remount);
+  const nested = createPreviewBridge({ serverURL: "https://admin.example" });
+  disposers.push(nested);
+  expect(parent.postMessage.mock.calls).toEqual([[ready, "https://admin.example"]]);
+  message({ ...ready, event: "locate", ids: ["one"] });
+  element.click();
+  message({ ...ready, ack: true });
+  expect(element.hasAttribute("data-payload-block-highlight")).toBe(false);
+  document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="late">Late</p>');
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(document.querySelector("[data-payload-block-highlight]")).toBeNull();
+  parent.postMessage.mockClear();
+  element.click();
+  expect(parent.postMessage.mock.calls).toEqual([
+    [{ ...ready, event: "locate", ids: ["one"] }, "https://admin.example"],
+  ]);
+  remount();
+  nested();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(document.head.querySelector("style")).toBeNull();
+});
+
+test("simultaneous startup and independent Admin restart acknowledge without duplicating interactions", () => {
+  const { parent, message, element } = setupPeer();
+  message(ready);
+  message({ ...ready, ack: true });
+  // A restarted Admin requests readiness from the still-connected frontend.
+  message(ready);
+  message({ ...ready, ack: true });
+  expect(parent.postMessage.mock.calls).toEqual([
+    [ready, "https://admin.example"],
+    [{ ...ready, ack: true }, "https://admin.example"],
+    [{ ...ready, ack: true }, "https://admin.example"],
+  ]);
+  parent.postMessage.mockClear();
+  element.click();
+  expect(parent.postMessage.mock.calls).toEqual([
+    [{ ...ready, event: "locate", ids: ["one"] }, "https://admin.example"],
+  ]);
+  expect(document.head.querySelectorAll("style")).toHaveLength(1);
+});

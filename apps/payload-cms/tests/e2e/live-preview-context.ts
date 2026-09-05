@@ -50,10 +50,12 @@ export const openLinkedPreview = async (page: Page, id: number, route = "/pages/
       .locator("html")
       .evaluate(
         (_element, next) => window.location.replace(next),
-        `${route}${path.split("/").at(-1)}`,
+        `/preview?slug=${path.split("/").at(-1)}&mode=${route === "/pages-client/" ? "client" : "server"}`,
       );
     await expect
-      .poll(() => preview.locator("html").evaluate(() => window.location.pathname))
+      .poll(() => preview.locator("html").evaluate(() => window.location.pathname), {
+        timeout: 15000,
+      })
       .toContain(route);
     await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "", {
       timeout: 15000,
@@ -94,4 +96,4 @@ export const seedNestedPage = async (payload: Awaited<ReturnType<typeof createE2
 };
 
 // Add future preview routes here so they inherit the same nested-linking scenarios.
-export const previewRoutes = ["/pages/"];
+export const previewRoutes = ["/pages/", "/pages-client/"];

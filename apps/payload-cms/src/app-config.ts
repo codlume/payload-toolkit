@@ -53,7 +53,10 @@ export const createAppConfig = ({
     db: sqliteAdapter({ client: { url: databaseURL } }),
     globals: [SiteSettings],
     plugins: [
-      livePreviewPlugin({ enabled: mode !== "disabled-in-memory" }),
+      livePreviewPlugin({
+        enabled: mode !== "disabled-in-memory",
+        debug: process.env.PAYLOAD_LIVE_PREVIEW_DEBUG === "true",
+      }),
       activityPlugin({ collections: ["media"], globals: ["site-settings"] }),
       blurHashPlugin({
         collections: ["media"],
