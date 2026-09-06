@@ -17,12 +17,6 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-env:
-  # The release automation (tools/release-tools) runs with bare Node: no
-  # install, no build. It is staged outside the workspace because
-  # actions/checkout empties the directory it checks the release commit into.
-  RELEASE_TOOLS: ${{ runner.temp }}/release-tools
-
 jobs:
   release:
     name: Release
@@ -49,8 +43,12 @@ jobs:
           node-version-file: automation/.node-version
           package-manager-cache: false
 
+      # The release automation runs with bare Node: no install, no build.
+      # Keep it outside the workspace that the release checkout empties.
       - name: Stage the release automation
-        run: mv automation/tools/release-tools "$RELEASE_TOOLS"
+        run: |
+          echo "RELEASE_TOOLS=$RUNNER_TEMP/release-tools" >> "$GITHUB_ENV"
+          mv automation/tools/release-tools "$RUNNER_TEMP/release-tools"
 
       # Existing release PRs may predate draft-by-default configuration. Move
       # one back to draft before release-please refreshes it so a maintainer
