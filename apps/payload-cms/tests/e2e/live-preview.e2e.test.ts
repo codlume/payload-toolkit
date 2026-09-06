@@ -171,8 +171,11 @@ for (const route of previewRoutes) {
   test(`${route} native updates preserve linking through autosave, draft save and publish`, async ({
     page,
   }) => {
+    // Trigger autosave deliberately so it cannot race Save Draft or Publish.
+    await page.clock.install();
     await login(page);
     const preview = await openLinkedPreview(page, seededPage.id, route);
+    await page.clock.pauseAt(Date.now() + 1000);
     const first = preview.locator(`[data-payload-block="${seededPage.layout![0]!.id}"]`);
     const field = page.locator("#field-layout__0__content");
     const { promise: saveGate, resolve: releaseSave } = Promise.withResolvers<void>();
@@ -189,6 +192,7 @@ for (const route of previewRoutes) {
     });
     try {
       await field.fill("Waiting for autosave");
+      await page.clock.runFor(1000);
       await expect.poll(() => saving).toBe(true);
       await expect(first).toHaveText(
         route === "/pages-client/" ? "Waiting for autosave" : "Draft block 1",
@@ -196,6 +200,7 @@ for (const route of previewRoutes) {
     } finally {
       releaseSave();
     }
+    await expect(page.getByRole("button", { name: "Publish changes", exact: true })).toBeEnabled();
     await expect(first).toHaveText("Waiting for autosave");
     await page.unroute("**/api/pages/**");
     await field.fill("Manually saved draft");
@@ -207,7 +212,10 @@ for (const route of previewRoutes) {
         !new URL(response.url()).searchParams.has("autosave"),
     );
     await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    // Advance Payload's autocomplete delay without reaching the autosave interval.
+    await page.clock.runFor(100);
     expect((await saved).ok()).toBe(true);
+    await expect(field).toBeEnabled();
     await expect(first).toHaveText("Manually saved draft");
     await first.click();
     await expect(page.locator("#layout-row-0 .blocks-field__row")).toHaveAttribute(
@@ -223,9 +231,10 @@ for (const route of previewRoutes) {
         !new URL(response.url()).searchParams.has("draft"),
     );
     await page.getByRole("button", { name: "Publish changes", exact: true }).click();
+    await page.clock.runFor(100);
     expect((await publishedResponse).ok()).toBe(true);
-    // The save response arrives before the server preview finishes refreshing.
-    await expect(first).toHaveText("Published from Admin", { timeout: 15000 });
+    await expect(field).toBeEnabled();
+    await expect(first).toHaveText("Published from Admin");
     await expect
       .poll(async () => {
         const published = await payload.findByID({ collection: "pages", id: seededPage.id });
