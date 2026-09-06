@@ -224,7 +224,8 @@ for (const route of previewRoutes) {
     );
     await page.getByRole("button", { name: "Publish changes", exact: true }).click();
     expect((await publishedResponse).ok()).toBe(true);
-    await expect(first).toHaveText("Published from Admin");
+    // The save response arrives before the server preview finishes refreshing.
+    await expect(first).toHaveText("Published from Admin", { timeout: 15000 });
     await expect
       .poll(async () => {
         const published = await payload.findByID({ collection: "pages", id: seededPage.id });
