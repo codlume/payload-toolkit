@@ -215,7 +215,15 @@ for (const route of previewRoutes) {
       "",
     );
     await field.fill("Published from Admin");
+    // Client preview renders unsaved edits before the database write completes.
+    const publishedResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PATCH" &&
+        new URL(response.url()).pathname === `/api/pages/${seededPage.id}` &&
+        !new URL(response.url()).searchParams.has("draft"),
+    );
     await page.getByRole("button", { name: "Publish changes", exact: true }).click();
+    expect((await publishedResponse).ok()).toBe(true);
     await expect(first).toHaveText("Published from Admin");
     await expect
       .poll(async () => {
@@ -236,6 +244,12 @@ for (const route of previewRoutes) {
     await login(page);
     const preview = await openLinkedPreview(page, seededPage.id, route);
     const { promise: saveGate, resolve: releaseSave } = Promise.withResolvers<void>();
+    const savedResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PATCH" &&
+        new URL(response.url()).pathname === `/api/pages/${seededPage.id}` &&
+        new URL(response.url()).searchParams.get("autosave") === "true",
+    );
     await page.route("**/api/pages/**", async (request) => {
       if (request.request().method() === "PATCH") await saveGate;
       await request.continue();
@@ -258,6 +272,7 @@ for (const route of previewRoutes) {
     } finally {
       releaseSave();
     }
+    expect((await savedResponse).ok()).toBe(true);
     const target = preview.getByText("New linked text", { exact: true });
     await expect(target).toBeVisible();
     await target.click();
