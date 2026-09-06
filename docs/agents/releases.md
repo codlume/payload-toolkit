@@ -69,6 +69,65 @@ nothing about the other.
 Never edit a plugin's `CHANGELOG.md` or version by hand. Do not edit
 `.release-please-manifest.json` by hand either. Release-please owns all three.
 
+## Publishing a new plugin for the first time
+
+Register the plugin directory in `release-please-config.json` and set public
+npm access in its `package.json`. The Release workflow discovers plugins under
+`packages/` automatically. Leave the release-please manifest and changelog to
+release-please.
+
+npm currently requires a package to exist before its trusted publisher can be
+configured. Use a temporary token for its first publication through the Release
+workflow. Merging the Release pull request remains the publication approval;
+do not publish a placeholder or run a local publish command.
+
+1. Sign in to npm with an account allowed to create packages under `@codlume`.
+   Open the profile menu, choose **Access Tokens**, and generate a granular token.
+2. Name it `payload-toolkit-first-publish`, set expiration to one day, and enable
+   **Bypass two-factor authentication** for unattended CI publishing. Under
+   **Packages and scopes**, choose **Read and write**, then select the `@codlume`
+   scope. Select the scope because the new package does not exist yet. Leave
+   **Organizations** at **No access**; that permission controls organization
+   administration, not package publication.
+3. Copy the token into a GitHub Actions repository secret named
+   `NPM_BOOTSTRAP_TOKEN` at
+   <https://github.com/codlume/payload-toolkit/settings/secrets/actions/new>.
+   Do not put the token in source files, issues, or chat.
+4. Merge the plugin pull request after its checks pass. It must include the
+   package registration and the workflow's bootstrap authentication support.
+5. Wait for the Release workflow to prepare its Release pull request and mark
+   it ready for review. Verify that the new plugin, version, and changelog are
+   included, then merge that Release pull request.
+6. Wait for the Release workflow's **Publish to npm** step to succeed. Verify the
+   published version against the Release pull request. For live preview, run:
+
+   ```sh
+   npm view @codlume/payload-live-preview version
+   ```
+
+7. On npm, open the new package's **Settings**, find **Trusted publishing**, and
+   add a GitHub Actions publisher with these values:
+
+   | Field                | Value                                       |
+   | -------------------- | ------------------------------------------- |
+   | Organization or user | `codlume`                                   |
+   | Repository           | `payload-toolkit`                           |
+   | Workflow filename    | `release.yml`                               |
+   | Environment          | Leave empty                                 |
+   | Allowed actions      | Enable direct publishing with `npm publish` |
+
+8. Delete the `NPM_BOOTSTRAP_TOKEN` GitHub secret and revoke the temporary token
+   in npm. Future releases use trusted publishing. The workflow's optional token
+   support can remain for the next new plugin; it contains no credential.
+
+If publishing fails because the token expired or lacks access, replace the
+secret and use **Re-run failed jobs** on the release run. Do not change the
+version or merge another Release pull request to retry authentication.
+
+References: [npm token setup](https://docs.npmjs.com/creating-and-viewing-access-tokens/),
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/), and
+[npm's first-publication limitation](https://github.com/npm/cli/issues/8544).
+
 ## Contributor attribution
 
 After release-please creates or refreshes the pending Release pull request,

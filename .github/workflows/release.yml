@@ -160,10 +160,21 @@ jobs:
       # step fails at the end if any failed. -r is required even for one
       # package: only pnpm's recursive publish skips versions already on npm and
       # skips private packages, which is what makes a re-run safe.
-      # --no-git-checks because HEAD is detached. No token: pnpm publishes with
-      # OIDC (id-token: write) and attaches provenance itself.
+      # --no-git-checks because HEAD is detached. pnpm prefers OIDC and attaches
+      # provenance itself. A temporary token lets a new package publish before
+      # its npm trusted publisher can be configured. See docs/agents/releases.md.
+      - name: Configure npm authentication
+        if: steps.build.outcome == 'success' && (steps.release-commit.outputs.pending == 'false' || steps.release-tagged.outcome == 'success')
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
       - name: Publish to npm
         if: steps.build.outcome == 'success' && (steps.release-commit.outputs.pending == 'false' || steps.release-tagged.outcome == 'success')
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: node "$RELEASE_TOOLS/src/cli.ts" publish
 
       - name: Log release-please outputs
