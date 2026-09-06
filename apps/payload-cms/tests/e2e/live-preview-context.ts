@@ -52,11 +52,10 @@ export const openLinkedPreview = async (page: Page, id: number, route = "/pages/
         (_element, next) => window.location.replace(next),
         `/preview?slug=${path.split("/").at(-1)}&mode=${route === "/pages-client/" ? "client" : "server"}`,
       );
-    await expect
-      .poll(() => preview.locator("html").evaluate(() => window.location.pathname), {
-        timeout: 15000,
-      })
-      .toContain(route);
+    await expect(async () => {
+      const loadedPath = await preview.locator("html").evaluate(() => window.location.pathname);
+      expect(loadedPath).toContain(route);
+    }).toPass({ timeout: 15000 });
     await expect(preview.locator("html")).toHaveAttribute("data-payload-linking", "", {
       timeout: 15000,
     });

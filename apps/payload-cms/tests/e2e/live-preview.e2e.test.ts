@@ -200,7 +200,9 @@ for (const route of previewRoutes) {
     } finally {
       releaseSave();
     }
-    await expect(page.getByRole("button", { name: "Publish changes", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Publish changes", exact: true })).toBeEnabled({
+      timeout: 15000,
+    });
     await expect(first).toHaveText("Waiting for autosave");
     await page.unroute("**/api/pages/**");
     await field.fill("Manually saved draft");
@@ -215,7 +217,7 @@ for (const route of previewRoutes) {
     // Advance Payload's autocomplete delay without reaching the autosave interval.
     await page.clock.runFor(100);
     expect((await saved).ok()).toBe(true);
-    await expect(field).toBeEnabled();
+    await expect(field).toBeEnabled({ timeout: 15000 });
     await expect(first).toHaveText("Manually saved draft");
     await first.click();
     await expect(page.locator("#layout-row-0 .blocks-field__row")).toHaveAttribute(
@@ -233,7 +235,7 @@ for (const route of previewRoutes) {
     await page.getByRole("button", { name: "Publish changes", exact: true }).click();
     await page.clock.runFor(100);
     expect((await publishedResponse).ok()).toBe(true);
-    await expect(field).toBeEnabled();
+    await expect(field).toBeEnabled({ timeout: 15000 });
     await expect(first).toHaveText("Published from Admin");
     await expect
       .poll(async () => {

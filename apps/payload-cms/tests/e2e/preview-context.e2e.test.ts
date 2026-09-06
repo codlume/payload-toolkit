@@ -51,6 +51,9 @@ for (const mode of ["server", "client"]) {
     });
     await login(page);
     await page.goto("/admin/globals/site-settings?locale=en");
+    await expect(
+      page.getByRole("button", { name: /^(Live Preview|Exit Live Preview)$/ }),
+    ).toBeVisible();
     const open = page.getByRole("button", { name: "Live Preview", exact: true });
     if (await open.isVisible()) await open.click();
     const preview = page.frameLocator("iframe");
