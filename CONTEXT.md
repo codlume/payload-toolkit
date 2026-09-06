@@ -52,6 +52,34 @@ _Avoid_: Any write, system change
 A change with no admin user behind it (scripts, scheduled jobs, other auth collections); it clears the recorded modifier instead of preserving a stale one.
 _Avoid_: Anonymous edit
 
+**Live Preview plugin**:
+The Payload plugin that links blocks in Payload Admin to the components rendering them in Payload's Live Preview, in both directions: selecting a component in the preview locates its block in the editor, and selecting a block in the editor locates its component in the preview.
+_Avoid_: Visual editor, preview replacement, Payload Live Preview
+
+**Linked block**:
+A block-field entry, at any nesting depth, rendered by one or more components carrying its block marker so the Live Preview plugin can locate it from either side.
+_Avoid_: Block, component, editable
+
+**Block marker**:
+The attributes the Live Preview plugin's frontend helper places on a component so the preview bridge can identify the linked block it renders: the block's row id, which alone identifies it, and its block type, shown in the hover label. It exists only in draft renders; published pages carry none.
+_Avoid_: Data attribute, editable tag
+
+**Block renderer**:
+The Live Preview plugin's frontend component that maps each block in a document to the developer's registered component for its type, attaching the block marker and passing down draft state and parent props, at any nesting depth.
+_Avoid_: Block switch, layout component, RenderBlocks
+
+**Preview bridge**:
+The message channel between Payload Admin and the previewed page that carries locate requests in both directions. It has no interaction listeners or styles until the bridge handshake completes, so it does nothing on pages not shown inside Payload Admin.
+_Avoid_: Storyblok bridge, postMessage layer, live preview
+
+**Bridge handshake**:
+The exchange in which Payload Admin and the previewed page each learn that the other side runs the Live Preview plugin. Either side may start it; until it completes neither side sends or acts on a locate request.
+_Avoid_: Payload ready message, connection, ping
+
+**Locate request**:
+A message across the preview bridge naming the linked block to reveal, together with its enclosing linked blocks from innermost to outermost. The receiving side reveals the first block it can find and ignores the rest; a request that matches nothing is dropped.
+_Avoid_: Selection event, click event, scroll message
+
 **Release**:
 A published version of one Payload plugin: its npm version, its git tag, its GitHub Release, and the matching entry in that plugin's changelog. Releases are per plugin; one plugin releasing says nothing about the other.
 _Avoid_: Deploy, version bump, lockstep release

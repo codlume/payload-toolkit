@@ -8,6 +8,8 @@ artifacts
 !packages/payload-activity/dist/**
 !packages/payload-blurhash/dist
 !packages/payload-blurhash/dist/**
+!packages/payload-live-preview/dist
+!packages/payload-live-preview/dist/**
 **/node_modules
 **/playwright-report
 **/test-results

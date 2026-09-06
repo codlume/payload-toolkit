@@ -22,6 +22,7 @@
   ],
   "packages": {
     "packages/payload-activity": {},
-    "packages/payload-blurhash": {}
+    "packages/payload-blurhash": {},
+    "packages/payload-live-preview": {}
   }
 }

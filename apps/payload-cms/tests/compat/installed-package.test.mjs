@@ -11,6 +11,7 @@ const applicationPackageJSON = JSON.parse(
 const verifiedPeerRanges = {
   "@codlume/payload-activity": { payload: ">=3.88.0 <4" },
   "@codlume/payload-blurhash": { "@payloadcms/ui": ">=3.88.0 <4", payload: ">=3.88.0 <4" },
+  "@codlume/payload-live-preview": { "@payloadcms/ui": ">=3.88.0 <4", payload: ">=3.88.0 <4" },
 };
 const pluginNames = Object.keys(verifiedPeerRanges);
 const installedPlugins = Object.fromEntries(

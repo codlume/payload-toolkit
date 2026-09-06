@@ -31,6 +31,7 @@ export default createAppConfig({
   },
   mediaBeforeChangeHooks: [],
   mode: configuredMode,
+  previewTestContext: process.env.PAYLOAD_LIVE_PREVIEW_TEST_CONTEXT === "true",
   storage: {
     bucket: process.env.PAYLOAD_S3_BUCKET ?? "payload-blurhash",
     config: {

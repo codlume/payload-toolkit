@@ -1,5 +1,6 @@
 import { activityPlugin } from "@codlume/payload-activity";
 import { blurHashPlugin, type BlurHashPluginOptions } from "@codlume/payload-blurhash";
+import { livePreviewPlugin } from "@codlume/payload-live-preview";
 import { sqliteAdapter } from "@payloadcms/db-sqlite";
 import { s3Storage, type S3StorageOptions } from "@payloadcms/storage-s3";
 import path from "node:path";
@@ -7,8 +8,10 @@ import { buildConfig, type CollectionBeforeChangeHook } from "payload";
 import sharp from "sharp";
 
 import { createMediaCollection } from "./collections/media.ts";
+import { Pages } from "./collections/pages.ts";
 import { Users } from "./collections/users.ts";
 import { SiteSettings } from "./globals/site-settings.ts";
+import { previewTestConfig } from "../tests/fixtures/live-preview-config.ts";
 
 type AppStorageOptions = {
   bucket: string;
@@ -28,6 +31,7 @@ type AppConfigOptions = {
   };
   mediaBeforeChangeHooks: CollectionBeforeChangeHook[];
   mode: "disabled-in-memory" | "enabled-in-memory" | "enabled-temporary-file";
+  previewTestContext?: boolean;
   storage: AppStorageOptions | false;
   uploadDirectory: string;
 };
@@ -38,19 +42,26 @@ export const createAppConfig = ({
   generatedFiles,
   mediaBeforeChangeHooks,
   mode,
+  previewTestContext = false,
   storage,
   uploadDirectory,
 }: AppConfigOptions) =>
   buildConfig({
+    ...(previewTestContext ? { localization: previewTestConfig.localization } : {}),
     admin: {
+      ...(previewTestContext ? { livePreview: previewTestConfig.livePreview } : {}),
       importMap: {
         importMapFile: generatedFiles.importMap,
       },
     },
-    collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users],
+    collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users, Pages],
     db: sqliteAdapter({ client: { url: databaseURL } }),
-    globals: [SiteSettings],
+    globals: [previewTestContext ? previewTestConfig.global : SiteSettings],
     plugins: [
+      livePreviewPlugin({
+        enabled: mode !== "disabled-in-memory",
+        debug: process.env.PAYLOAD_LIVE_PREVIEW_DEBUG === "true",
+      }),
       activityPlugin({ collections: ["media"], globals: ["site-settings"] }),
       blurHashPlugin({
         collections: ["media"],

@@ -103,7 +103,7 @@ try {
   exitCode = await new Promise((resolve, reject) => {
     testProcess = spawn(
       "pnpm",
-      ["exec", "playwright", "test", "--config", "playwright.config.ts"],
+      ["exec", "playwright", "test", "--config", "playwright.config.ts", ...process.argv.slice(2)],
       {
         cwd: appDirectory,
         env: {

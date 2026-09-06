@@ -107,7 +107,7 @@ test("package declares runtime and host relationships without bundling Sharp", a
   );
 });
 
-test("package owns the tarball gate exposed from the workspace root", async () => {
+test("package participates in the workspace tarball gate", async () => {
   const [packageJSON, rootPackageJSON] = await Promise.all([
     readPackageJSON(),
     readFile(rootPackageJSONPath, "utf8").then(JSON.parse),
@@ -120,7 +120,7 @@ test("package owns the tarball gate exposed from the workspace root", async () =
     },
     {
       package: "node tests/pack/run.mjs",
-      root: "pnpm --filter @codlume/payload-blurhash test:pack",
+      root: "pnpm --filter './packages/*' --if-present test:pack",
     },
   );
 });

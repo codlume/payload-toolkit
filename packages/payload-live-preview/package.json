@@ -1,0 +1,88 @@
+{
+  "name": "@codlume/payload-live-preview",
+  "version": "0.1.0",
+  "description": "Link Payload blocks with their Live Preview components.",
+  "keywords": [
+    "blocks",
+    "live-preview",
+    "payload"
+  ],
+  "homepage": "https://github.com/codlume/payload-toolkit/tree/main/packages/payload-live-preview#readme",
+  "bugs": {
+    "url": "https://github.com/codlume/payload-toolkit/issues"
+  },
+  "license": "MIT",
+  "author": "Codlume",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codlume/payload-toolkit.git",
+    "directory": "packages/payload-live-preview"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./core": {
+      "types": "./dist/core.d.mts",
+      "import": "./dist/core.mjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.mts",
+      "import": "./dist/react.mjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.mts",
+      "import": "./dist/client.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "test:build": "pnpm build && node --test tests/build/package-contract.test.mjs",
+    "test:pack": "node --test tests/pack/run.mjs",
+    "test:unit": "pnpm build && vitest run tests/unit"
+  },
+  "devDependencies": {
+    "@payloadcms/db-sqlite": "3.88.0",
+    "@payloadcms/ui": "3.88.0",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "26.1.0",
+    "payload": "3.88.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "peerDependencies": {
+    "@payloadcms/ui": ">=3.88.0 <4",
+    "payload": ">=3.88.0 <4",
+    "react": "^19.0.1 || ^19.1.2 || ^19.2.1"
+  },
+  "peerDependenciesMeta": {
+    "payload": {
+      "optional": true
+    },
+    "@payloadcms/ui": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.12.0 <23 || >=24.0.0 <25"
+  }
+}
