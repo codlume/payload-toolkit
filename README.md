@@ -13,6 +13,11 @@ development and testing.
 - [`@codlume/payload-blurhash`](https://www.npmjs.com/package/@codlume/payload-blurhash)
   generates and previews BlurHash placeholders for uploaded images.
   [Documentation](packages/payload-blurhash/)
+- [`@codlume/payload-live-preview`](https://www.npmjs.com/package/@codlume/payload-live-preview)
+  links blocks in Payload Admin with their rendered components in native Live
+  Preview. Click a preview component to reveal its Admin row, or focus an Admin
+  field to reveal its component.
+  [Documentation](packages/payload-live-preview/)
 
 ## Contributing
 
