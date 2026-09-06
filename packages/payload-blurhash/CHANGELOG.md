@@ -5,7 +5,7 @@
 
 ### Features
 
-* **payload-live-preview:** link Payload blocks with preview components ([#100](https://github.com/codlume/payload-toolkit/issues/100)) ([e8dedbd](https://github.com/codlume/payload-toolkit/commit/e8dedbd76d1418909555332051c3e3145f514604))
+* **payload-live-preview:** link Payload blocks with preview components ([#100](https://github.com/codlume/payload-toolkit/issues/100)) ([e8dedbd](https://github.com/codlume/payload-toolkit/commit/e8dedbd76d1418909555332051c3e3145f514604)) by @hadrysm
 
 ## [0.1.2](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.1...payload-blurhash-v0.1.2) (2026-09-01)
 
