@@ -55,7 +55,11 @@ export const createAppConfig = ({
       },
     },
     collections: [createMediaCollection(uploadDirectory, mediaBeforeChangeHooks), Users, Pages],
-    db: sqliteAdapter({ client: { url: databaseURL } }),
+    db: sqliteAdapter({
+      // The dev server and E2E seed process share this database.
+      busyTimeout: 5000,
+      client: { url: databaseURL },
+    }),
     globals: [previewTestContext ? previewTestConfig.global : SiteSettings],
     plugins: [
       livePreviewPlugin({
