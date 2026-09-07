@@ -25,12 +25,20 @@ afterAll(async () => {
 test.each(["read", "write", "connect"] as const)(
   "E2E %s waits for another connection's brief write lock",
   async (operation) => {
-    const writer = fork(new URL("../fixtures/sqlite-write-lock.mjs", import.meta.url), [
-      path.join(directory, "enabled", "payload.db"),
-    ]);
+    const writer = fork(
+      new URL("../fixtures/sqlite-write-lock.mjs", import.meta.url),
+      [path.join(directory, "enabled", "payload.db")],
+      { execArgv: ["--experimental-sqlite"] },
+    );
     const exited = once(writer, "exit");
     try {
-      await once(writer, "message");
+      const [message] = await Promise.race([
+        once(writer, "message"),
+        exited.then(([code, signal]) => {
+          throw new Error(`SQLite lock process exited before locking: ${signal ?? code}`);
+        }),
+      ]);
+      expect(message).toBe("locked");
       if (operation === "read") {
         await expect(seedAdminUser(payload)).resolves.toMatchObject({
           email: "preview@example.com",
@@ -54,7 +62,7 @@ test.each(["read", "write", "connect"] as const)(
         }
       }
     } finally {
-      await exited;
+      await expect(exited).resolves.toEqual([0, null]);
     }
   },
 );
