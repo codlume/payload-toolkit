@@ -48,6 +48,28 @@ for (const route of previewRoutes) {
     await expect(last).not.toHaveAttribute("data-payload-block-highlight", "");
   });
 
+  test(`${route} an Admin field relocates its block after a preview click selects another`, async ({
+    page,
+  }) => {
+    await login(page);
+    const preview = await openLinkedPreview(page, seededPage.id, route);
+    const lastField = page.locator("#field-layout__5__content");
+    const last = preview.locator(`[data-payload-block="${seededPage.layout![5]!.id}"]`);
+    await lastField.focus();
+    await expect(last).toHaveAttribute("data-payload-block-highlight", "");
+    await expect(last).not.toHaveAttribute("data-payload-block-highlight", "", { timeout: 3000 });
+    await preview.locator(`[data-payload-block="${seededPage.layout![0]!.id}"]`).click();
+    await expect(page.locator("#layout-row-0 .blocks-field__row")).toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+    await expect(last).not.toBeInViewport();
+    await lastField.click();
+    await expect(lastField).toBeFocused();
+    await expect(last).toBeInViewport();
+    await expect(last).toHaveAttribute("data-payload-block-highlight", "");
+  });
+
   test(`${route} public pages omit markers and an unauthenticated preview entry rejects access`, async ({
     page,
     request,
