@@ -40,7 +40,7 @@ type GenerationOutcome =
         | "type_mismatch";
       status: "failed";
     }
-  | { status: "generated"; value: string };
+  | { height: number; status: "generated"; value: string; width: number };
 
 type GenerationInput = {
   input: Buffer;
@@ -242,7 +242,13 @@ const createGenerator = ({
     }
 
     try {
+      const swapsDimensions =
+        metadata.orientation !== undefined &&
+        metadata.orientation >= 5 &&
+        metadata.orientation <= 8;
+
       return {
+        height: Number(swapsDimensions ? width : height),
         status: "generated",
         value: encode(
           new Uint8ClampedArray(pixels),
@@ -251,6 +257,7 @@ const createGenerator = ({
           COMPONENTS_X,
           COMPONENTS_Y,
         ),
+        width: Number(swapsDimensions ? height : width),
       };
     } catch {
       return { code: "encode_failed", status: "failed" };
@@ -497,6 +504,11 @@ export const createBlurHashGeneration = ({
         });
 
         if (outcome.status === "generated") {
+          if (args.data) {
+            args.data.width = outcome.width;
+            args.data.height = outcome.height;
+          }
+
           finishDiagnostics({ status: "generated" });
           return outcome.value;
         }
