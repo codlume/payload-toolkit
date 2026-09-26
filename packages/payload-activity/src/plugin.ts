@@ -315,7 +315,7 @@ const createAttributionHook =
   ): FieldHook =>
   ({ collection, global, operation, previousValue, req }) => {
     if (!enabled) {
-      return previousValue ?? null;
+      return operation === "create" ? null : (previousValue ?? null);
     }
 
     const user = req.user;
