@@ -273,7 +273,11 @@ const inspectPng = (input: Buffer): ImageInputInspection => {
   return { code: "malformed_container", status: "failed" };
 };
 
-export const inspectImageInput = (input: Buffer, mimeType: unknown): ImageInputInspection => {
+export const inspectImageInput = (input: Buffer, mimeTypeValue: unknown): ImageInputInspection => {
+  const mimeType =
+    typeof mimeTypeValue === "string"
+      ? mimeTypeValue.split(";", 1)[0]?.trim().toLowerCase()
+      : undefined;
   const expectedFormat =
     mimeType === "image/avif"
       ? "avif"
