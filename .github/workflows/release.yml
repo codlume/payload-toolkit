@@ -90,7 +90,6 @@ jobs:
       # never runs from it: the command checks out and updates the exact
       # release PR head in an isolated temporary working copy.
       - name: Prepare the release PR
-        if: steps.release-commit.outputs.sha == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: node "$RELEASE_TOOLS/src/cli.ts" prepare-pull-request
