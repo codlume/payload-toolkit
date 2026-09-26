@@ -118,14 +118,23 @@ describe("JPEG and PNG inputs", () => {
     expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
   });
 
-  test.each(["image/jpg", "IMAGE/JPEG", "image/jpeg; charset=binary"])(
-    "the non-exact JPEG MIME %s is not eligible",
-    async (mimetype) => {
-      const media = await uploadFixture("jpeg-baseline.jpg", mimetype);
+  test.each([
+    "image/JPEG",
+    " image/jpeg",
+    "image/jpeg ",
+    "image/jpeg; charset=binary",
+    " IMAGE/JPEG ; charset=binary",
+  ])("the normalized JPEG MIME %s is eligible", async (mimetype) => {
+    const media = await uploadFixture("jpeg-baseline.jpg", mimetype);
 
-      expect(media.blurHash ?? null).toBeNull();
-    },
-  );
+    expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
+  });
+
+  test("the unsupported image/jpg MIME alias is not eligible", async () => {
+    const media = await uploadFixture("jpeg-baseline.jpg", "image/jpg");
+
+    expect(media.blurHash).toBeNull();
+  });
 
   test.each([
     ["JPEG bytes declared as PNG", "jpeg-baseline.jpg", "image/png"],

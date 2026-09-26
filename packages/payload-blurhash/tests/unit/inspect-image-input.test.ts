@@ -44,6 +44,26 @@ describe("inspectImageInput", () => {
   });
 
   test.each([
+    ["jpeg-baseline.jpg", " IMAGE/JPEG ; charset=binary", "jpeg"],
+    ["png-opaque.png", " IMAGE/PNG ; charset=binary", "png"],
+    ["webp-lossy.webp", " IMAGE/WEBP ; charset=binary", "webp"],
+    ["avif-8-bit.avif", " IMAGE/AVIF ; charset=binary", "avif"],
+  ])("normalizes the declared MIME for %s", async (fixture, mime, format) => {
+    const input = await readFile(new URL(fixture, fixtureDirectory));
+
+    expect(inspectImageInput(input, mime)).toEqual({ format, status: "eligible" });
+  });
+
+  test("normalization still rejects disagreement between MIME and content", async () => {
+    const input = await readFile(new URL("jpeg-baseline.jpg", fixtureDirectory));
+
+    expect(inspectImageInput(input, " IMAGE/PNG ; charset=binary")).toEqual({
+      code: "type_mismatch",
+      status: "failed",
+    });
+  });
+
+  test.each([
     ["png-opaque.png", "image/jpeg"],
     ["webp-lossy.webp", "image/avif"],
     ["avif-8-bit.avif", "image/webp"],
