@@ -10,7 +10,7 @@ import type {
   UploadCollectionSlug,
 } from "payload";
 
-import { createBlurHashGeneration } from "./blur-hash-generation.ts";
+import { createBlurHashGeneration, trackBlurHashOperation } from "./blur-hash-generation.ts";
 
 export type BlurHashPluginOptions = {
   alphaBackground?: { b: number; g: number; r: number };
@@ -364,6 +364,10 @@ const addBlurHashField = (
 ): CollectionConfig => ({
   ...collection,
   fields: [...collection.fields, createBlurHashField(options, lifecycleHook)],
+  hooks: {
+    ...collection.hooks,
+    beforeOperation: [...(collection.hooks?.beforeOperation ?? []), trackBlurHashOperation],
+  },
 });
 
 export const blurHashPlugin = (options: BlurHashPluginOptions): Plugin => {
