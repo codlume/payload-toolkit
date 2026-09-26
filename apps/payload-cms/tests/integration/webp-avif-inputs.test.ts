@@ -164,10 +164,10 @@ describe("WebP and AVIF inputs", () => {
   test.each([
     ["image/webp; charset=binary", "webp-lossy.webp"],
     ["IMAGE/AVIF", "avif-8-bit.avif"],
-  ])("the non-exact MIME %s is not eligible", async (mime, fixture) => {
+  ])("the normalized MIME %s is eligible", async (mime, fixture) => {
     const media = await upload(fixture, mime);
 
-    expect(media.blurHash ?? null).toBeNull();
+    expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
   });
 
   test("an animated WebP replacement clears an existing value", async () => {
