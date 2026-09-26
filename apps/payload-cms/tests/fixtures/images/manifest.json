@@ -135,16 +135,16 @@
       "sha256": "b1a6a3491da6eb94822da9b337ab9d8160aca666beb3520e07ff0cded5cffe94"
     },
     {
-      "bytes": 603,
+      "bytes": 580,
       "dimensions": {
         "height": 24,
         "width": 40
       },
       "expected": "malformed_container",
-      "facts": ["decodable JPEG", "bytes after EOI"],
+      "facts": ["JPEG signature", "invalid segment length"],
       "mime": "image/jpeg",
       "name": "jpeg-malformed.jpg",
-      "sha256": "9b59cf2f4d9bda86b8d4271760cd6fee54e0f1bec2235bf530f36f9ff0470b92"
+      "sha256": "59582b92e1b84299a2a589a09f63a0c1338f57e8463c9013b3295f70d18dd559"
     },
     {
       "bytes": 580,
@@ -334,6 +334,18 @@
       "mime": "image/jpeg",
       "name": "jpeg-truncated.jpg",
       "sha256": "420bc9fbc7a5be58914a6018bd3e2bd4f48a1378c95146ed5dcbfe7b840cb6d7"
+    },
+    {
+      "bytes": 2912,
+      "dimensions": {
+        "height": 24,
+        "width": 40
+      },
+      "expected": "eligible",
+      "facts": ["primary SDR JPEG", "Ultra HDR gain map after EOI"],
+      "mime": "image/jpeg",
+      "name": "jpeg-ultra-hdr.jpg",
+      "sha256": "0b2c058e06092b5afa560e12045bcecd50da6b5087181600b28f48f2d6b79129"
     },
     {
       "bytes": 170,

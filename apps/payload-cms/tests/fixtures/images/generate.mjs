@@ -281,6 +281,12 @@ await addFixture(
   "eligible",
 );
 await addFixture(
+  "jpeg-ultra-hdr.jpg",
+  await sharp(baselineJpeg).withGainMap().jpeg().toBuffer(),
+  ["primary SDR JPEG", "Ultra HDR gain map after EOI"],
+  "eligible",
+);
+await addFixture(
   "jpeg-progressive.jpg",
   await rgbInput()
     .jpeg({ ...jpegOptions, progressive: true })
@@ -344,8 +350,8 @@ await addFixture(
 );
 await addFixture(
   "jpeg-malformed.jpg",
-  Buffer.concat([baselineJpeg, Buffer.from("unexpected trailing bytes")]),
-  ["decodable JPEG", "bytes after EOI"],
+  Buffer.concat([baselineJpeg.subarray(0, -2), Buffer.from([0xff, 0xdb, 0, 1])]),
+  ["JPEG signature", "invalid segment length"],
   "malformed_container",
 );
 
