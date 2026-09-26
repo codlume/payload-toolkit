@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "vitest";
 
 import type {
@@ -8,6 +9,7 @@ import type {
   WorkingCopy,
 } from "../../src/ports.ts";
 import { prepareReleasePullRequest } from "../../src/prepare-release-pull-request.ts";
+import { findReleaseCommit, holdReleasePullRequestDraft } from "../../src/release-workflow.ts";
 
 const HEAD = "1111111111111111111111111111111111111111";
 const CHANGE_SHA = "2222222222222222222222222222222222222222";
@@ -498,3 +500,46 @@ test("returns a concurrently changed Release pull request to draft after readine
   );
   assert.equal(system.events.at(-1), "draft");
 });
+
+test.each([1, 2])(
+  "the Release workflow leaves the open pull request ready on attempt %i",
+  async (runAttempt) => {
+    const { events, github, workingCopies } = preparedSystem();
+    github.findOpenReleasePullRequests = async () => [
+      releasePullRequest({ isDraft: events.includes("draft") && !events.includes("ready") }),
+    ];
+    github.findNewestMergedReleasePullRequest = async () => ({
+      labels: ["autorelease: tagged"],
+      mergeCommitSha: HEAD,
+      number: 7,
+    });
+
+    await holdReleasePullRequestDraft({ repository: "acme/toolkit" }, { github });
+    const { outputs } = await findReleaseCommit(
+      { repository: "acme/toolkit", runAttempt },
+      { github },
+    );
+    assert.equal(outputs.sha, runAttempt === 1 ? "" : HEAD);
+
+    const workflow = await readFile(
+      new URL("../../../../.github/workflows/release.yml", import.meta.url),
+      "utf8",
+    );
+    const preparation = workflow
+      .split("      - name: Prepare the release PR\n")[1]
+      ?.split("\n      - name:")[0];
+    assert.ok(preparation, "The Release workflow has a preparation step.");
+    const condition = preparation.match(/^        if: (.+)$/m)?.[1];
+    assert.ok(condition === undefined || condition === "steps.release-commit.outputs.sha == ''");
+    if (condition === undefined || outputs.sha === "") {
+      await prepareReleasePullRequest({ repository: "acme/toolkit" }, { github, workingCopies });
+    }
+
+    const [pullRequest] = await github.findOpenReleasePullRequests("acme/toolkit");
+    assert.equal(
+      pullRequest?.isDraft,
+      false,
+      "A release retry must leave the open Release pull request ready.",
+    );
+  },
+);
