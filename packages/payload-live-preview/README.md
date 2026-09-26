@@ -53,7 +53,7 @@ return (
 
 The client alternative needs `@payloadcms/live-preview-react` in the frontend in addition to the plugin's React peer. Payload owns document streaming in both modes. Linking uses row ids and never streams document content itself. In server preview, a new block can only be located once save or autosave renders it; an available ancestor can be located sooner, and missing targets expire after two seconds.
 
-Both peers reconnect through the plugin's ready handshake. Admin cancels pending selections and clears selection deduplication when the preview URL or iframe changes, on iframe load, and on close/reopen. A preview click also clears it, so the next Admin selection reveals its block even when that row was selected before. Disconnected locates are dropped without replay. Multiple frontend bridge registrations share one connection; dispose each registration on unmount. Final disposal removes interaction listeners, target waits, styles, temporary attributes, and positioning. A later mount starts a fresh handshake.
+Both peers reconnect through the plugin's ready handshake. Admin cancels pending selections and clears selection deduplication when the preview URL or iframe changes, on iframe load, and on close/reopen. A preview click also clears selection deduplication, so the next Admin selection reveals its block even when that row was selected before. Disconnected locates are dropped without replay. Multiple frontend bridge registrations share one connection; dispose each registration on unmount. Final disposal removes interaction listeners, target waits, styles, temporary attributes, and positioning. A later mount starts a fresh handshake.
 
 ## Install in your application
 
