@@ -99,6 +99,10 @@ within 32 × 32 pixels while preserving aspect ratio. Malformed or mismatched
 containers, unsupported types, APNG, animated WebP, AVIF sequences, multi-image
 AVIF, and inputs outside the resource limits produce no value.
 
+After successful generation, the document's `width` and `height` describe the
+full image after EXIF orientation. The Admin preview uses these dimensions to
+preserve the displayed image's aspect ratio.
+
 ## Resource limits
 
 The defaults bound compressed input to 25 MiB, decoded input to 40 million
