@@ -4,6 +4,8 @@ import type {
   Config,
   Field,
   FieldHook,
+  GlobalAfterChangeHook,
+  GlobalConfig,
   GlobalSlug,
   Plugin,
   RelationshipField,
@@ -312,8 +314,17 @@ const createAttributionHook =
     enabled: boolean,
     adminUserCollection: CollectionSlug,
     diagnostics: ReturnType<typeof createActivityDiagnostics>,
-  ): FieldHook =>
-  ({ collection, global, operation, previousValue, req }) => {
+  ) =>
+  ({
+    collection,
+    global,
+    operation,
+    previousValue,
+    req,
+  }: Pick<
+    Parameters<FieldHook>[0],
+    "collection" | "global" | "operation" | "previousValue" | "req"
+  >) => {
     if (!enabled) {
       return previousValue ?? null;
     }
@@ -342,6 +353,45 @@ const createAttributionHook =
     });
     return null;
   };
+
+const createRestoreAttributionHook = (
+  { adminUserCollection, enabled, fieldName }: ResolvedOptions,
+  diagnostics: ReturnType<typeof createActivityDiagnostics>,
+): GlobalAfterChangeHook => {
+  const resolveAttribution = createAttributionHook(enabled, adminUserCollection, diagnostics);
+
+  return async ({ data, doc, global, req }) => {
+    // Global restores pass the saved result as both data and doc, unlike ordinary writes.
+    if (!enabled || !req.context.isRestoringVersion || data !== doc) {
+      return doc;
+    }
+
+    const value = resolveAttribution({
+      collection: null,
+      global,
+      operation: "update",
+      req,
+    });
+    await req.payload.db.updateGlobal({
+      data: { [fieldName]: value },
+      req,
+      slug: global.slug,
+    });
+
+    // Payload returns the new version record when restoring an existing global.
+    if (doc.globalType !== global.slug && doc.version && typeof doc.version === "object") {
+      await req.payload.db.updateGlobalVersion({
+        global: global.slug,
+        id: doc.id,
+        req,
+        versionData: { version: { [fieldName]: value } },
+      });
+      return { ...doc, version: { ...doc.version, [fieldName]: value } };
+    }
+
+    return { ...doc, [fieldName]: value };
+  };
+};
 
 const createActivityField = (
   { adminUserCollection, enabled, fieldName }: ResolvedOptions,
@@ -394,15 +444,27 @@ export const activityPlugin = (options: ActivityPluginOptions): Plugin => {
 
     const diagnostics = createActivityDiagnostics(resolvedOptions.debug);
     const activityField = createActivityField(resolvedOptions, diagnostics);
+    const transformGlobal = createTargetTransformer<GlobalConfig>(
+      resolvedOptions.globals,
+      activityField,
+    );
+    const restoreAttribution = createRestoreAttributionHook(resolvedOptions, diagnostics);
 
     return {
       ...config,
       collections: (config.collections ?? []).map(
         createTargetTransformer(resolvedOptions.collections, activityField),
       ),
-      globals: (config.globals ?? []).map(
-        createTargetTransformer(resolvedOptions.globals, activityField),
-      ),
+      globals: (config.globals ?? []).map((global) => {
+        const transformed = transformGlobal(global);
+        if (transformed !== global) {
+          transformed.hooks = {
+            ...global.hooks,
+            afterChange: [restoreAttribution, ...(global.hooks?.afterChange ?? [])],
+          };
+        }
+        return transformed;
+      }),
     };
   };
 
