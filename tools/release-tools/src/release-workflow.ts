@@ -94,7 +94,7 @@ export async function verifyReleasePullRequestTagged(
 }
 
 /**
- * Publishes every package one at a time so one failure does not block the
+ * Publishes each package in this release so one failure does not block the
  * others, then fails if any did. pnpm skips versions already on npm and
  * private packages, which is what makes a re-run safe.
  */

@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
 
 import {
@@ -6,6 +10,7 @@ import {
   createWorkingCopiesAdapter,
   createWorkspaceAdapter,
 } from "../../src/adapters.ts";
+import { publishPackages } from "../../src/release-workflow.ts";
 
 const HEAD = "1111111111111111111111111111111111111111";
 const PREPARED_HEAD = "2222222222222222222222222222222222222222";
@@ -264,17 +269,19 @@ test("reads a pull request's label names", async () => {
   assert.deepEqual(await github.pullRequestLabels("acme/toolkit", 7), ["autorelease: pending"]);
 });
 
-test("lists package names from the packages directories only, in order", async () => {
+test("lists released package names in order", async () => {
   const workspace = createWorkspaceAdapter({
     cwd: "/release",
+    async execFile(_command, args) {
+      return {
+        stdout: JSON.stringify(
+          args[1] === "HEAD:.release-please-manifest.json"
+            ? { "packages/payload-blurhash": "0.1.4", "packages/payload-activity": "0.1.1" }
+            : { "packages/payload-blurhash": "0.1.3", "packages/payload-activity": "0.1.0" },
+        ),
+      };
+    },
     fs: {
-      async readdir() {
-        return [
-          { isDirectory: () => true, name: "payload-blurhash" },
-          { isDirectory: () => false, name: ".DS_Store" },
-          { isDirectory: () => true, name: "payload-activity" },
-        ];
-      },
       async readFile(path) {
         return JSON.stringify({ name: `@codlume/${path.split("/").at(-2)}` });
       },
@@ -314,3 +321,95 @@ test("publishes through pnpm's recursive publish and reports a non-zero exit", a
     },
   );
 });
+
+test("a release publishes only versions changed from its first parent", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "release-publish-test-"));
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
+  const manifest = (versions: Record<string, string>) =>
+    writeFile(join(directory, ".release-please-manifest.json"), JSON.stringify(versions));
+  const commit = (message: string) => {
+    git("add", ".");
+    git(
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.test",
+      "commit",
+      "--quiet",
+      "-m",
+      message,
+    );
+  };
+
+  try {
+    git("init", "--quiet");
+    await Promise.all(
+      ["activity", "blurhash", "new-plugin", "unregistered"].map(async (name) => {
+        const path = join(directory, "packages", name);
+        await mkdir(path, { recursive: true });
+        await writeFile(join(path, "package.json"), JSON.stringify({ name: `@acme/${name}` }));
+      }),
+    );
+    await manifest({
+      "packages/activity": "0.1.0",
+      "packages/blurhash": "0.1.4",
+      "packages/removed": "0.1.0",
+    });
+    commit("Skipped blurhash release");
+    await manifest({
+      "packages/activity": "0.1.1",
+      "packages/blurhash": "0.1.4",
+      "packages/new-plugin": "0.1.0",
+    });
+    commit("Release activity and the new plugin");
+
+    const attempted: string[] = [];
+    const workspace = createWorkspaceAdapter({
+      cwd: directory,
+      run: async (_command, args) => {
+        attempted.push(args[args.indexOf("--filter") + 1] ?? "");
+        return 0;
+      },
+    });
+    await publishPackages({ log() {}, workspace });
+    assert.deepEqual(attempted, ["@acme/activity", "@acme/new-plugin"]);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test("missing release history fails before attempting publication", async () => {
+  const attempted: string[][] = [];
+  const workspace = createWorkspaceAdapter({
+    async execFile() {
+      throw new Error("Release parent is unavailable.");
+    },
+    run: async (_command, args) => {
+      attempted.push(args);
+      return 0;
+    },
+  });
+
+  await assert.rejects(publishPackages({ log() {}, workspace }), /Release parent is unavailable/);
+  assert.deepEqual(attempted, []);
+});
+
+test.each(["null", "[]", '{"packages/activity": 42}'])(
+  "an invalid release manifest fails before publication: %s",
+  async (contents) => {
+    const attempted: string[][] = [];
+    const workspace = createWorkspaceAdapter({
+      async execFile() {
+        return { stdout: contents };
+      },
+      run: async (_command, args) => {
+        attempted.push(args);
+        return 0;
+      },
+    });
+
+    await assert.rejects(publishPackages({ log() {}, workspace }), /release manifest/);
+    assert.deepEqual(attempted, []);
+  },
+);
