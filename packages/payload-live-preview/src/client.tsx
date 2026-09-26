@@ -90,6 +90,7 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
         },
         onLocate(ids) {
           visuals?.cancelReveal();
+          selected = undefined;
           const visited = new Set<string>();
           let fallbackLogged = false;
           work.locate(ids, () => {
