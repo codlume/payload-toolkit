@@ -84,7 +84,7 @@ const isValidJpeg = (input: Buffer) => {
     }
 
     if (marker === 0xd9) {
-      return foundFrame && foundScan && offset === input.length;
+      return foundFrame && foundScan;
     }
 
     if (marker === 0xd8 || marker === 0x00) {
