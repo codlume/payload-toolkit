@@ -226,9 +226,11 @@ const invokeHook = (
 ) =>
   Reflect.apply(hook, undefined, [
     {
+      context: {},
       data,
       previousValue,
       req: {
+        context: {},
         file,
         payload: {
           config: sharp ? { sharp } : {},

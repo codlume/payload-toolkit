@@ -84,6 +84,8 @@ upload stores its new 28-character BlurHash. Metadata-only updates preserve the
 current value. Replacements that are skipped or fail, and removal of the current
 file, store `null` so a stale placeholder never describes different or absent
 pixels. Placeholder failure is fail-open and does not reject the media write.
+Restoring an upload version restores that version's stored BlurHash, including
+`null` when the version has no placeholder.
 
 ## Supported media
 

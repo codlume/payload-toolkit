@@ -2,7 +2,12 @@ import { readFile, stat } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 
 import { encode } from "blurhash";
-import type { FieldHook, PayloadLogger, SharpDependency } from "payload";
+import type {
+  CollectionBeforeOperationHook,
+  FieldHook,
+  PayloadLogger,
+  SharpDependency,
+} from "payload";
 
 import { inspectImageInput } from "./inspect-image-input.ts";
 
@@ -14,6 +19,13 @@ const DECODE_FAILED = { code: "decode_failed", status: "failed" } as const;
 const DECODE_TIMEOUT = { code: "decode_timeout", status: "failed" } as const;
 const MAX_MIME_TYPE_LENGTH = 128;
 const PLUGIN_NAME = "blurhash";
+const RESTORING_VERSION = Symbol("blurhash.restoringVersion");
+
+export const trackBlurHashOperation: CollectionBeforeOperationHook = ({ operation, req }) => {
+  if (["create", "update", "autosave", "restoreVersion"].includes(operation)) {
+    req.context = { ...req.context, [RESTORING_VERSION]: operation === "restoreVersion" };
+  }
+};
 
 type GenerationOutcome =
   | { code: "animated_input" | "not_eligible"; status: "skipped" }
@@ -449,6 +461,10 @@ export const createBlurHashGeneration = ({
       }
 
       if (!args.req.file) {
+        if (Reflect.get(args.context, RESTORING_VERSION) === true) {
+          return args.value ?? null;
+        }
+
         return args.previousValue ?? null;
       }
 
