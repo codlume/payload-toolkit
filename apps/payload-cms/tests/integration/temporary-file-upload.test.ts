@@ -64,45 +64,56 @@ describe("temporary-file uploads", () => {
     await rm(testDirectory, { force: true, recursive: true });
   });
 
-  test("a multipart upload hashes Payload's resized and reformatted temporary-file bytes", async () => {
-    const upload = async (data: Buffer, name: string, type: string) => {
-      const body = new FormData();
-      body.set("_payload", JSON.stringify({}));
-      body.set("file", new File([new Uint8Array(data)], name, { type }));
+  test.each(["jpeg-baseline.jpg", "jpeg-orientation-6.jpg"])(
+    "a multipart %s upload hashes Payload's resized and reformatted temporary-file bytes",
+    async (fixtureName) => {
+      const upload = async (data: Buffer, name: string, type: string) => {
+        const body = new FormData();
+        body.set("_payload", JSON.stringify({}));
+        body.set("file", new File([new Uint8Array(data)], name, { type }));
 
-      const response = await handleEndpoints({
-        config: payload.config,
-        request: new Request("http://localhost/api/media", {
-          body,
-          headers: { authorization: `JWT ${authToken}` },
-          method: "POST",
-        }),
+        const response = await handleEndpoints({
+          config: payload.config,
+          request: new Request("http://localhost/api/media", {
+            body,
+            headers: { authorization: `JWT ${authToken}` },
+            method: "POST",
+          }),
+        });
+
+        return readCreatedMedia(response);
+      };
+      const source = await readImageFixture(fixtureName);
+      const transformedUpload = await upload(source, "temporary-file.jpg", "image/jpeg");
+      const stored = await readStoredMedia(payload.config, transformedUpload.filename);
+      const storedMetadata = await sharp(stored).metadata();
+      const repeatedUpload = await upload(stored, "stored.png", "image/png");
+      const {
+        docs: [document],
+      } = await payload.find({
+        collection: "media",
+        where: { filename: { equals: transformedUpload.filename } },
       });
 
-      return readCreatedMedia(response);
-    };
-    const source = await readImageFixture("jpeg-baseline.jpg");
-    const transformedUpload = await upload(source, "temporary-file.jpg", "image/jpeg");
-    const stored = await readStoredMedia(payload.config, transformedUpload.filename);
-    const storedMetadata = await sharp(stored).metadata();
-    const repeatedUpload = await upload(stored, "stored.png", "image/png");
-
-    expect({
-      decodedBytes: decode(transformedUpload.blurHash, 4, 3).length,
-      dimensions: `${storedMetadata.width}x${storedMetadata.height}`,
-      hashMatchesStoredPixels: transformedUpload.blurHash === repeatedUpload.blurHash,
-      mimeType: transformedUpload.mimeType,
-      sourceWasTransformed: !stored.equals(source),
-      statuses: [transformedUpload.status, repeatedUpload.status],
-      validation: isBlurhashValid(transformedUpload.blurHash),
-    }).toEqual({
-      decodedBytes: 48,
-      dimensions: "4x4",
-      hashMatchesStoredPixels: true,
-      mimeType: "image/png",
-      sourceWasTransformed: true,
-      statuses: [201, 201],
-      validation: { result: true },
-    });
-  });
+      expect({
+        decodedBytes: decode(transformedUpload.blurHash, 4, 3).length,
+        dimensions: `${storedMetadata.width}x${storedMetadata.height}`,
+        documentDimensions: `${document?.width}x${document?.height}`,
+        hashMatchesStoredPixels: transformedUpload.blurHash === repeatedUpload.blurHash,
+        mimeType: transformedUpload.mimeType,
+        sourceWasTransformed: !stored.equals(source),
+        statuses: [transformedUpload.status, repeatedUpload.status],
+        validation: isBlurhashValid(transformedUpload.blurHash),
+      }).toEqual({
+        decodedBytes: 48,
+        dimensions: "4x4",
+        documentDimensions: "4x4",
+        hashMatchesStoredPixels: true,
+        mimeType: "image/png",
+        sourceWasTransformed: true,
+        statuses: [201, 201],
+        validation: { result: true },
+      });
+    },
+  );
 });
