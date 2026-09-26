@@ -401,6 +401,46 @@ for (const route of previewRoutes) {
     ).toEqual([]);
   });
 
+  test(`${route} an Admin selection cancels a pending nested preview locate`, async ({ page }) => {
+    const nested = await seedNestedPage(payload);
+    const outer = nested.layout![6]!;
+    if (outer.blockType !== "section") throw new Error("Missing outer section");
+    const inner = outer.content![0]!;
+    if (inner.blockType !== "section") throw new Error("Missing inner section");
+    const deep = inner.content![0]!;
+    await login(page);
+    expect(
+      (
+        await page.request.post(`/api/payload-preferences/collection-pages-${nested.id}`, {
+          data: {
+            value: {
+              fields: {
+                layout: { collapsed: [outer.id] },
+                "layout.6.content": { collapsed: [inner.id] },
+              },
+            },
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+    const preview = await openLinkedPreview(page, nested.id, route);
+    await page.clock.install();
+    await page.clock.pauseAt(Date.now() + 1000);
+    const target = preview.locator(`[data-payload-block="${deep.id}"]`);
+    await target.click();
+    await page.clock.runFor(100);
+    await expect(page.locator("#field-layout__6__heading")).toBeVisible();
+    const deepField = page.locator("#field-layout__6__content__0__content__0__content");
+    await expect(deepField).not.toBeVisible();
+    const sibling = page.locator("#field-layout__0__content");
+    await sibling.click();
+    await page.clock.runFor(2500);
+    await expect(sibling).toBeFocused();
+    await expect(sibling).toBeInViewport();
+    await expect(deepField).not.toBeVisible();
+    await expect(page.locator("[data-payload-block-highlight]")).toHaveCount(0);
+  });
+
   test(`${route} reveals three depths through collapsed ancestors and preserves nested identity`, async ({
     page,
   }) => {

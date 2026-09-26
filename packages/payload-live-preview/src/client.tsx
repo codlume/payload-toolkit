@@ -71,7 +71,10 @@ export const PreviewBridgeAdmin = ({ debug = false }: { debug?: boolean }) => {
       const ids = matches.map(({ row }) => row.id);
       const id = ids[0];
       const header = event.type === "click" && !!target.closest(".collapsible__toggle-wrap");
-      if (id && (id !== selected || header) && channel.locate(ids)) selected = id;
+      if (!id || (id === selected && !header)) return;
+      work.cancel();
+      visuals?.cancelReveal();
+      if (channel.locate(ids)) selected = id;
     };
     const start = () =>
       connect({
