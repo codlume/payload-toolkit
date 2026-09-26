@@ -283,7 +283,10 @@ const findConfigurationProblems = (
     }
   }
 
-  const adminUserCollection = config.admin?.user ?? "users";
+  const adminUserCollection =
+    config.admin?.user ??
+    config.collections?.find((collection) => collection.auth)?.slug ??
+    "users";
   const adminCollection = availableCollections.get(adminUserCollection);
 
   if (!adminCollection) {
