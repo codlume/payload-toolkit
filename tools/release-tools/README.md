@@ -26,8 +26,10 @@ Commands, in the order the Release run uses them. All but `publish` read
   review.
 - `verify-tagged` fails unless the merged Release pull request in `RELEASE_PR`
   carries the `autorelease: tagged` label.
-- `publish` runs pnpm's recursive publish for each `packages/*` entry of the
-  current directory, one at a time, and fails at the end if any failed.
+- `publish` compares the checked-out release commit's manifest with its first
+  parent and runs pnpm's recursive publish only for changed versions. The
+  checkout must include that parent. It publishes one package at a time and
+  fails at the end if any failed.
 
 Tests run with the rest of the workspace through `pnpm test:unit`. See
 `docs/agents/releases.md` for how the Release run fits together.

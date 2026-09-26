@@ -1,5 +1,5 @@
 import { execFile as execFileWithCallback, spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -455,10 +455,6 @@ export function createWorkingCopiesAdapter({
 type RunCommand = (command: string, args: string[]) => Promise<number>;
 
 type WorkspaceFs = {
-  readdir(
-    path: string,
-    options: { withFileTypes: true },
-  ): Promise<{ isDirectory(): boolean; name: string }[]>;
   readFile(path: string, encoding: "utf8"): Promise<string>;
 };
 
@@ -483,28 +479,55 @@ function packageName(manifest: string, path: string) {
   throw new Error(`${path} has no package name.`);
 }
 
+function releaseVersions(manifest: string) {
+  const parsed: unknown = JSON.parse(manifest);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("The release manifest must map package paths to versions.");
+  }
+  const versions = new Map<string, string>();
+  for (const [path, version] of Object.entries(parsed)) {
+    if (typeof version !== "string") {
+      throw new Error(`The release manifest has no version for ${path}.`);
+    }
+    versions.set(path, version);
+  }
+  return versions;
+}
+
 /**
- * The packages of the checked-out release commit. Publishing goes through
- * pnpm's recursive publish: only it skips versions already on npm and private
+ * Selects versions changed by the checked-out release commit against its first
+ * parent. pnpm's recursive publish skips versions already on npm and private
  * packages, which is what makes a re-run safe.
  */
 export function createWorkspaceAdapter({
   cwd = process.cwd(),
-  fs = { readdir, readFile },
+  execFile = execFileFromSystem,
+  fs = { readFile },
   run = runFromSystem,
 }: {
   cwd?: string;
+  execFile?: ExecFile;
   fs?: WorkspaceFs;
   run?: RunCommand;
 }): Workspace {
+  async function manifestAt(ref: string) {
+    const { stdout } = await execFile("git", ["show", `${ref}:.release-please-manifest.json`], {
+      cwd,
+    });
+    return releaseVersions(stdout.toString());
+  }
+
   return {
     async listPackageNames() {
-      const entries = await fs.readdir(join(cwd, "packages"), { withFileTypes: true });
+      const [versions, previousVersions] = await Promise.all([
+        manifestAt("HEAD"),
+        manifestAt("HEAD^1"),
+      ]);
       const names = await Promise.all(
-        entries
-          .filter((entry) => entry.isDirectory())
-          .map(async (entry) => {
-            const path = join("packages", entry.name, "package.json");
+        [...versions]
+          .filter(([path, version]) => previousVersions.get(path) !== version)
+          .map(async ([directory]) => {
+            const path = join(directory, "package.json");
             return packageName(await fs.readFile(join(cwd, path), "utf8"), path);
           }),
       );
