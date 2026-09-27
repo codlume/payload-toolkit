@@ -112,6 +112,40 @@ describe("JPEG and PNG inputs", () => {
     expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
   });
 
+  test.each(["padding", "motion-photo trailer", "second JPEG"])(
+    "JPEG with %s after its end marker retains the primary image's hash",
+    async (suffix) => {
+      const jpeg = await readImageFixture("jpeg-baseline.jpg");
+      const trailer =
+        suffix === "padding"
+          ? Buffer.alloc(16)
+          : suffix === "motion-photo trailer"
+            ? Buffer.from("MotionPhoto_Data\0\0\0\0SEFT")
+            : jpeg;
+      const data = Buffer.concat([jpeg, trailer]);
+      const primary = await uploadFixture("jpeg-baseline.jpg", "image/jpeg");
+      const media = await payload.create({
+        collection: "media",
+        data: {},
+        file: {
+          data,
+          mimetype: "image/jpeg",
+          name: `${suffix.replaceAll(" ", "-")}.jpg`,
+          size: data.length,
+        },
+      });
+
+      expect(isBlurhashValid(primary.blurHash ?? "")).toEqual({ result: true });
+      expect(media.blurHash).toBe(primary.blurHash);
+    },
+  );
+
+  test("an Ultra HDR JPEG stores a valid primary image hash", async () => {
+    const media = await uploadFixture("jpeg-ultra-hdr.jpg", "image/jpeg");
+
+    expect(isBlurhashValid(media.blurHash ?? "")).toEqual({ result: true });
+  });
+
   test("a wrong filename extension does not override exact MIME and content agreement", async () => {
     const media = await upload(payload, "jpeg-baseline.jpg", "image/jpeg", "not-an-image.txt");
 

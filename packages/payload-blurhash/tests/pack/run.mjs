@@ -397,6 +397,6 @@ try {
   console.log("Packed tarball and clean consumer verified.");
 } finally {
   if (temporaryDirectory) {
-    await rm(temporaryDirectory, { force: true, recursive: true });
+    await rm(temporaryDirectory, { force: true, recursive: true, maxRetries: 3 });
   }
 }
