@@ -5,8 +5,8 @@
 
 ### Bug Fixes
 
-* **payload-live-preview:** cancel pending locates on Admin selection ([#116](https://github.com/codlume/payload-toolkit/issues/116)) ([ef1c009](https://github.com/codlume/payload-toolkit/commit/ef1c0095250b5722bd4e5180d1a9f3efffc356e8))
-* **payload-live-preview:** clear Admin selection on preview locates ([#104](https://github.com/codlume/payload-toolkit/issues/104)) ([6bf832a](https://github.com/codlume/payload-toolkit/commit/6bf832ae4e3e0f222242715a97198d36a6c8606c))
+* **payload-live-preview:** cancel pending locates on Admin selection ([#116](https://github.com/codlume/payload-toolkit/issues/116)) ([ef1c009](https://github.com/codlume/payload-toolkit/commit/ef1c0095250b5722bd4e5180d1a9f3efffc356e8)) by @hadrysm
+* **payload-live-preview:** clear Admin selection on preview locates ([#104](https://github.com/codlume/payload-toolkit/issues/104)) ([6bf832a](https://github.com/codlume/payload-toolkit/commit/6bf832ae4e3e0f222242715a97198d36a6c8606c)) by @hadrysm
 
 ## 0.1.0 (2026-09-06)
 
