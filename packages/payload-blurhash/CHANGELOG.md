@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.4](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.3...payload-blurhash-v0.1.4) (2026-09-27)
+
+
+### Bug Fixes
+
+* **payload-blurhash:** accept JPEG trailers after the primary image ([#117](https://github.com/codlume/payload-toolkit/issues/117)) ([4f5e057](https://github.com/codlume/payload-toolkit/commit/4f5e0572bc5391b33ef0f3743ad3fbb5362b4241)) by @hadrysm
+* **payload-blurhash:** normalize declared image MIME types ([#119](https://github.com/codlume/payload-toolkit/issues/119)) ([33aca7e](https://github.com/codlume/payload-toolkit/commit/33aca7e7e79b83fa04be0f586edadf19d0d0516a)) by @hadrysm
+* **payload-blurhash:** preserve EXIF orientation in preview dimensions ([#118](https://github.com/codlume/payload-toolkit/issues/118)) ([68b0e8b](https://github.com/codlume/payload-toolkit/commit/68b0e8bc76514141abaed598060f5dc712f2e650)) by @hadrysm
+* **payload-blurhash:** restore the saved version's placeholder ([#125](https://github.com/codlume/payload-toolkit/issues/125)) ([4277d22](https://github.com/codlume/payload-toolkit/commit/4277d229de27a70c4260b2f5b3ea405c8ed1c3f2)) by @hadrysm
+
 ## [0.1.3](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.2...payload-blurhash-v0.1.3) (2026-09-06)
 
 
