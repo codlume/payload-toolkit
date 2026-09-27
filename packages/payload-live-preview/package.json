@@ -1,6 +1,6 @@
 {
   "name": "@codlume/payload-live-preview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Link Payload blocks with their Live Preview components.",
   "keywords": [
     "blocks",
