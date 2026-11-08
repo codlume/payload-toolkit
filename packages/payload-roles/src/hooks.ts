@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-
 import type {
   CollectionBeforeChangeHook,
   CollectionBeforeDeleteHook,
@@ -35,6 +33,12 @@ import {
 } from "./guards.ts";
 import { loadRoleGrants, normalizeRoleIds } from "./resolve.ts";
 import { CLAIM_SENTINEL } from "./schema.ts";
+import {
+  createOperationScope,
+  operationKind,
+  type OperationTarget,
+  requestKeyOf,
+} from "./scope.ts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -51,12 +55,10 @@ export const isTrusted = (overrideAccess: boolean | undefined, req: PayloadReque
   overrideAccess === true && req.payloadAPI === "local";
 
 /**
- * What `beforeOperation` records for the per-document hooks of one operation. The record
- * travels in an AsyncLocalStorage, so a nested operation and each document of a bulk
- * operation see their own operation's record (G1). A missing record is untrusted.
+ * What `beforeOperation` records for the per-document hooks of one operation. Trust travels
+ * beside it in the operation scope, which also decides which records apply to a document.
  */
 type Operation = {
-  trusted: boolean;
   /** The privileged keys as the client sent them, before Payload coerces or strips them. */
   raw: Readonly<Record<string, unknown>>;
   /** Active super admins before the operation, counted once per operation. */
@@ -65,11 +67,26 @@ type Operation = {
   removed: number;
 };
 
-const operations = new AsyncLocalStorage<Operation>();
+const scope = createOperationScope<Operation>();
 
-const untrusted = (): Operation => ({ trusted: false, raw: {}, superAdmins: null, removed: 0 });
+/**
+ * How one document hook judges its write: untrusted with nothing recorded when no record covers
+ * it. Each covering record's raw keys are judged separately on top of the final data, so a record
+ * can add a refusal but never hide what is written.
+ */
+const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
+  const found = scope.lookup(target, requestKeyOf(req));
+  return {
+    trusted: found?.trusted ?? false,
+    raws: found?.all.map(({ raw }) => raw) ?? [],
+    tally: found?.innermost ?? { raw: {}, superAdmins: null, removed: 0 },
+  };
+};
 
-const RECORDED_OPERATIONS = new Set(["create", "update", "delete", "restoreVersion"]);
+const judgedBodies = (
+  base: Readonly<Record<string, unknown>>,
+  raws: readonly Readonly<Record<string, unknown>>[],
+) => [...raws.map((raw) => ({ ...base, ...raw })), base];
 
 const pick = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
   const source = isRecord(value) ? value : {};
@@ -77,6 +94,17 @@ const pick = (value: unknown, keys: readonly string[]): Record<string, unknown> 
     keys.filter((key) => source[key] !== undefined).map((key) => [key, source[key]]),
   );
 };
+
+/**
+ * Records that a password was sent without keeping it. Payload saves the password it read before
+ * any hook ran, so the guard must see the attempt even when a hook drops it from `data`.
+ */
+const SENT_PASSWORD = "[sent]";
+
+const redact = (raw: Record<string, unknown>) =>
+  typeof raw.password === "string" && raw.password !== ""
+    ? { ...raw, password: SENT_PASSWORD }
+    : raw;
 
 type CollectionOperationArgs = Parameters<CollectionBeforeOperationHook>[0];
 
@@ -86,17 +114,19 @@ type CollectionOperationArgs = Parameters<CollectionBeforeOperationHook>[0];
  * checked access or validated the query yet.
  */
 const createRecorder =
-  (keys: readonly string[]): LeadingBeforeOperation<CollectionOperationArgs> =>
+  (collection: string, keys: readonly string[]): LeadingBeforeOperation<CollectionOperationArgs> =>
   ({ args, operation, overrideAccess, req }) => {
-    if (RECORDED_OPERATIONS.has(operation)) {
+    const kind = operationKind(operation);
+    if (kind !== undefined) {
       const source: unknown = args;
-      const data = isRecord(source) ? source.data : undefined;
-      operations.enterWith({
-        trusted: isTrusted(overrideAccess, req),
-        raw: pick(data, keys),
-        superAdmins: null,
-        removed: 0,
-      });
+      const fields = isRecord(source) ? source : {};
+      const id = kind !== "create" && operation !== "restoreVersion" ? fields.id : undefined;
+      scope.open(
+        { collection, kind, id: isId(id) ? id : undefined },
+        requestKeyOf(req),
+        isTrusted(overrideAccess, req),
+        { raw: redact(pick(fields.data, keys)), superAdmins: null, removed: 0 },
+      );
     }
     return undefined;
   };
@@ -250,13 +280,21 @@ const userKeys = (options: ResolvedOptions): readonly string[] => [
 const createUsersWriteGuard =
   (enforcer: Enforcer): CollectionBeforeChangeHook =>
   async ({ data, operation, originalDoc, req }) => {
-    const current = operations.getStore() ?? untrusted();
+    const current = judgedOperation(
+      {
+        collection: enforcer.options.userCollection,
+        kind: operation === "create" ? "create" : "update",
+        id: operation === "create" ? undefined : (idOf(originalDoc) ?? undefined),
+      },
+      req,
+    );
     if (current.trusted) {
       return data;
     }
     const { options } = enforcer;
     const ctx = await guardContext(enforcer, req, options.userCollection, operation);
-    const judged = { ...pick(data, userKeys(options)), ...current.raw };
+    const written = pick(data, userKeys(options));
+    const bodies = judgedBodies(written, current.raws);
     const row = operation === "update" ? await findRow(ctx, idOf(originalDoc)) : null;
     const roleGrants = await loadRoleGrants(
       enforcer,
@@ -264,29 +302,34 @@ const createUsersWriteGuard =
       req,
       uniqueIds([
         ...normalizeRoleIds(row?.[options.rolesField]),
-        ...normalizeRoleIds(judged[options.rolesField]),
+        ...bodies.flatMap((body) => normalizeRoleIds(body[options.rolesField])),
       ]),
     );
     const target = row ? toTarget(ctx, row, roleGrants) : null;
     if (operation === "update" && !target) {
       refuse("target-missing", ctx);
     }
-    const removal = target !== null && removesSuperAdmin(judged, target, options);
-    const superAdminCount = removal ? (await superAdminsBefore(ctx, current)) - current.removed : 0;
-    throwDecision(
-      decideUserWrite({
-        editor: ctx.editor.capabilities,
-        editorId: ctx.editor.id,
-        raw: judged,
-        target,
-        roleGrants,
-        superAdminCount,
-        fields: options,
-      }),
-      ctx,
-    );
-    if (removal) {
-      current.removed += 1;
+    const removes = (body: Readonly<Record<string, unknown>>) =>
+      target !== null && removesSuperAdmin(body, target, options);
+    const superAdminCount = bodies.some(removes)
+      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
+      : 0;
+    for (const body of bodies) {
+      throwDecision(
+        decideUserWrite({
+          editor: ctx.editor.capabilities,
+          editorId: ctx.editor.id,
+          raw: body,
+          target,
+          roleGrants,
+          superAdminCount,
+          fields: options,
+        }),
+        ctx,
+      );
+    }
+    if (removes(written)) {
+      current.tally.removed += 1;
     }
     return data;
   };
@@ -295,7 +338,10 @@ const createUsersWriteGuard =
 const createUsersDeleteGuard =
   (enforcer: Enforcer): CollectionBeforeDeleteHook =>
   async ({ id, req }) => {
-    const current = operations.getStore() ?? untrusted();
+    const current = judgedOperation(
+      { collection: enforcer.options.userCollection, kind: "delete", id },
+      req,
+    );
     if (current.trusted) {
       return;
     }
@@ -313,13 +359,15 @@ const createUsersDeleteGuard =
       refuse("target-missing", ctx);
     }
     const removal = target.superAdmin && !target.trashed;
-    const superAdminCount = removal ? (await superAdminsBefore(ctx, current)) - current.removed : 0;
+    const superAdminCount = removal
+      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
+      : 0;
     throwDecision(
       decideUserDelete({ editor: ctx.editor.capabilities, target, superAdminCount }),
       ctx,
     );
     if (removal) {
-      current.removed += 1;
+      current.tally.removed += 1;
     }
   };
 
@@ -330,7 +378,14 @@ const createUsersDeleteGuard =
 const createRolesWriteGuard =
   (enforcer: Enforcer): CollectionBeforeChangeHook =>
   async ({ data, operation, originalDoc, req }) => {
-    const current = operations.getStore() ?? untrusted();
+    const current = judgedOperation(
+      {
+        collection: enforcer.options.rolesSlug,
+        kind: operation === "create" ? "create" : "update",
+        id: operation === "create" ? undefined : (idOf(originalDoc) ?? undefined),
+      },
+      req,
+    );
     if (current.trusted) {
       return data;
     }
@@ -340,25 +395,33 @@ const createRolesWriteGuard =
     if (operation === "update" && !row) {
       refuse("target-missing", ctx);
     }
-    const { decision, canonical } = decideRoleWrite({
-      editor: ctx.editor.capabilities,
-      raw: { ...pick(data, [permissionsField, "key"]), ...current.raw },
-      targetKey: typeof row?.key === "string" ? row.key : null,
-      current: row ? parsePermissions(row[permissionsField], enforcer.registry).grants : null,
-      registry: enforcer.registry,
-      permissionsField,
-    });
+    const written = pick(data, [permissionsField, "key"]);
+    const decide = (raw: Readonly<Record<string, unknown>>) =>
+      decideRoleWrite({
+        editor: ctx.editor.capabilities,
+        raw,
+        targetKey: typeof row?.key === "string" ? row.key : null,
+        current: row ? parsePermissions(row[permissionsField], enforcer.registry).grants : null,
+        registry: enforcer.registry,
+        permissionsField,
+      });
+    for (const raw of judgedBodies(written, current.raws).slice(0, -1)) {
+      throwDecision(decide(raw).decision, ctx);
+    }
+    const { decision, canonical } = decide(written);
     throwDecision(decision, ctx);
-    return canonical && permissionsField in current.raw && isRecord(data)
-      ? { ...data, [permissionsField]: canonical }
-      : data;
+    const sent = current.raws.some((raw) => permissionsField in raw);
+    return canonical && sent && isRecord(data) ? { ...data, [permissionsField]: canonical } : data;
   };
 
 /** Judges the delete of one role, by id or as one document of a bulk delete. */
 const createRolesDeleteGuard =
   (enforcer: Enforcer): CollectionBeforeDeleteHook =>
   async ({ id, req }) => {
-    const current = operations.getStore() ?? untrusted();
+    const current = judgedOperation(
+      { collection: enforcer.options.rolesSlug, kind: "delete", id },
+      req,
+    );
     if (current.trusted) {
       return;
     }
@@ -419,7 +482,9 @@ export const createCoreHooks = (enforcer: Enforcer, slug: string): CoreCollectio
   const { options } = enforcer;
   if (slug === options.userCollection) {
     return {
-      ...(options.enabled && { record: createRecorder(userKeys(options)) }),
+      ...(options.enabled && {
+        record: createRecorder(slug, userKeys(options)),
+      }),
       beforeChange: [
         ...(options.enabled ? [createUsersWriteGuard(enforcer)] : []),
         createBootstrapHook(enforcer),
@@ -429,7 +494,7 @@ export const createCoreHooks = (enforcer: Enforcer, slug: string): CoreCollectio
   }
   if (slug === options.rolesSlug && options.enabled) {
     return {
-      record: createRecorder([options.permissionsField, "key"]),
+      record: createRecorder(slug, [options.permissionsField, "key"]),
       beforeChange: [createRolesWriteGuard(enforcer)],
       beforeDelete: [createRolesDeleteGuard(enforcer)],
     };
@@ -443,16 +508,36 @@ type CollectionHookKey =
 type GlobalHookKey = Exclude<keyof GlobalLifecycleHooks, "leadingBeforeOperation">;
 
 /** How many of the plugin's hooks lead and trail the app's on one key. */
-type Placement = { leading: number; trailing: number };
+type Placement = { leading: readonly object[]; trailing: readonly object[] };
 
 type Installed<Key extends string> = Map<string, Map<Key, Placement>>;
 
 const problem = (id: string, key: string) =>
-  `Hooks were placed around the roles plugin's own on "${id}" \`${key}\` after it ran. Register rolesPlugin after every plugin that adds hooks there.`;
+  `The roles plugin's own hooks on "${id}" \`${key}\` were removed or replaced after it ran.`;
+
+const inPlace = (list: readonly object[] | undefined, { leading, trailing }: Placement) => {
+  const hooks = list ?? [];
+  return (
+    hooks.length >= leading.length + trailing.length &&
+    leading.every((hook, index) => hooks[index] === hook) &&
+    trailing.every((hook, index) => hooks[hooks.length - trailing.length + index] === hook)
+  );
+};
+
+const reorder = (list: object[] | undefined, { leading, trailing }: Placement) => {
+  if (list === undefined) {
+    return;
+  }
+  const others = list.filter((hook) => !leading.includes(hook) && !trailing.includes(hook));
+  const present = (hooks: readonly object[]) => hooks.filter((hook) => list.includes(hook));
+  list.splice(0, list.length, ...present(leading), ...others, ...present(trailing));
+};
 
 /**
- * Orders hooks as `[...leading, ...app, ...trailing]` and remembers which ones are ours, so
- * `verify` can prove at init that no later plugin moved a hook in front of or behind them.
+ * Orders hooks as `[...leading, ...app, ...trailing]` and remembers which ones are ours. Payload
+ * and later plugins can still add hooks after ours (Payload's sanitizer appends the orderable
+ * `beforeChange` hook after every plugin), so `restore` puts ours back at both ends of the live
+ * arrays at init, and `verify` then proves none of ours went missing.
  * The opener leads `beforeOperation`; everything else of core's and the lifecycle's trails.
  */
 export const createHookTracker = () => {
@@ -472,7 +557,7 @@ export const createHookTracker = () => {
       ours.add(hook);
     }
     const perKey = installed.get(slug) ?? new Map<Key, Placement>();
-    perKey.set(key, { leading: leading.length, trailing: trailing.length });
+    perKey.set(key, { leading, trailing });
     installed.set(slug, perKey);
     return [...leading, ...(app ?? []), ...trailing];
   };
@@ -562,13 +647,19 @@ export const createHookTracker = () => {
     ),
   });
 
-  const inPlace = (list: readonly object[] | undefined, { leading, trailing }: Placement) => {
-    const hooks = list ?? [];
-    return (
-      hooks.length >= leading + trailing &&
-      hooks.slice(0, leading).every((hook) => ours.has(hook)) &&
-      (trailing === 0 || hooks.slice(-trailing).every((hook) => ours.has(hook)))
-    );
+  const restore = (payload: Payload) => {
+    for (const [slug, perKey] of collections) {
+      const hooks = payload.collections[slug]?.config.hooks;
+      for (const [key, placement] of perKey) {
+        reorder(hooks?.[key], placement);
+      }
+    }
+    for (const [slug, perKey] of globals) {
+      const hooks = payload.globals.config.find((config) => config.slug === slug)?.hooks;
+      for (const [key, placement] of perKey) {
+        reorder(hooks?.[key], placement);
+      }
+    }
   };
 
   const verify = (payload: Payload): string[] => {
@@ -592,5 +683,5 @@ export const createHookTracker = () => {
     return problems;
   };
 
-  return { collection, global, verify };
+  return { collection, global, restore, verify };
 };

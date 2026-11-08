@@ -178,6 +178,7 @@ export const rolesPlugin = (options: RolesPluginOptions): Plugin => {
             message: "payload-roles is disabled: role checks are off and app access decides alone.",
           });
         } else {
+          tracker.restore(payload);
           const startupProblems = [
             ...describeRegistryDrift(registry, buildRegistry(payload.config, resolved)),
             ...tracker.verify(payload),
@@ -193,6 +194,13 @@ export const rolesPlugin = (options: RolesPluginOptions): Plugin => {
           }
         }
         await config.onInit?.(payload);
+        if (resolved.enabled) {
+          tracker.restore(payload);
+          const lateProblems = tracker.verify(payload);
+          if (lateProblems.length > 0) {
+            throw new RolesPluginConfigError(lateProblems);
+          }
+        }
       },
     };
   };

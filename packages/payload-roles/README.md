@@ -59,8 +59,12 @@ rejects missing targets, unknown or duplicate slugs, Payload system collections,
 that is not auth-enabled, field names that clash on the user collection, a `rolesSlug` that is
 already a collection, collections that use `versions.drafts.localizeStatus`, a user collection
 with `versions.drafts`, and a second registration. Startup also fails when a plugin that runs after this one changes the drafts, trash,
-versions or auth shape of a managed collection, or places hooks in front of or behind the plugin's
-own.
+versions or auth shape of a managed collection, or removes one of the plugin's own hooks.
+
+Hooks that Payload or a later plugin adds after this plugin runs, such as the `beforeChange` hook
+Payload adds to orderable collections, do not stop startup. At startup, before and after your
+`onInit`, the plugin moves its own hooks back to the front of `beforeOperation` and the end of the
+other hook lists, so its checks always judge the data those hooks produce.
 
 ### What the plugin adds
 
@@ -243,6 +247,17 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   every app hook. Payload awaits each `beforeOperation` hook in turn, so an app hook there whose
   `AsyncLocalStorage.enterWith` must reach the operation's later hooks no longer does. Pass such
   state between hooks through Payload's `req.context` instead.
+- Hook order is restored at startup only. Payload's development hot reload rebuilds hook lists
+  without running `onInit`, and a process that skips `onInit` never restores them, so a hook added
+  after the plugin's own runs after its checks there.
+- An app hook that starts another write on the same document under the same request, for example
+  an exported operation called with `disableTransaction: true`, makes both writes count as
+  untrusted. A trusted write from app code inside an editor's write therefore needs its own Local
+  API request, and a Local API request that mixes trusted and untrusted writes on one collection
+  judges all of them as untrusted.
+- Operations started synchronously from app code, without an `await` between them, stack their
+  records in one async context. After 64 of them every later write in that context is judged
+  untrusted, and the records stay in memory until the context ends.
 - On an upload-enabled user collection, an update that replaces the file writes the new file and
   deletes the old one before `beforeChange` runs (gate G18). A refused update can therefore leave
   the stored row pointing at a file that no longer exists. The plugin does not handle this.
