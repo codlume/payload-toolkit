@@ -260,6 +260,31 @@ describe("an upload draft save that carries a new file", () => {
     ).resolves.toMatchObject({ id });
   });
 
+  test("with the focal point the admin form always sends stays an update-only draft save", async () => {
+    const { payload } = context;
+    const id = await liveWithPendingDraft("live-focal.png");
+    const before = onDisk();
+
+    const save = (autosave: boolean) =>
+      payload.update({
+        autosave,
+        collection: "media",
+        data: { alt: "focal draft", focalX: 10, focalY: 90 },
+        draft: true,
+        id,
+        overrideAccess: false,
+        user: users.updateOnly,
+      });
+    await expect(save(false), "a draft save").resolves.toMatchObject({ id });
+    await expect(save(true), "an autosave").resolves.toMatchObject({ id });
+
+    expect(onDisk()).toEqual(before);
+    expect(await mainRow(payload, "media", id)).toMatchObject({
+      _status: "published",
+      filename: "live-focal.png",
+    });
+  });
+
   test("without a file stays an update-only draft save", async () => {
     const { payload } = context;
     const id = await liveWithPendingDraft("live-plain.png");

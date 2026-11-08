@@ -70,8 +70,6 @@ const KINDS: Readonly<Record<string, Kind>> = {
   update: "update",
 };
 
-const FILE_KEYS: ReadonlySet<string> = new Set(["focalX", "focalY"]);
-
 /** `create` access serves create and duplicate; `update` access serves update and restore. */
 const servesKey = (kind: Kind, key: WriteAccessArgs["key"]) =>
   key === "create" ? kind === "create" : kind !== "create";
@@ -142,7 +140,7 @@ const viewOf = (frame: Frame, source: Record<string, unknown>, files: boolean): 
   data: isRecord(source.data) ? source.data : undefined,
 });
 
-type Files = (frame: Frame, source: Record<string, unknown>) => boolean;
+type Files = () => boolean;
 
 type PlanArgs = {
   resource: Resource;
@@ -176,7 +174,7 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
       can(capabilities, resource.id, action) ||
       (action === "update" && self && isId(target) && sameId(target, subjectId));
   const source = isRecord(args) ? args : {};
-  const view = viewOf(frame, source, kind === "update" && files(frame, source));
+  const view = viewOf(frame, source, kind === "update" && files());
   const verdict = judge(
     resource,
     requestFacts(resource, view),
@@ -329,18 +327,12 @@ const requiredWriteActions = ({ resource, key, data }: WriteAccessArgs): Readonl
 const governs = (resource: Resource) => resource.drafts || resource.trash || resource.versions;
 
 /**
- * An upload update writes or deletes stored files only for a new file, `uploadEdits` in the query,
- * or a focal point in the data (`generateFileData.js:18-32,66,378`). Without new files,
- * `deleteAssociatedFiles` deletes nothing. The client's keys and the post-hook keys both count.
+ * An upload update writes or deletes stored files only for a new file or `uploadEdits` in the
+ * query (`generateFileData.js:18-32,66,378`). A focal point in the body is compared with that same
+ * body, so it never reuploads; without new files `deleteAssociatedFiles` deletes nothing.
  */
-const touchesFiles = (req: PayloadRequest, frame: Frame, source: Record<string, unknown>) => {
-  const keys = [...frame.bodyKeys, ...(isRecord(source.data) ? Object.keys(source.data) : [])];
-  return (
-    req.file !== undefined ||
-    req.query.uploadEdits !== undefined ||
-    keys.some((key) => FILE_KEYS.has(key))
-  );
-};
+const touchesFiles = (req: PayloadRequest) =>
+  req.file !== undefined || req.query.uploadEdits !== undefined;
 
 const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer) => {
   if (!governs(resource)) {
@@ -353,7 +345,7 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
       operation,
       args,
       req,
-      files: (frame, source) => Boolean(collection.upload) && touchesFiles(req, frame, source),
+      files: () => Boolean(collection.upload) && touchesFiles(req),
     });
   };
   const beforeChange: CollectionBeforeChangeHook = async ({
