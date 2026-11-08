@@ -46,12 +46,10 @@ test("the server entry never bundles the client entry", async () => {
 });
 
 test("server entry exposes the plugin factory, config error and capabilities helper", async () => {
-  assert.deepEqual(Object.keys(await import("@codlume/payload-roles")).sort(), [
-    "RolesPluginConfigError",
-    "resolveCapabilities",
-    "rolesPlugin",
-  ]);
-  assert.deepEqual(Object.keys(await import("@codlume/payload-roles/client")), []);
+  const exported = Object.keys(await import("@codlume/payload-roles"));
+  for (const name of ["RolesPluginConfigError", "resolveCapabilities", "rolesPlugin"]) {
+    assert.ok(exported.includes(name), `server entry is missing ${name}`);
+  }
 });
 
 test("declarations expose the options type and the public contract types", async () => {

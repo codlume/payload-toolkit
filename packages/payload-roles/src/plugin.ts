@@ -56,6 +56,18 @@ const wrapGlobalAccess = (
   ),
 });
 
+/** Admin slots win over the app's, except `beforeDocumentControls`, where both lists render. */
+const mergeSlots = <Slots extends { beforeDocumentControls?: unknown[] }>(
+  app: Slots | undefined,
+  ours: Slots,
+): Slots => {
+  const controls: Slots["beforeDocumentControls"] = [
+    ...(app?.beforeDocumentControls ?? []),
+    ...(ours.beforeDocumentControls ?? []),
+  ];
+  return { ...app, ...ours, ...(controls.length > 0 && { beforeDocumentControls: controls }) };
+};
+
 const transformCollection = (
   collection: CollectionConfig,
   { enforcer, tracker }: Context,
@@ -82,7 +94,7 @@ const transformCollection = (
         ...withFields.admin,
         components: {
           ...withFields.admin?.components,
-          edit: { ...withFields.admin?.components?.edit, ...edit },
+          edit: mergeSlots(withFields.admin?.components?.edit, edit),
         },
       },
     }),
@@ -104,7 +116,7 @@ const transformGlobal = (global: GlobalConfig, { enforcer, tracker }: Context): 
         ...global.admin,
         components: {
           ...global.admin?.components,
-          elements: { ...global.admin?.components?.elements, ...elements },
+          elements: mergeSlots(global.admin?.components?.elements, elements),
         },
       },
     }),
