@@ -51,7 +51,6 @@ const ALL: Capabilities = { kind: "all" };
 export type ModelInput = {
   registry: Registry;
   options: Pick<ResolvedOptions, "enabled" | "rolesSlug" | "userCollection">;
-  /** Row labels by resource; a missing label falls back to the slug. */
   labels: ReadonlyMap<ResourceId, string>;
   editor: Capabilities;
   readOnly: boolean;
@@ -70,7 +69,6 @@ const lockOf = (input: ModelInput, granted: Grants): MatrixLock | null => {
   return missing.length > 0 ? { kind: "not-covered", missing } : null;
 };
 
-/** Every capability decision the matrix shows, from plain inputs. */
 export const matrixModelOf = (input: ModelInput): MatrixModel => {
   const { registry, options, value } = input;
   const effective = options.enabled ? input.editor : ALL;
@@ -121,7 +119,6 @@ export const matrixModelOf = (input: ModelInput): MatrixModel => {
   };
 };
 
-/** Payload labels are a string, a per-language record, or a function of `{ i18n, t }`. */
 const labelText = (label: unknown, req: PayloadRequest): string | undefined => {
   if (typeof label === "string") {
     return label;

@@ -1,5 +1,5 @@
-// Client-side matrix algebra. Imports core types only: a runtime import shared with the server
-// entry would split into a fifth dist file.
+// Imports core types only: a runtime import shared with the server entry would split into a fifth
+// dist file.
 import type { ActionId, Grant, ResourceId, StoredPermissions } from "../../contract.ts";
 import type { CellMode, CopySource, MatrixModel, MatrixRow } from "../model.ts";
 
@@ -7,24 +7,18 @@ export type Cells = ReadonlySet<Grant>;
 
 export type MatrixView =
   | { status: "unreadable" }
-  /** `untouched`: the value is the one the server rendered with, so `stored.issues` describe it. */
   | { status: "ready"; cells: Cells; untouched: boolean };
 
 export type MatrixOp =
   | { type: "cell"; cell: Grant; on: boolean }
-  /** Every grantable cell of the row on, or off when they are all on already. */
   | { type: "row"; row: ResourceId }
-  /** The same over one action of the given rows, the ones the filter shows. */
   | { type: "column"; action: ActionId; rows: readonly ResourceId[] }
-  /** Grantable cells take the source's value, on and off alike. */
   | { type: "copy"; source: CopySource }
-  /** Rewrites the current cells canonically, dropping invalid entries and publish without update. */
   | { type: "clean" };
 
 export type Outcome = {
   value: StoredPermissions;
   cells: Cells;
-  /** Cells the op asked for that did not land, because they are fixed or the coupling held them. */
   skipped: readonly Grant[];
 };
 
@@ -78,10 +72,6 @@ const hasPublishWithoutUpdate = (model: MatrixModel, cells: Cells) =>
     (row) => cells.has(grantOf(row.id, "publish")) && !cells.has(grantOf(row.id, "update")),
   );
 
-/**
- * Accepts only values the client itself could have written, so a decoded value grants exactly
- * what the server's parser grants. Anything else returns null and falls back to the server's parse.
- */
 const decode = (model: MatrixModel, value: unknown): Cells | null => {
   if (value === null || value === undefined) {
     return new Set();
@@ -132,7 +122,6 @@ const encode = (model: MatrixModel, cells: Cells): StoredPermissions => {
 
 const fingerprintOf = (value: unknown) => JSON.stringify(value ?? null);
 
-/** The only way the client reads the field value. It never guesses at a value it cannot read. */
 export const readMatrix = (model: MatrixModel, value: unknown): MatrixView => {
   const untouched = fingerprintOf(value) === model.stored.fingerprint;
   const decoded = decode(model, value);
@@ -144,7 +133,6 @@ export const readMatrix = (model: MatrixModel, value: unknown): MatrixView => {
     : { status: "unreadable" };
 };
 
-/** The cells of `row` among `actions` that the editor can change, which toggles act on. */
 export const grantableCells = (row: MatrixRow, actions: readonly ActionId[]): Grant[] =>
   actions.filter((action) => row.cells[action] === "grantable").map((a) => grantOf(row.id, a));
 
@@ -191,7 +179,6 @@ const intentOf = (model: MatrixModel, cells: Cells, op: MatrixOp): Map<Grant, bo
   }
 };
 
-/** Checking publish checks update, unchecking update unchecks publish, and off wins a conflict. */
 const couple = (model: MatrixModel, intent: ReadonlyMap<Grant, boolean>) => {
   const desired = new Map(intent);
   for (const row of model.rows) {
@@ -209,11 +196,6 @@ const couple = (model: MatrixModel, intent: ReadonlyMap<Grant, boolean>) => {
   return desired;
 };
 
-/**
- * The single write funnel. Postconditions: the value is in core's canonical stored order, fixed
- * cells keep their value, and no op leaves publish without update on a row where the editor can
- * change either cell.
- */
 export const applyOp = (model: MatrixModel, cells: Cells, op: MatrixOp): Outcome => {
   const { modes } = indexOf(model);
   const intent = intentOf(model, cells, op);
@@ -244,7 +226,6 @@ export const applyOp = (model: MatrixModel, cells: Cells, op: MatrixOp): Outcome
   return { value: encode(model, next), cells: next, skipped };
 };
 
-/** True when the cells let holders edit users while the Roles picker would list nothing. */
 export const pickerWarning = (model: MatrixModel, cells: Cells) => {
   const check = model.pickerCheck;
   return check !== null && check.assigns.some((cell) => cells.has(cell)) && !cells.has(check.needs);
@@ -252,10 +233,6 @@ export const pickerWarning = (model: MatrixModel, cells: Cells) => {
 
 const isServerKey = (key: string, path: string) => key.startsWith(`${path}.`);
 
-/**
- * A primitive summary of the `${path}.*` entries Payload adds for a failed save, so a form-fields
- * selector re-renders only when they change.
- */
 export const serverIssueSignature = (fields: FieldsSnapshot, path: string) =>
   JSON.stringify(
     Object.keys(fields)
@@ -279,7 +256,6 @@ export const takeServerIssues = (
   return { issues, remove };
 };
 
-/** Issues on a row's path go to that row. Everything else shows above the table. */
 export const placeServerIssues = (
   model: MatrixModel,
   issues: readonly ServerIssue[],

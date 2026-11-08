@@ -8,7 +8,6 @@ import { PermissionsMatrix } from "../../../src/admin/client/permissions-matrix.
 import type { MatrixModel, ResourceId } from "../../../src/admin/model.ts";
 import { holding, modelOf } from "./fixture.ts";
 
-// payload-roles has no @types/react-dom, so the one function the test needs is typed here.
 const { renderToStaticMarkup }: { renderToStaticMarkup: (element: React.ReactElement) => string } =
   createRequire(import.meta.url)("react-dom/server");
 

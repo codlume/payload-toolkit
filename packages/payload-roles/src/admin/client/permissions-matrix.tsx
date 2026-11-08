@@ -65,8 +65,7 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 /**
  * After a failed save Payload adds `${path}.*` form-state entries whose null values would
  * overwrite the permissions object on the next read of the form data. A layout effect runs
- * before the passive effects that read it, so the entries are captured and removed first. The
- * captured issues show while the value is the one that failed; the next edit hides them.
+ * before the passive effects that read it, so the entries are captured and removed first.
  */
 const useServerIssues = (path: string, value: unknown): readonly ServerIssue[] => {
   const signature = useFormFields(([fields]) => serverIssueSignature(fields, path));
@@ -122,7 +121,6 @@ const ToggleButton = ({
   );
 };
 
-/** The roles `permissions` field: one checkbox per grantable cell, bound to the field value. */
 export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps) => {
   const { value, setValue, errorMessage, showError } = useField<unknown>({
     potentiallyStalePath: path,

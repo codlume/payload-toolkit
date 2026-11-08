@@ -59,7 +59,6 @@ const random = (seed: number) => {
 };
 
 describe("reading the field value", () => {
-  // The stored value is a sentinel, so every case below goes through the strict decoder.
   const model = modelOf({ value: { sentinel: true } });
 
   const hostile: { name: string; raw: unknown; readable: boolean }[] = [

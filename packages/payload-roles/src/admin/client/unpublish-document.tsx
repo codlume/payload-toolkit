@@ -13,11 +13,6 @@ import React from "react";
 
 import { unpublishErrorOf, unpublishTarget } from "./unpublish-request.ts";
 
-/**
- * Unpublish in `beforeDocumentControls`, for viewers the server already found holding the
- * `unpublish` grant. Sends the stock all-locales request and refreshes the document like the
- * stock button. Hidden until the document has a published version.
- */
 export const UnpublishDocument = () => {
   const {
     id,

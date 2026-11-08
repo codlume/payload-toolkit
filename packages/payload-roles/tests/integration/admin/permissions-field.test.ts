@@ -40,7 +40,6 @@ const isModel = (value: unknown): value is MatrixModel =>
 const storedPermissions = async (payload: Payload, id: number | string): Promise<unknown> =>
   (await payload.findByID({ collection: "roles", depth: 0, id })).permissions;
 
-/** Renders the field as Payload does for `editor` editing role `id`, and returns the model it built. */
 const modelFor = async (
   { payload }: TestPayload,
   editor: Actor,

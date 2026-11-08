@@ -4,7 +4,7 @@ export type UnpublishTarget = { method: "patch" | "post"; url: string };
 
 const QUERY = "?depth=0&fallback-locale=null&unpublishAllLocales=true";
 
-/** The request Payload's stock all-locales Unpublish sends. Null for an unsaved collection doc. */
+/** The request Payload's stock all-locales Unpublish sends. */
 export const unpublishTarget = ({
   api,
   serverURL,

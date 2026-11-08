@@ -1,4 +1,3 @@
-// Seeded by core. Owned by the matrix thread from here on.
 import type { AdminModule, Resource } from "../contract.ts";
 
 const unpublishSlots = ({ drafts, id }: Resource) =>

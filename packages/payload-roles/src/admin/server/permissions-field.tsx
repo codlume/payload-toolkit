@@ -10,7 +10,6 @@ export type PermissionsFieldProps = Pick<
   "clientField" | "id" | "path" | "readOnly" | "req" | "value"
 >;
 
-/** The roles `permissions` field. Registered as `@codlume/payload-roles#PermissionsField`. */
 export const PermissionsField = async (props: PermissionsFieldProps) => {
   // A static import would load @payloadcms/ui, and its CSS imports, whenever the root entry loads in Node.
   const { PermissionsMatrix } = await import("@codlume/payload-roles/client");
