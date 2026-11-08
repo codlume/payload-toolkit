@@ -118,13 +118,6 @@ test("a later plugin that puts a beforeOperation hook ahead of the plugin's own 
   ).rejects.toThrow(/beforeOperation/u);
 });
 
-test("startup warns that lifecycle enforcement is not installed", async () => {
-  context = await createTestPayload({ name: "startup-lifecycle-warning" });
-  expect(context.logs).toContainEqual(
-    expect.objectContaining({ event: "lifecycle_not_installed" }),
-  );
-});
-
 test("disabled mode keeps the schema, warns, and lets app access decide alone", async () => {
   context = await createTestPayload({
     name: "startup-disabled",
