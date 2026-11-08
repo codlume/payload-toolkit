@@ -45,9 +45,21 @@ try {
   packageJSON.devDependencies["vite-plus"] = rootPackageJSON.devDependencies["vite-plus"];
   await writeFile(packageJSONPath, `${JSON.stringify(packageJSON, null, 2)}\n`);
 
+  // pnpm 11 fails an install whose build scripts are not approved. The disposable
+  // install approves exactly the packages the workspace root already approves.
+  const rootWorkspace = await readFile(
+    path.join(repositoryDirectory, "pnpm-workspace.yaml"),
+    "utf8",
+  );
+  const allowBuilds = /^allowBuilds:\n(?:[ \t]+.*\n?)+/mu.exec(rootWorkspace)?.[0];
+  if (!allowBuilds) {
+    throw new Error("The root pnpm-workspace.yaml declares no allowBuilds.");
+  }
+  await writeFile(path.join(copyDirectory, "pnpm-workspace.yaml"), allowBuilds);
+
   const run = (arguments_) =>
     runCommand({ arguments_, command: "pnpm", cwd: copyDirectory, env: process.env });
-  await run(["install", "--ignore-workspace", "--config.minimum-release-age=0"]);
+  await run(["install", "--config.minimum-release-age=0"]);
   const installed = JSON.parse(
     await readFile(path.join(copyDirectory, "node_modules/payload/package.json"), "utf8"),
   );
