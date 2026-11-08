@@ -1,0 +1,69 @@
+{
+  "name": "@codlume/payload-roles",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Database-backed roles for Payload CMS, intersected with the access functions an app already has.",
+  "keywords": [
+    "access-control",
+    "cms",
+    "payload",
+    "payloadcms",
+    "permissions",
+    "plugin",
+    "roles"
+  ],
+  "homepage": "https://github.com/codlume/payload-toolkit/tree/main/packages/payload-roles#readme",
+  "bugs": {
+    "url": "https://github.com/codlume/payload-toolkit/issues"
+  },
+  "license": "MIT",
+  "author": "Codlume",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codlume/payload-toolkit.git",
+    "directory": "packages/payload-roles"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.mts",
+      "import": "./dist/client.mjs"
+    }
+  },
+  "scripts": {
+    "build": "vp pack",
+    "test:build": "pnpm build && node --test tests/build/package-contract.test.mjs",
+    "test:unit": "pnpm build && vitest run tests/unit",
+    "test:integration": "pnpm build && vitest run tests/integration --maxWorkers=1"
+  },
+  "devDependencies": {
+    "@payloadcms/db-sqlite": "3.90.1",
+    "@payloadcms/graphql": "3.90.1",
+    "@payloadcms/ui": "3.90.1",
+    "@types/react": "19.2.18",
+    "graphql": "16.14.2",
+    "payload": "3.90.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  },
+  "peerDependencies": {
+    "@payloadcms/ui": ">=3.90.1 <4",
+    "payload": ">=3.90.1 <4",
+    "react": "^19.0.1 || ^19.1.2 || ^19.2.1"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23 || >=24.0.0 <25"
+  }
+}
