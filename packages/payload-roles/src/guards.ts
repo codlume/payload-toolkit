@@ -326,9 +326,17 @@ export const decideRoleWrite = ({
   let canonical: null | StoredPermissions = null;
   if (permissionsField in raw) {
     const checked = checkPermissions(raw[permissionsField], registry, editor);
-    errors.push(
-      ...checked.issues.map((issue) => ({ path: issue.path, message: describeCellIssue(issue) })),
-    );
+    // One error at the field's own path. Payload's admin form adds a form-state entry for
+    // each error path and sends its null value with the next save, so a path inside the JSON
+    // would overwrite the editor's retry; it also keeps only one message per path.
+    if (checked.issues.length > 0) {
+      errors.push({
+        path: permissionsField,
+        message: checked.issues
+          .map((issue) => `${issue.path}: ${describeCellIssue(issue)}`)
+          .join("\n"),
+      });
+    }
     canonical = serializePermissions(checked.grants, registry);
   }
   return {

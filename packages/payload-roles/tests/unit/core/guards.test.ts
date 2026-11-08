@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 
 import type { Capabilities, Grants } from "../../../src/contract.ts";
-import { grantsOf } from "../../../src/grants.ts";
+import { checkPermissions, describeCellIssue, grantsOf } from "../../../src/grants.ts";
 import {
   decideRoleDelete,
   decideRoleWrite,
@@ -224,7 +224,14 @@ test("role writes validate permissions against the editor and freeze the key", (
     targetKey: null,
   });
   expect(denied.decision).toMatchObject({
-    errors: [{ path: "permissions.collections.pages.actions" }],
+    errors: [
+      {
+        message: expect.stringContaining(
+          'permissions.collections.pages.actions: You cannot grant action "delete"',
+        ),
+        path: "permissions",
+      },
+    ],
     kind: "invalid",
   });
 
@@ -270,4 +277,36 @@ test("role edits and deletes need the editor to cover the role's current grants"
   });
   expect(decideRoleDelete(editorOf(pagesWrite), pagesWrite)).toEqual({ kind: "allow" });
   expect(decideRoleDelete(ALL, pagesWrite)).toEqual({ kind: "allow" });
+});
+
+test("role permission refusals arrive as one permissions error, one line per cell in check order", () => {
+  const registry = buildRegistry(
+    { collections: [{ slug: "pages" }, { slug: "roles" }], globals: [] },
+    { collections: ["pages"], globals: [], rolesSlug: "roles" },
+  );
+  const editor = editorOf(pagesWrite);
+  const permissions = {
+    collections: { nothing: { actions: ["read"] }, pages: { actions: ["delete", "publish"] } },
+  };
+  const { issues } = checkPermissions(permissions, registry, editor);
+  expect(issues.length).toBeGreaterThan(1);
+
+  const { decision } = decideRoleWrite({
+    current: null,
+    editor,
+    permissionsField: "permissions",
+    raw: { permissions },
+    registry,
+    targetKey: null,
+  });
+
+  expect(decision).toEqual({
+    kind: "invalid",
+    errors: [
+      {
+        message: issues.map((issue) => `${issue.path}: ${describeCellIssue(issue)}`).join("\n"),
+        path: "permissions",
+      },
+    ],
+  });
 });
