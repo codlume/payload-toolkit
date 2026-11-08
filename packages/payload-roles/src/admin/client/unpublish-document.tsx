@@ -1,0 +1,84 @@
+import {
+  Button,
+  ConfirmationModal,
+  toast,
+  useConfig,
+  useDocumentInfo,
+  useForm,
+  useModal,
+  useTranslation,
+} from "@payloadcms/ui";
+import { requests } from "@payloadcms/ui/shared";
+import React from "react";
+
+import { unpublishErrorOf, unpublishTarget } from "./unpublish-request.ts";
+
+/**
+ * Unpublish in `beforeDocumentControls`, for viewers the server already found holding the
+ * `unpublish` grant. Sends the stock all-locales request and refreshes the document like the
+ * stock button. Hidden until the document has a published version.
+ */
+export const UnpublishDocument = () => {
+  const {
+    id,
+    collectionSlug,
+    data,
+    globalSlug,
+    hasPublishedDoc,
+    isTrashed,
+    setHasPublishedDoc,
+    setMostRecentVersionIsAutosaved,
+    setUnpublishedVersionCount,
+  } = useDocumentInfo();
+  const {
+    config: {
+      routes: { api },
+      serverURL,
+    },
+  } = useConfig();
+  const { i18n, t } = useTranslation();
+  const { reset } = useForm();
+  const { toggleModal } = useModal();
+  const target = unpublishTarget({ api, serverURL, collectionSlug, globalSlug, id });
+  if (!hasPublishedDoc || isTrashed || !target) {
+    return null;
+  }
+  const modalSlug = `roles-unpublish-${collectionSlug ?? globalSlug}-${id ?? ""}`;
+
+  const unpublish = async () => {
+    const response = await requests[target.method](target.url, {
+      body: JSON.stringify({ _status: "draft" }),
+      headers: { "Accept-Language": i18n.language, "Content-Type": "application/json" },
+    }).catch(() => null);
+    if (response?.status !== 200) {
+      const json: unknown = await response?.json().catch(() => null);
+      toast.error(unpublishErrorOf(json) ?? t("error:unPublishingDocument"));
+      return;
+    }
+    await reset({ ...data, _status: "draft" });
+    toast.success(t("version:unpublishedSuccessfully"));
+    setUnpublishedVersionCount(1);
+    setMostRecentVersionIsAutosaved(false);
+    setHasPublishedDoc(false);
+  };
+
+  return (
+    <>
+      <Button
+        buttonStyle="secondary"
+        onClick={() => toggleModal(modalSlug)}
+        size="medium"
+        type="button"
+      >
+        {t("version:unpublish")}
+      </Button>
+      <ConfirmationModal
+        body={t("version:aboutToUnpublish")}
+        confirmingLabel={t("version:unpublishing")}
+        heading={t("version:confirmUnpublish")}
+        modalSlug={modalSlug}
+        onConfirm={unpublish}
+      />
+    </>
+  );
+};
