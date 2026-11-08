@@ -43,6 +43,20 @@ export const requestKeyOf = (req: { payloadDataLoader?: unknown }): object =>
     ? req.payloadDataLoader
     : req;
 
+const NUMERIC = /^[+-]?\d+(?:\.\d+)?$/u;
+
+/**
+ * Whether two ids may name the same document. A caller's id can differ in form from the stored
+ * one (`"05"` finds row 5, a uuid can differ in case), so this over-matches: matching only adds
+ * an entry's sent fields to the judgement.
+ */
+const maybeSameId = (a: DefaultDocumentIDType, b: DefaultDocumentIDType) => {
+  const [left, right] = [String(a).trim().toLowerCase(), String(b).trim().toLowerCase()];
+  return NUMERIC.test(left) && NUMERIC.test(right)
+    ? Number(left) === Number(right)
+    : left === right;
+};
+
 /** The kind of write a `beforeOperation` operation name performs, if it writes. */
 export const operationKind = (operation: string) => KINDS[operation];
 
@@ -103,7 +117,7 @@ export const createOperationScope = <Data>() => {
                   entry === innermost ||
                   entry.target.id === undefined ||
                   document.id === undefined ||
-                  String(entry.target.id) === String(document.id),
+                  maybeSameId(entry.target.id, document.id),
               )
               .map((entry) => entry.data),
           };

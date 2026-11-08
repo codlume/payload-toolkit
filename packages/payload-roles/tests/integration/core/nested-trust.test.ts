@@ -28,7 +28,8 @@ type Nested =
   | "direct-trusted-missing-outer-req"
   | "direct-untrusted"
   | "strip-password"
-  | "touch-other-user";
+  | "touch-other-user"
+  | "nested-then-strip-password";
 
 const NESTED: readonly Nested[] = [
   "none",
@@ -147,6 +148,22 @@ const nestedWrites: CollectionBeforeChangeHook = async ({ data, originalDoc, req
         req,
       }).catch(() => undefined);
       break;
+    case "nested-then-strip-password":
+      if (
+        isRecord(originalDoc) &&
+        (typeof originalDoc.id === "number" || typeof originalDoc.id === "string")
+      ) {
+        await updateByIDOperation({
+          collection: users,
+          data: {},
+          depth: 0,
+          disableTransaction: true,
+          id: originalDoc.id,
+          overrideAccess: true,
+          req,
+        });
+      }
+      return Object.fromEntries(Object.entries(data).filter(([key]) => key !== "password"));
     case "touch-other-user":
       await payload
         .update({ collection: "users", data: {}, id: state.touchTarget, req })
@@ -406,4 +423,22 @@ test("an editor's save of a covered user still works while an app hook writes a 
     data: { email: "bystander@example.test" },
     id: state.bystanderId,
   });
+});
+
+test("a password sent by a non-canonical id stays judged when a hook nests a write and strips it", async () => {
+  await withNested("nested-then-strip-password", () =>
+    rejectsWith(
+      context.payload.update({
+        collection: "users",
+        data: { password: "takeover-attempt-password" },
+        id: `0${String(target.id)}`,
+        overrideAccess: false,
+        user: editor,
+      }),
+      "Forbidden",
+    ),
+  );
+  await expect(
+    login(context.payload, "target@example.test", "takeover-attempt-password"),
+  ).rejects.toThrow();
 });

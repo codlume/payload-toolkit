@@ -256,8 +256,9 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   API request, and a Local API request that mixes trusted and untrusted writes on one collection
   judges all of them as untrusted.
 - Operations started synchronously from app code, without an `await` between them, stack their
-  records in one async context. After 64 of them every later write in that context is judged
-  untrusted, and the records stay in memory until the context ends.
+  records in one async context. From about the 64th of them (the 63rd on Node 22) every later
+  write in that context is judged untrusted, and the records stay in memory until the context
+  ends.
 - On an upload-enabled user collection, an update that replaces the file writes the new file and
   deletes the old one before `beforeChange` runs (gate G18). A refused update can therefore leave
   the stored row pointing at a file that no longer exists. The plugin does not handle this.
