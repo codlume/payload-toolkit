@@ -279,15 +279,14 @@ describe("T2: restore from trash as draft needs trash", () => {
 });
 
 describe("T3: restore from trash as published needs trash and publish", () => {
-  test("trash-only is denied per doc over bulk REST and the pages stay trashed", async () => {
+  test("trash-only is refused before any document is read over bulk REST and the pages stay trashed", async () => {
     const a = await seedPage("TN", "T3 denied a");
     const b = await seedPage("TN", "T3 denied b");
     const response = await actors.trashOnly.api("PATCH", `/pages?trash=true&${idIn(a, b)}`, {
       _status: "published",
       deletedAt: null,
     });
-    expect(response.status).toBe(400);
-    expect(failedIds(response)).toEqual(new Set([a, b]));
+    expect(response.status).toBe(403);
     expect(await stored(a)).toEqual({
       _status: "draft",
       deletedAt: TRASHED,
@@ -300,15 +299,17 @@ describe("T3: restore from trash as published needs trash and publish", () => {
     });
   });
 
-  test("trash-only is denied per doc over Local updateMany", async () => {
+  test("trash-only is refused before any document is read over Local updateMany", async () => {
     const id = await seedPage("TN", "T3 denied local");
-    const result = await updateManyAs({
-      role: "trashOnly",
-      ids: [id],
-      data: { _status: "published", deletedAt: null },
-      trash: true,
-    });
-    expect(result.errors.map((error) => error.id)).toEqual([id]);
+    await rejectsWith(
+      updateManyAs({
+        role: "trashOnly",
+        ids: [id],
+        data: { _status: "published", deletedAt: null },
+        trash: true,
+      }),
+      "Forbidden",
+    );
     expect(await stored(id)).toEqual({
       _status: "draft",
       deletedAt: TRASHED,
