@@ -15,7 +15,7 @@ const unpublishSlots = ({ drafts, id }: Resource) =>
     : undefined;
 
 export const admin: AdminModule = {
-  permissionsField: undefined,
+  permissionsField: { Field: "@codlume/payload-roles#PermissionsField" },
   collectionEdit: unpublishSlots,
   globalElements: unpublishSlots,
 };
