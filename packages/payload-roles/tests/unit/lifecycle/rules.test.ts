@@ -732,3 +732,25 @@ test("admin probes, which carry no client body, ask for the stock controls' acti
   expect(probe(pages, "create", { _status: "published" })).toEqual(["create", "publish"]);
   expect(probe(settings, "update", undefined)).toEqual(["update"]);
 });
+
+test("a key absent from the written data keeps the stored value, so a live edit still needs publish", () => {
+  const facts = settleAfter(
+    pages,
+    requestFacts(pages, view({ bodyKeys: ["title"], data: { title: "x" } })),
+    { title: "x" },
+  );
+  const live = settleBefore(pages, facts, { _status: "published", deletedAt: null });
+  expect([...requiredActions(pages, live)]).toEqual(["update", "publish"]);
+  const trashed = settleBefore(pages, facts, { _status: "draft", deletedAt: DATE });
+  expect([...requiredActions(pages, trashed)]).toEqual(["update"]);
+});
+
+test("a draft save that may rewrite upload files needs publish, because Payload can delete live files", () => {
+  const facts = requestFacts(
+    pages,
+    view({ bodyKeys: ["alt"], data: { alt: "x" }, draft: true, files: true }),
+  );
+  expect([...requiredActions(pages, facts)]).toEqual(["update", "publish"]);
+  const noFile = requestFacts(pages, view({ bodyKeys: ["alt"], data: { alt: "x" }, draft: true }));
+  expect([...requiredActions(pages, noFile)]).toEqual(["update"]);
+});

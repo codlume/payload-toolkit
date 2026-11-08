@@ -70,7 +70,7 @@ const KINDS: Readonly<Record<string, Kind>> = {
   update: "update",
 };
 
-const LIFECYCLE_KEYS: ReadonlySet<string> = new Set(["_status", "deletedAt"]);
+const FILE_KEYS: ReadonlySet<string> = new Set(["focalX", "focalY"]);
 
 /** `create` access serves create and duplicate; `update` access serves update and restore. */
 const servesKey = (kind: Kind, key: WriteAccessArgs["key"]) =>
@@ -180,7 +180,9 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
   const verdict = judge(
     resource,
     requestFacts(resource, view),
-    holdsFor(kind === "update" ? source.id : undefined),
+    // A restore's `args.id` is the version id, so its parent is unknown here; assume it may be
+    // the member's own user and let beforeChange judge the real target.
+    holdsFor(kind === "update" ? source.id : kind === "restore" ? subjectId : undefined),
   );
   // Payload deletes and writes an upload's files before beforeChange (G18), so such an update
   // must hold every possibility now.
@@ -327,16 +329,16 @@ const requiredWriteActions = ({ resource, key, data }: WriteAccessArgs): Readonl
 const governs = (resource: Resource) => resource.drafts || resource.trash || resource.versions;
 
 /**
- * An upload update may touch stored files unless its body is lifecycle-only and it carries no
- * file and no crop or focal edit (`generateFileData.js:18-32,66,378`).
+ * An upload update writes or deletes stored files only for a new file, `uploadEdits` in the query,
+ * or a focal point in the data (`generateFileData.js:18-32,66,378`). Without new files,
+ * `deleteAssociatedFiles` deletes nothing. The client's keys and the post-hook keys both count.
  */
 const touchesFiles = (req: PayloadRequest, frame: Frame, source: Record<string, unknown>) => {
   const keys = [...frame.bodyKeys, ...(isRecord(source.data) ? Object.keys(source.data) : [])];
   return (
     req.file !== undefined ||
     req.query.uploadEdits !== undefined ||
-    keys.length === 0 ||
-    keys.some((key) => !LIFECYCLE_KEYS.has(key))
+    keys.some((key) => FILE_KEYS.has(key))
   );
 };
 
@@ -408,10 +410,11 @@ const globalHooks: LifecycleModule["globalHooks"] = (resource, enforcer) => {
       data,
       originalDoc: undefined,
       req,
-      // `{}` before the first save is a row: an unsaved global (@payloadcms/drizzle findGlobal.js).
+      // An unsaved global is `{}` on drizzle (findGlobal.js) and falsy elsewhere, which Payload
+      // also treats as never saved (globals/operations/update.js `globalExists`).
       readRow: async () => {
         const row: unknown = await req.payload.db.findGlobal({ slug: resource.slug, req });
-        return isRecord(row) ? row : null;
+        return isRecord(row) ? row : {};
       },
     });
     return data;

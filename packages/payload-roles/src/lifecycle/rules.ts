@@ -10,13 +10,14 @@ export type Before =
   | { readonly kind: "unknown"; readonly mayBeTrashed: boolean };
 
 export type After = {
-  readonly published: "either" | boolean;
+  readonly published: "either" | "unchanged" | boolean;
   readonly trashed: "unchanged" | boolean;
 };
 
 export type Facts = {
   readonly write: Write;
   readonly writesMain: boolean;
+  readonly files: boolean;
   readonly before: Before;
   readonly after: After;
 };
@@ -42,7 +43,12 @@ type Move = { readonly before: RowState; readonly after: RowState };
 
 type Transition =
   | { readonly write: Write; readonly main: Move }
-  | { readonly write: Exclude<Write, "create">; readonly main: null; readonly trashes: boolean };
+  | {
+      readonly write: Exclude<Write, "create">;
+      readonly main: null;
+      readonly trashes: boolean;
+      readonly files: boolean;
+    };
 
 export const STATUS = "_status";
 
@@ -71,6 +77,12 @@ const transitionActions = (
     }
     if (transition.trashes) {
       out.add("trash");
+    }
+    // Payload deletes the old files on a draft save over a newer draft (utilities/update.js:88-98),
+    // and those can be the live document's files.
+    if (transition.files && resource.drafts) {
+      out.add("publish");
+      out.add("update");
     }
   } else {
     const { before, after } = transition.main;
@@ -116,12 +128,16 @@ const befores = (resource: RulesResource, before: Before): readonly RowState[] =
 
 const possibleTransitions = (resource: RulesResource, facts: Facts): readonly Transition[] => {
   if (!facts.writesMain && facts.write !== "create") {
-    return [{ write: facts.write, main: null, trashes: facts.after.trashed === true }];
+    return [
+      { write: facts.write, main: null, trashes: facts.after.trashed === true, files: facts.files },
+    ];
   }
   const { published, trashed } = facts.after;
-  const publisheds = published === "either" ? [false, true] : [published];
   return befores(resource, facts.before).flatMap((before) =>
-    publisheds.map((after) => ({
+    (published === "either"
+      ? [false, true]
+      : [published === "unchanged" ? before.published : published]
+    ).map((after) => ({
       write: facts.write,
       main: {
         before,
@@ -237,6 +253,7 @@ export const requestFacts = (resource: RulesResource, view: RequestView): Facts 
   return {
     write: writeOf(resource, view),
     writesMain: writesMainOf(resource, view, status),
+    files: view.files,
     // Without `trash: true` Payload filters trashed rows out (updateByID.js:121, update.js:134).
     before:
       view.kind === "create"
@@ -252,6 +269,14 @@ export const requestFacts = (resource: RulesResource, view: RequestView): Facts 
 const isSet = (value: unknown) => value !== undefined && value !== null;
 
 /**
+ * A key absent from the data Payload writes leaves the stored value as it was. Field fills skip
+ * it while `req.context.isRestoringVersion` is set (beforeValidate/promise.js:182), and restore
+ * never clears that flag on a request GraphQL shares across mutations.
+ */
+const settled = <T extends boolean>(value: unknown, read: (value: unknown) => T): "unchanged" | T =>
+  value === undefined ? "unchanged" : read(value);
+
+/**
  * Field `beforeValidate` has filled every key before `beforeChange`
  * (fields/hooks/beforeValidate/promise.js:182), so both values are definitive.
  */
@@ -262,8 +287,8 @@ export const settleAfter = (
 ): Facts => ({
   ...facts,
   after: {
-    published: !resource.drafts || data[STATUS] === "published",
-    trashed: resource.trash && isSet(data.deletedAt),
+    published: !resource.drafts || settled(data[STATUS], (status) => status === "published"),
+    trashed: resource.trash && settled(data.deletedAt, isSet),
   },
 });
 
