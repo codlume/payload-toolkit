@@ -1,8 +1,21 @@
 // Seeded by core. Owned by the matrix thread from here on.
-import type { AdminModule } from "../contract.ts";
+import type { AdminModule, Resource } from "../contract.ts";
+
+const unpublishSlots = ({ drafts, id }: Resource) =>
+  drafts
+    ? {
+        UnpublishButton: {
+          path: "@codlume/payload-roles#UnpublishSlot",
+          serverProps: { resource: id },
+        },
+        beforeDocumentControls: [
+          { path: "@codlume/payload-roles#UnpublishControl", serverProps: { resource: id } },
+        ],
+      }
+    : undefined;
 
 export const admin: AdminModule = {
   permissionsField: undefined,
-  collectionEdit: () => undefined,
-  globalElements: () => undefined,
+  collectionEdit: unpublishSlots,
+  globalElements: unpublishSlots,
 };
