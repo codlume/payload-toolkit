@@ -1,6 +1,3 @@
-// Restore-version outcomes on the `pages` drafts collection (R1-R4) and draft, publish, unpublish
-// and restore outcomes on the `settings` drafts global (G1-G6), over REST, Local API and GraphQL.
-// Every case asserts the stored main row and newest version, not the response alone.
 import { Forbidden } from "payload";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -39,7 +36,6 @@ type ActorName = keyof typeof ROLES;
 type Surface = "graphql" | "local" | "rest";
 type Attempt = "allowed" | "forbidden" | `unexpected ${string}`;
 type Row = Record<string, unknown>;
-/** The main row, and the newest version with its id so a denied write cannot hide behind pruning. */
 type Stored = { main: Row; newest: Row | undefined };
 type Step = { data: Row; draft: boolean };
 
@@ -110,7 +106,6 @@ const fromGraphql = (
   return `unexpected ${JSON.stringify({ data, errors })}`;
 };
 
-/** Runs `attempt`; an allowed one must leave `effect` stored, a forbidden one must store nothing. */
 const expectOutcome = async ({
   attempt,
   effect,
@@ -134,7 +129,6 @@ const expectOutcome = async ({
 const published = (data: Row): Step => ({ data: { ...data, _status: "published" }, draft: false });
 const unpublished = (data: Row): Step => ({ data: { ...data, _status: "draft" }, draft: false });
 
-/** Runs `writes` one after another, each after the previous settles. */
 const inOrder = (writes: (() => Promise<unknown>)[]) =>
   writes.reduce<Promise<unknown>>((previous, write) => previous.then(write), Promise.resolve());
 
@@ -170,7 +164,6 @@ describe("collection restoreVersion on pages", () => {
     };
   };
 
-  /** Trusted history; returns the page id and the version id each step wrote, in step order. */
   const seedPage = async ([first, ...later]: [Step, ...Step[]]) => {
     const { payload } = context;
     const page = await payload.create({
@@ -335,7 +328,6 @@ describe("the settings drafts global", () => {
     };
   };
 
-  /** Trusted history; returns the version id each step wrote, in step order. */
   const seedSettings = async (history: Step[]) => {
     const { payload } = context;
     const before = (await newestGlobalVersion())?.id ?? 0;

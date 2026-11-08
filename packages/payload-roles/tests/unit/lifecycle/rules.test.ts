@@ -1,6 +1,3 @@
-// The lifecycle rule table. Expected sets come from the owner-approved transition spec, not from
-// running the rules. Each row is one write as the adapter would parse it, the stored main row it
-// meets, and the data `beforeChange` sees after Payload's field fills.
 import { expect, test } from "vitest";
 
 import type { ActionId } from "../../../src/contract.ts";
@@ -18,18 +15,10 @@ type Row = {
   id: string;
   resource: RulesResource;
   view: RequestView;
-  /** The stored main row as `db.findOne` or `db.findGlobal` returns it; `null` before a create. */
   before: null | Record<string, unknown>;
-  /** `data` as `beforeChange` sees it, every key filled. */
   final: Record<string, unknown>;
-  /** `requiredWriteActions` before any row is read. */
   floor: ActionId[];
-  /** What the write needs once the row and the final data are known. */
   exact: ActionId[];
-  /**
-   * Whether `beforeChange` must read the main row, per role: unpublish-only, update-only,
-   * update+publish. `r` reads, `-` decides without a row, `n/a` is decided in beforeOperation.
-   */
   reads: string;
 };
 
@@ -637,10 +626,8 @@ const holding = (actions: readonly ActionId[]) => (action: ActionId) => actions.
 
 const requested = ({ resource: res, view: request }: Row) => requestFacts(res, request);
 
-/** Facts as `beforeChange` holds them before any row read. */
 const settled = (entry: Row) => settleAfter(entry.resource, requested(entry), entry.final);
 
-/** Complete facts: the row read as well. */
 const exact = (entry: Row) =>
   entry.before === null
     ? settled(entry)

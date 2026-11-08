@@ -1,5 +1,3 @@
-// Trash, restore-from-trash, permanent delete and bulk lifecycle outcomes on the `pages` fixture
-// (drafts + trash). Spec rows T1-T5 and U8, plus the bulk partial-commit contract.
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import {
@@ -55,7 +53,6 @@ afterAll(() => context.destroy());
 
 type State = "N" | "P" | "PD" | "TN" | "TP";
 
-/** A fresh page in `state`. PD keeps "<title>" on the main row and "<title> draft" in a newer version. TN/TP are trashed N/P. */
 const seedPage = async (state: State, title: string) => {
   const { payload } = context;
   const published = state === "P" || state === "PD" || state === "TP";
@@ -81,7 +78,6 @@ const seedPage = async (state: State, title: string) => {
   return id;
 };
 
-/** The stored main row, trashed rows included; `null` once permanently deleted. */
 const stored = async (id: number | string) => {
   const row = await context.payload.db.findOne<{
     _status?: string;
@@ -101,7 +97,6 @@ const stored = async (id: number | string) => {
 
 const TRASHED = expect.any(String);
 
-/** The ids a bulk REST response lists in `errors`. */
 const failedIds = (response: RestResponse) => {
   const errors = response.json?.errors;
   return Array.isArray(errors)
@@ -117,7 +112,6 @@ const NONE = new Set();
 
 const idIn = (...ids: (number | string)[]) => `where[id][in]=${ids.join(",")}`;
 
-/** Local API bulk update as `role`. The `as` helper's updateMany has no `trash` option. */
 const updateManyAs = ({
   role,
   ids,

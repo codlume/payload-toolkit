@@ -1,5 +1,3 @@
-// Each write on the drafts + trash `pages` collection needs exactly the lifecycle actions its stored
-// effect implies. Every row runs over the Local API and REST and checks the stored rows.
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { type Actor, as, login, rest, seedRole, seedUser } from "../../helpers/actors.ts";
@@ -380,7 +378,6 @@ const viaLocal: Transport = async (role, write) => {
           });
           return errors.length === 0 ? "allowed" : `unexpected errors ${JSON.stringify(errors)}`;
         }
-        // The helper's by-id `update` type omits Payload's `draft` and `autosave` options.
         const options = {
           autosave: write.via === "autosave",
           collection: "pages",

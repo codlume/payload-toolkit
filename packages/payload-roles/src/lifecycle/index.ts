@@ -1,7 +1,3 @@
-// The Payload adapter around ./rules.ts. It parses hook arguments into `RequestView`, carries one
-// `Frame` per operation in its own AsyncLocalStorage, reads the main row when a verdict depends
-// on it, and throws `Forbidden`. Every policy decision is a call into ./rules.ts. Nothing but
-// `lifecycle` leaves this file, so the store cannot be reached from outside it.
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import type {
@@ -40,29 +36,24 @@ type Kind = RequestView["kind"];
 type Holds = (action: ActionId) => boolean;
 
 type Plan =
-  /** Trusted, an outsider, or a super admin: the lifecycle adds no denial. */
   | { readonly kind: "exempt" }
   | {
       readonly kind: "enforce";
       readonly view: RequestView;
       /**
-       * Pinned when planned, so a nested Local call that rewrites `req.user` (payload-ops 0.7)
-       * cannot change whose write is judged. `target` is the document id for the self-edit
-       * carve-out on the user collection.
+       * Pinned when planned, so a nested Local call that rewrites `req.user`
+       * (utilities/createLocalReq.js:91) cannot change whose write is judged.
        */
       readonly holdsFor: (target: unknown) => Holds;
     };
 
 /**
- * One write operation's record. Opened by `open` in core's first `beforeOperation` hook, the
- * only `enterWith` that reaches the operation's later hooks (G1), so a nested operation and every
- * document of a bulk see their own operation's frame and never another's. `plan` has one writer,
- * the trailing `beforeOperation` hook, which sets it once; access and `beforeChange` only read it.
+ * Opened by `open` in core's first `beforeOperation` hook, the only `enterWith` that reaches the
+ * operation's later hooks (G1).
  */
 type Frame = {
   readonly resource: ResourceId;
   readonly kind: Kind;
-  /** Payload's contract, `overrideAccess === true`; wider than core's `isTrusted`. */
   readonly trusted: boolean;
   /** `Object.keys(args.data)` as the client sent it, before app hooks and field fills (G3, G7). */
   readonly bodyKeys: readonly string[];
@@ -103,7 +94,6 @@ function refuse(
   reason: Reason,
   missing: readonly ActionId[],
 ): never {
-  // A missing frame means a write path skipped the opener, an invariant break worth surfacing.
   const log = reason === "intent-missing" ? enforcer.log.error : enforcer.log.debug;
   log(req.payload, "lifecycle_denied", { resource: resource.id, reason, missing });
   throw new Forbidden(req.t);
@@ -111,11 +101,6 @@ function refuse(
 
 type OpenArgs = { args?: unknown; operation: string; overrideAccess?: boolean | undefined };
 
-/**
- * `leadingBeforeOperation`. Synchronous and decision-free, because Payload has not checked access
- * yet. Reads and deletes keep whatever frame is current, which only write hooks of the same
- * resource and kind ever consult.
- */
 const open =
   (resource: Resource) =>
   ({ args, operation, overrideAccess }: OpenArgs): undefined => {
@@ -133,11 +118,6 @@ const open =
     }
   };
 
-/**
- * The frame `open` made for this very operation. An unplanned frame for this resource and kind
- * can only be this operation's: an outer operation's frame was planned before its access ran,
- * and every write opens its own.
- */
 const ownFrame = (enforcer: Enforcer, req: PayloadRequest, resource: Resource, kind: Kind) => {
   const frame = frames.getStore();
   if (
@@ -151,7 +131,7 @@ const ownFrame = (enforcer: Enforcer, req: PayloadRequest, resource: Resource, k
   return frame;
 };
 
-/** Boundary parse of Payload's operation args. Truthiness, because Payload branches on it. */
+/** Truthiness, because Payload branches on it. */
 const viewOf = (frame: Frame, source: Record<string, unknown>, files: boolean): RequestView => ({
   kind: frame.kind,
   duplicate: frame.kind === "create" && source.duplicateFromID !== undefined,
@@ -170,15 +150,9 @@ type PlanArgs = {
   operation: string;
   args: unknown;
   req: PayloadRequest;
-  /** Upload collections only: whether this update may write stored files before beforeChange. */
   files: Files;
 };
 
-/**
- * The trailing `beforeOperation` hook body, after every app hook, so it sees the args Payload
- * acts on. Pins the subject, runs the pre-access check and stores the plan. The check reads
- * nothing stored, so its denial says nothing about any document.
- */
 const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArgs) => {
   const kind = KINDS[operation];
   if (kind === undefined) {
@@ -195,8 +169,6 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
     return;
   }
   const { capabilities, id: subjectId } = subject;
-  // Core's self-edit carve-out (access.ts `rolesSide`): a member may update their own user
-  // document without `update`. Every other grant still applies to it.
   const self = resource.slug === enforcer.options.userCollection;
   const holdsFor =
     (target: unknown): Holds =>
@@ -211,7 +183,7 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
     holdsFor(kind === "update" ? source.id : undefined),
   );
   // Payload deletes and writes an upload's files before beforeChange (G18), so such an update
-  // must hold every possibility now. Otherwise only what no possibility allows is refused.
+  // must hold every possibility now.
   if (verdict.kind === "deny" || (view.files && verdict.kind !== "allow")) {
     refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
   }
@@ -227,15 +199,9 @@ type CheckArgs = {
   data: Row;
   originalDoc: unknown;
   req: PayloadRequest;
-  /** The stored main row this write replaces. `null` when the document is gone. */
   readRow: () => Promise<null | Row>;
 };
 
-/**
- * The trailing `beforeChange` hook body, once per document. Judges the data Payload is about to
- * write and reads the main row only when the verdict depends on it: never for a draft save, an
- * autosave or a create, and never when the editor holds every possibility or none.
- */
 const check = async ({
   resource,
   enforcer,
@@ -282,10 +248,8 @@ type GlobalRestoreArgs = {
 };
 
 /**
- * Global restore runs no beforeChange (payload-ops 9.2), so it is decided whole here, right
- * after `plan`. The steps mirror Payload's own order and errors (globals/restoreVersion.js:36-53),
- * so nothing stored is read before the editor passed the same readVersions access Payload is
- * about to run. Races a concurrent writer like every main-row read (G2).
+ * Global restore runs no beforeChange (G4), so it is decided whole here. The steps mirror
+ * Payload's own order and errors (globals/restoreVersion.js:36-53).
  */
 const settleGlobalRestore = async ({
   resource,
@@ -336,13 +300,17 @@ const settleGlobalRestore = async ({
   }
 };
 
-/**
- * Called by core's create and update access wrappers for members, for real writes and for admin
- * probes. Inside a planned write of this resource it uses the plan's write class and the access
- * call's `data` (for a restore, Payload's `{ _status }` of the version). Outside one it is a
- * probe: no client body, any untrashed row, so `{ ...doc, _status: "draft" }` asks for `update`
- * and `{ ...doc, _status: "published" }` for `update + publish`.
- */
+/** An admin probe or `/access` call: no operation, so no client body and no flags. */
+const probeView = (key: WriteAccessArgs["key"], data: WriteAccessArgs["data"]): RequestView => ({
+  kind: key,
+  duplicate: false,
+  bodyKeys: null,
+  files: false,
+  draft: false,
+  trash: false,
+  data,
+});
+
 const requiredWriteActions = ({ resource, key, data }: WriteAccessArgs): ReadonlySet<ActionId> => {
   const frame = frames.getStore();
   const planned =
@@ -352,28 +320,15 @@ const requiredWriteActions = ({ resource, key, data }: WriteAccessArgs): Readonl
     frame.plan?.kind === "enforce"
       ? frame.plan.view
       : null;
-  const view: RequestView =
-    planned === null
-      ? {
-          kind: key,
-          duplicate: false,
-          bodyKeys: null,
-          files: false,
-          draft: false,
-          trash: false,
-          data,
-        }
-      : { ...planned, data };
+  const view = planned === null ? probeView(key, data) : { ...planned, data };
   return requiredActions(resource, requestFacts(resource, view));
 };
 
-/** Drafts, trash or versions: otherwise no lifecycle action applies and the floor is the key. */
 const governs = (resource: Resource) => resource.drafts || resource.trash || resource.versions;
 
 /**
  * An upload update may touch stored files unless its body is lifecycle-only and it carries no
- * file and no crop or focal edit (`generateFileData.js:18-32,66,378`). The client's keys and the
- * post-hook keys both count, so an app hook cannot add content behind the check.
+ * file and no crop or focal edit (`generateFileData.js:18-32,66,378`).
  */
 const touchesFiles = (req: PayloadRequest, frame: Frame, source: Record<string, unknown>) => {
   const keys = [...frame.bodyKeys, ...(isRecord(source.data) ? Object.keys(source.data) : [])];
@@ -412,7 +367,7 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
       data,
       originalDoc,
       req,
-      // The main table only, trashed rows included (payload-ops 14a).
+      // The main table only, trashed rows included.
       readRow: async () => {
         const id = idOf(originalDoc);
         if (id === null) {
@@ -453,7 +408,7 @@ const globalHooks: LifecycleModule["globalHooks"] = (resource, enforcer) => {
       data,
       originalDoc: undefined,
       req,
-      // `{}` before the first save is a row: an unsaved global (payload-ops 14c).
+      // `{}` before the first save is a row: an unsaved global (@payloadcms/drizzle findGlobal.js).
       readRow: async () => {
         const row: unknown = await req.payload.db.findGlobal({ slug: resource.slug, req });
         return isRecord(row) ? row : null;

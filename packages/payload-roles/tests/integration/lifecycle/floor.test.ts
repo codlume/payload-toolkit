@@ -1,7 +1,3 @@
-// The access floor and the pre-access check through the real plugin: the floor must see the
-// operation's plan (a status-only body has no floor, so an unpublish-only member passes access),
-// a member who can satisfy no outcome is refused before Payload loads anything, and a
-// `beforeChange` hook that finds no planned frame refuses.
 import { createLocalReq } from "payload";
 import { afterAll, beforeAll, expect, test } from "vitest";
 

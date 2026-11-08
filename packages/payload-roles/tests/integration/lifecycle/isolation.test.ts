@@ -1,7 +1,3 @@
-// Lifecycle intent lives in an AsyncLocalStorage store opened by the first beforeOperation hook.
-// These cases prove that no trusted context leaks into an untrusted operation (nested calls from
-// app hooks, a shared req, the restore Proxy req, concurrent users), and that the exemptions
-// hold: outsiders, super admins, trusted Local API calls and disabled mode get the app's answer.
 import { type CollectionConfig, createLocalReq, type Payload, type PayloadRequest } from "payload";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -35,10 +31,6 @@ const settle = (promise: Promise<unknown>): Promise<PromiseSettledResult<unknown
     (reason: unknown) => ({ reason, status: "rejected" }),
   );
 
-/**
- * Runs `outer` with an app `hook` armed to run `effect` once, on the first operation that reaches
- * it. `nested` is undefined when no operation reached the hook.
- */
 const during = async <T>(
   hook: Hook,
   effect: (req: PayloadRequest) => Promise<unknown>,
@@ -131,7 +123,6 @@ type State = "N" | "P" | "P+" | "PD" | "T";
 // latest, and a later non-draft edit of a PD document then keeps it published.
 const nextMillisecond = () => new Promise((resolve) => setTimeout(resolve, 2));
 
-/** Seeds and reads documents with trusted calls and raw adapter reads. */
 const docs = (payload: Payload) => {
   const seed = async (state: State, title: string, collection = "pages"): Promise<Id> => {
     const write = async <T>(run: () => Promise<T>) => {
@@ -281,10 +272,6 @@ type Attempt =
   | { kind: "restore"; versionId: Id }
   | { kind: "update"; id: Id; data: Doc; draft?: boolean };
 
-/**
- * One pages write as `actor`. REST and Local run with access control; `trusted` is a Local API
- * call with the default `overrideAccess: true` on a req that carries `actor`.
- */
 const attempt = async (
   transport: Transport,
   actor: Actor,
@@ -340,9 +327,7 @@ type Scene = { req: PayloadRequest; actor: Actor; other: Id; third: Id };
 type Effect = {
   name: string;
   run: (scene: Scene) => Promise<unknown>;
-  /** What the app hook observes from its nested call, matched against the settled result. */
   nested: Doc;
-  /** The nested trusted call publishes `other` with `NESTED`. */
   publishesOther: boolean;
 };
 
@@ -424,9 +409,7 @@ type Outer = {
   transports: Transport[];
   seed: () => Promise<{ self: Id; request: Attempt }>;
   outcome: "allowed" | "denied";
-  /** The outer page's main row afterwards. */
   stored: Doc;
-  /** Title of the outer page's latest version afterwards, for draft saves. */
   version?: string;
 };
 
@@ -803,7 +786,6 @@ const transitions: Transition[] = [
   },
 ];
 
-/** Seeds `transition.from` in `collection`, sends the transition over REST and reads the row. */
 const overREST = async (
   target: TestPayload,
   token: null | string,

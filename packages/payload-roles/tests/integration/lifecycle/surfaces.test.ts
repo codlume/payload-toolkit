@@ -1,5 +1,3 @@
-// Lifecycle enforcement on the surfaces beside plain REST and Local writes: upload files, scheduled
-// publish jobs, GraphQL mutations and the admin's copy-to-locale action.
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
