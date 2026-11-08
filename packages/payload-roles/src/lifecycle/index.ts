@@ -103,7 +103,9 @@ function refuse(
   reason: Reason,
   missing: readonly ActionId[],
 ): never {
-  enforcer.log.debug(req.payload, "lifecycle_denied", { resource: resource.id, reason, missing });
+  // A missing frame means a write path skipped the opener, an invariant break worth surfacing.
+  const log = reason === "intent-missing" ? enforcer.log.error : enforcer.log.debug;
+  log(req.payload, "lifecycle_denied", { resource: resource.id, reason, missing });
   throw new Forbidden(req.t);
 }
 
