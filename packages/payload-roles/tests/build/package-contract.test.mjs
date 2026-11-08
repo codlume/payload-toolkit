@@ -38,11 +38,39 @@ test("only the client entry carries the use client directive", async () => {
   assert.doesNotMatch(await read("dist/index.mjs"), /["']use client["']/u);
 });
 
-test("the server entry never bundles the client entry", async () => {
-  const server = await read("dist/index.mjs");
-  const mentions = server.split("@codlume/payload-roles/client").length - 1;
-  const imports = server.match(/from ["']@codlume\/payload-roles\/client["']/gu)?.length ?? 0;
-  assert.equal(mentions, imports);
+// The client entry cannot load in plain Node (it reaches CSS through @payloadcms/ui), while the
+// server entry must, because Payload configs load outside Next. Server code may reach client
+// components only through a deferred `import("@codlume/payload-roles/client")`. Bundled client
+// code is caught elsewhere: shared code would add a file to the pinned dist list, and a static
+// load breaks the plain-Node import of the server entry below.
+const serverBoundaryProblems = (server) => [
+  ...(/(?:from|import)\s*["']@codlume\/payload-roles\/client["']/u.test(server)
+    ? ["static import of the client entry"]
+    : []),
+  ...(/["']\.{1,2}\/client\.mjs["']/u.test(server) ? ["relative import of the client build"] : []),
+];
+
+test("the server boundary check accepts deferred client imports and rejects static ones", () => {
+  assert.deepEqual(
+    serverBoundaryProblems(
+      'const { PermissionsMatrix } = await import("@codlume/payload-roles/client");\nconst path = "@codlume/payload-roles/client#PermissionsMatrix";',
+    ),
+    [],
+  );
+  for (const source of [
+    'import { PermissionsMatrix } from "@codlume/payload-roles/client";',
+    'import "@codlume/payload-roles/client";',
+    'export * from "@codlume/payload-roles/client";',
+  ]) {
+    assert.deepEqual(serverBoundaryProblems(source), ["static import of the client entry"], source);
+  }
+  assert.deepEqual(serverBoundaryProblems('const m = await import("./client.mjs");'), [
+    "relative import of the client build",
+  ]);
+});
+
+test("the server entry reaches the client entry only through deferred imports", async () => {
+  assert.deepEqual(serverBoundaryProblems(await read("dist/index.mjs")), []);
 });
 
 test("server entry exposes the plugin factory, config error and capabilities helper", async () => {
