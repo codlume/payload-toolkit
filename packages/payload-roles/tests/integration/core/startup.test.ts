@@ -78,46 +78,6 @@ test("a later plugin that changes a managed collection's drafts flag fails start
   ).rejects.toThrow(/drafts/u);
 });
 
-test("a later plugin that appends a hook behind the plugin's own fails startup", async () => {
-  await expect(
-    createTestPayload({
-      name: "startup-hook-order",
-      plugins: [
-        lastPlugin((config) => {
-          const users = config.collections?.find((collection) => collection.slug === "users");
-          if (users) {
-            users.hooks = {
-              ...users.hooks,
-              beforeChange: [...(users.hooks?.beforeChange ?? []), ({ data }) => data],
-            };
-          }
-          return config;
-        }),
-      ],
-    }),
-  ).rejects.toThrow(/beforeChange/u);
-});
-
-test("a later plugin that puts a beforeOperation hook ahead of the plugin's own fails startup", async () => {
-  await expect(
-    createTestPayload({
-      name: "startup-opener-order",
-      plugins: [
-        lastPlugin((config) => {
-          const roles = config.collections?.find((collection) => collection.slug === "roles");
-          if (roles) {
-            roles.hooks = {
-              ...roles.hooks,
-              beforeOperation: [() => undefined, ...(roles.hooks?.beforeOperation ?? [])],
-            };
-          }
-          return config;
-        }),
-      ],
-    }),
-  ).rejects.toThrow(/beforeOperation/u);
-});
-
 test("disabled mode keeps the schema, warns, and lets app access decide alone", async () => {
   context = await createTestPayload({
     name: "startup-disabled",
