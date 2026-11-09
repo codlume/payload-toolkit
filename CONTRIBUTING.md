@@ -60,8 +60,7 @@ runs the full readiness and minimum compatibility checks on every pull request.
   change affects motion or timing.
 - Keep generated release files out of the change. Release automation owns
   package versions, changelogs, tags, and GitHub Releases.
-- Wait for CI to pass. Pull requests that change a plugin receive a comment
-  with a Preview build that can be installed before merge.
+- Wait for CI to pass.
 
 When a plugin change ships, the generated changelog and GitHub Release credit
 the pull request author.
