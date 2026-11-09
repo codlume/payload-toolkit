@@ -61,6 +61,8 @@ type Plan =
  */
 type Frame = {
   readonly kind: Kind;
+  /** This operation's own `overrideAccess === true`, as the scope entry records it. */
+  readonly trusted: boolean;
   /** `Object.keys(args.data)` as the client sent it, before app hooks and field fills (G3, G7). */
   readonly bodyKeys: readonly string[];
   /** The raw `draft` flag. Restore reads it before any hook runs (restoreVersion.js:24). */
@@ -130,8 +132,10 @@ const open =
     const target = targetOf(resource, operation, args);
     if (kind !== undefined && target !== null) {
       const source = isRecord(args) ? args : {};
-      frames.open(target, requestKeyOf(req), overrideAccess === true, {
+      const trusted = overrideAccess === true;
+      frames.open(target, requestKeyOf(req), trusted, {
         kind,
+        trusted,
         bodyKeys: isRecord(source.data) ? Object.keys(source.data) : [],
         draft: Boolean(source.draft),
         plan: null,
@@ -230,10 +234,14 @@ type Row = Readonly<Record<string, unknown>>;
 type Enforced = { view: RequestView; holdsFor: (target: unknown) => Holds };
 
 /**
- * The frames that must each allow a write to `document` once trust is lowered. Every frame that
- * may write it is judged as its own planned subject, so a trusted Local API write under an
- * untrusted one counts as the member's. An exempt frame is an outsider's or a super admin's. A
- * frame with no plan, or planned as trusted before any untrusted frame covered it, refuses.
+ * The frames that must each allow a write to `document` once trust is lowered: the frames whose
+ * id may name it, and every untrusted frame of its collection and kind under this request,
+ * whatever id that frame was opened with. A member's id can name the document in another form
+ * (`"7e0"` finds row 7) or be rewritten by an app hook, so only this keeps the member's own
+ * frame judging its write when a laxer nested operation (a draft save, another user) runs inside
+ * it. Each frame is judged as its own planned subject; an exempt one is an outsider's or a super
+ * admin's. A frame with no plan, or planned as trusted before any untrusted frame covered it,
+ * refuses.
  */
 const judged = (
   enforcer: Enforcer,
@@ -245,7 +253,11 @@ const judged = (
   if (found.trusted) {
     return [];
   }
-  return found.all.flatMap(({ plan: current }) => {
+  const everyUntrusted =
+    frames
+      .lookup({ ...document, id: undefined }, requestKeyOf(req))
+      ?.all.filter((frame) => !frame.trusted) ?? [];
+  return [...new Set([...found.all, ...everyUntrusted])].flatMap(({ plan: current }) => {
     if (current === null || current.kind === "trusted") {
       refuse(enforcer, req, resource, "intent-missing", []);
     }
@@ -262,7 +274,7 @@ type CheckArgs = {
   readRow: () => Promise<null | Row>;
 };
 
-/** Each covering untrusted frame judges the data about to be written; the row is read once. */
+/** Every frame `judged` returns must allow the data about to be written; the row is read once. */
 const check = async ({ resource, enforcer, document, data, req, readRow }: CheckArgs) => {
   let row: null | Row | undefined;
   for (const { view, holdsFor } of judged(enforcer, req, resource, document)) {

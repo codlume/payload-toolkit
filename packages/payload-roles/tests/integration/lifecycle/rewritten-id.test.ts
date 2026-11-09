@@ -5,7 +5,7 @@ import {
   updateByIDOperation,
   updateOperation,
 } from "payload";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 
 import { type Actor, login, rest, seedRole, seedUser } from "../../helpers/actors.ts";
 import { rejectsWith } from "../../helpers/expect.ts";
@@ -18,8 +18,12 @@ import {
 
 type Nested = "bulk" | "same-document";
 
+/** How the nested trusted operation differs from the outer write it runs inside. */
+type Variant = "draft" | "outsider" | "plain" | "super-admin";
+
 let context: TestPayload;
-let users: Record<"articles" | "bins", Actor>;
+let users: Record<"articles" | "bins" | "superAdmin", Actor>;
+let variant: Variant = "plain";
 let nested: null | Nested = null;
 const TRASHED = "2026-01-01T00:00:00.000Z";
 
@@ -33,13 +37,20 @@ const directTrusted =
       return data;
     }
     req.context.nestedRan = true;
+    const nestedReq =
+      variant === "super-admin"
+        ? { ...req, user: { ...users.superAdmin, collection: "users" } }
+        : variant === "outsider"
+          ? { ...req, user: null }
+          : req;
     const shared = {
       collection,
       data: {},
       depth: 0,
       disableTransaction: true,
+      draft: variant === "draft",
       overrideAccess: true,
-      req,
+      req: nestedReq,
       trash: slug === "bins",
     };
     if (mode === "same-document" && originalDoc) {
@@ -96,7 +107,7 @@ beforeAll(async () => {
     },
   });
   const { payload } = context;
-  await seedUser(payload, { email: "bootstrap@example.com" });
+  const superAdmin = await seedUser(payload, { email: "bootstrap@example.com" });
   const member = async (key: string, permissions: Parameters<typeof seedRole>[2]) =>
     seedUser(payload, {
       email: `${key}@example.com`,
@@ -107,6 +118,7 @@ beforeAll(async () => {
       collections: { articles: { actions: ["read", "update"] } },
     }),
     bins: await member("bins-update", { collections: { bins: { actions: ["read", "update"] } } }),
+    superAdmin,
   };
   await payload.create({ collection: "bins", data: { title: "unrelated" } });
   await payload.create({
@@ -116,6 +128,11 @@ beforeAll(async () => {
 });
 
 afterAll(() => context.destroy());
+
+beforeEach(() => {
+  nested = null;
+  variant = "plain";
+});
 
 const bin = async (title: string) =>
   (await context.payload.create({ collection: "bins", data: { deletedAt: TRASHED, title } })).id;
@@ -208,6 +225,81 @@ describe("an outer write whose id differs from the stored id, around a direct tr
 
       expect(response.status, "the live edit needs publish").toBe(403);
       expect(await articleTitle(id)).toBe(`alias rest ${mode}`);
+    },
+  );
+});
+
+describe("a nested trusted operation that is laxer than the outer write it runs inside", () => {
+  const variants: readonly Variant[] = ["draft", "super-admin", "outsider"];
+  const cases = variants.flatMap((current) => MODES.map((mode) => ({ current, mode })));
+
+  test.each(cases)(
+    "an update-only member's aliased live edit stays refused over the Local API ($current, $mode)",
+    async ({ current, mode }) => {
+      const id = await article(`lax local ${current} ${mode}`);
+      nested = mode;
+      variant = current;
+
+      await rejectsWith(
+        context.payload.update({
+          collection: "articles",
+          data: { title: "edited without publish" },
+          id: `slug:lax local ${current} ${mode}`,
+          overrideAccess: false,
+          user: users.articles,
+        }),
+        "Forbidden",
+      );
+      nested = null;
+      variant = "plain";
+
+      expect(await articleTitle(id)).toBe(`lax local ${current} ${mode}`);
+    },
+  );
+
+  test.each(cases)(
+    "an update-only member's aliased live edit stays refused over REST ($current, $mode)",
+    async ({ current, mode }) => {
+      const id = await article(`lax rest ${current} ${mode}`);
+      const api = rest(context, await login(context.payload, users.articles.email));
+      nested = mode;
+      variant = current;
+
+      const response = await api(
+        "PATCH",
+        `/articles/${encodeURIComponent(`slug:lax rest ${current} ${mode}`)}`,
+        { title: "edited without publish" },
+      );
+      nested = null;
+      variant = "plain";
+
+      expect(response.status, "the live edit needs publish").toBe(403);
+      expect(await articleTitle(id)).toBe(`lax rest ${current} ${mode}`);
+    },
+  );
+
+  test.each(cases)(
+    "an update-only member cannot restore a trashed bin by a spelled id over the Local API ($current, $mode)",
+    async ({ current, mode }) => {
+      const id = await bin(`lax bin ${current} ${mode}`);
+      nested = mode;
+      variant = current;
+
+      await rejectsWith(
+        context.payload.update({
+          collection: "bins",
+          data: { deletedAt: null },
+          id: `${String(id)}e0`,
+          overrideAccess: false,
+          trash: true,
+          user: users.bins,
+        }),
+        "Forbidden",
+      );
+      nested = null;
+      variant = "plain";
+
+      expect((await binRow(id))?.deletedAt, "the bin stays in the trash").toBe(TRASHED);
     },
   );
 });
