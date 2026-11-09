@@ -39,6 +39,8 @@ type Kind = RequestView["kind"];
 type Holds = (action: ActionId) => boolean;
 
 type Plan =
+  /** Planned while every covering frame was trusted; it carries nothing to judge it by. */
+  | { readonly kind: "trusted" }
   /** An outsider or a super admin: app access alone decides. */
   | { readonly kind: "exempt" }
   | {
@@ -59,8 +61,6 @@ type Plan =
  */
 type Frame = {
   readonly kind: Kind;
-  /** This operation's own `overrideAccess === true`; the scope ANDs it with every covering entry. */
-  readonly trusted: boolean;
   /** `Object.keys(args.data)` as the client sent it, before app hooks and field fills (G3, G7). */
   readonly bodyKeys: readonly string[];
   /** The raw `draft` flag. Restore reads it before any hook runs (restoreVersion.js:24). */
@@ -130,10 +130,8 @@ const open =
     const target = targetOf(resource, operation, args);
     if (kind !== undefined && target !== null) {
       const source = isRecord(args) ? args : {};
-      const trusted = overrideAccess === true;
-      frames.open(target, requestKeyOf(req), trusted, {
+      frames.open(target, requestKeyOf(req), overrideAccess === true, {
         kind,
-        trusted,
         bodyKeys: isRecord(source.data) ? Object.keys(source.data) : [],
         draft: Boolean(source.draft),
         plan: null,
@@ -142,26 +140,19 @@ const open =
   };
 
 /**
- * The frames that may write `document` under this request, innermost first, and whether all of
- * them are trusted. `all` keeps only the entries whose id may name this document, so a trusted
- * write an app hook makes to another document is not judged as the member's. No covering frame
- * refuses the write.
+ * The frames that may write `document` under this request, innermost first. Trust is the scope's
+ * own verdict: an untrusted entry lowers it for every document of its collection and kind, because
+ * the id it was opened with can name this document in another form (`"5e0"` finds row 5) or be
+ * rewritten by an app hook before Payload reads it. No covering frame refuses the write.
  */
 const covering = (
   enforcer: Enforcer,
   req: PayloadRequest,
   resource: Resource,
   document: OperationTarget,
-) => {
-  const found =
-    frames.lookup(document, requestKeyOf(req)) ??
-    refuse(enforcer, req, resource, "intent-missing", []);
-  return {
-    innermost: found.innermost,
-    all: found.all,
-    trusted: found.all.every((frame) => frame.trusted),
-  };
-};
+) =>
+  frames.lookup(document, requestKeyOf(req)) ??
+  refuse(enforcer, req, resource, "intent-missing", []);
 
 /** Truthiness, because Payload branches on it. */
 const viewOf = (frame: Frame, source: Record<string, unknown>, files: boolean): RequestView => ({
@@ -200,7 +191,7 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
     refuse(enforcer, req, resource, "intent-missing", []);
   }
   if (found.trusted) {
-    frame.plan = { kind: "exempt" };
+    frame.plan = { kind: "trusted" };
     return;
   }
   const subject = await enforcer.subject(req);
@@ -239,9 +230,10 @@ type Row = Readonly<Record<string, unknown>>;
 type Enforced = { view: RequestView; holdsFor: (target: unknown) => Holds };
 
 /**
- * The untrusted frames that must each allow a write to `document`. A trusted frame adds no
- * permission; an exempt one is an outsider's or a super admin's. Lowered trust with nothing to
- * judge (the scope's depth cap) refuses.
+ * The frames that must each allow a write to `document` once trust is lowered. Every frame that
+ * may write it is judged as its own planned subject, so a trusted Local API write under an
+ * untrusted one counts as the member's. An exempt frame is an outsider's or a super admin's. A
+ * frame with no plan, or planned as trusted before any untrusted frame covered it, refuses.
  */
 const judged = (
   enforcer: Enforcer,
@@ -253,11 +245,12 @@ const judged = (
   if (found.trusted) {
     return [];
   }
-  const plans = found.all.filter((frame) => !frame.trusted).map((frame) => frame.plan);
-  if (plans.length === 0 || plans.includes(null)) {
-    refuse(enforcer, req, resource, "intent-missing", []);
-  }
-  return plans.flatMap((current) => (current?.kind === "enforce" ? [current] : []));
+  return found.all.flatMap(({ plan: current }) => {
+    if (current === null || current.kind === "trusted") {
+      refuse(enforcer, req, resource, "intent-missing", []);
+    }
+    return current.kind === "enforce" ? [current] : [];
+  });
 };
 
 type CheckArgs = {

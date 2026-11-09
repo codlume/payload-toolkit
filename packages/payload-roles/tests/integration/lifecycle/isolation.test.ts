@@ -330,10 +330,11 @@ type Effect = {
   nested: Doc;
   publishesOther: boolean;
   /**
-   * Inside an untrusted restore, whose parent page is unknown until it is read, a trusted write
-   * to any page may be the restore's own document, so it is judged as the member's and refused.
+   * Under an untrusted member write on pages, a trusted write to any page is judged as the
+   * member's: the outer id can name that page in another form or be rewritten by an app hook,
+   * so the operation scope cannot rule it out. These members lack publish, so it is refused.
    */
-  insideRestore?: { nested: Doc; publishesOther: boolean };
+  underMember?: { nested: Doc; publishesOther: boolean };
 };
 
 const trustedPublishOther = ({ req, other }: Scene) =>
@@ -354,7 +355,7 @@ const effects: Effect[] = [
     name: "a trusted publish of another page",
     nested: { status: "fulfilled" },
     publishesOther: true,
-    insideRestore: {
+    underMember: {
       nested: { reason: { name: "Forbidden" }, status: "rejected" },
       publishesOther: false,
     },
@@ -370,7 +371,7 @@ const effects: Effect[] = [
     name: "a caught trusted update of a missing page",
     nested: { reason: { name: "NotFound" }, status: "rejected" },
     publishesOther: false,
-    insideRestore: {
+    underMember: {
       nested: { reason: { name: "Forbidden" }, status: "rejected" },
       publishesOther: false,
     },
@@ -401,7 +402,7 @@ const effects: Effect[] = [
       value: [{ status: "fulfilled" }, { reason: { name: "Forbidden" }, status: "rejected" }],
     },
     publishesOther: true,
-    insideRestore: {
+    underMember: {
       nested: {
         status: "fulfilled",
         value: [
@@ -421,7 +422,7 @@ const effects: Effect[] = [
       value: [{ reason: { name: "Forbidden" }, status: "rejected" }, { status: "fulfilled" }],
     },
     publishesOther: true,
-    insideRestore: {
+    underMember: {
       nested: {
         status: "fulfilled",
         value: [
@@ -566,8 +567,7 @@ describe("nested calls from app hooks never carry trust into the operation aroun
       if (hook === "beforeOperation" || outer.outcome === "allowed") {
         expect(nested, `the app ${hook} hook ran its nested call`).toBeDefined();
       }
-      const expected =
-        request.kind === "restore" && effect.insideRestore ? effect.insideRestore : effect;
+      const expected = transport !== "trusted" && effect.underMember ? effect.underMember : effect;
       if (nested) {
         expect(nested, "the nested calls get their own decisions").toMatchObject(expected.nested);
       }

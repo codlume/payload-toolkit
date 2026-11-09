@@ -109,10 +109,11 @@ const setup = async (at: At, nested: Nested, label: string) => {
   return { otherId, outerId };
 };
 
-// A trusted write to the same document an untrusted write names is judged as the member's, so
-// the same-id nested call is refused too: the operation scope cannot tell it from a leak.
+// Under an untrusted member write on pages, a trusted write to any page is judged as the
+// member's, so this update-only member's nested live edits are refused too; a missing page still
+// fails to load.
 const NESTED: readonly { nested: Nested; expected: string }[] = [
-  { nested: "different-id", expected: "ok" },
+  { nested: "different-id", expected: "Forbidden" },
   { nested: "same-id", expected: "Forbidden" },
   { nested: "caught-error", expected: "NotFound" },
 ];
