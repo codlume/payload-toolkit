@@ -425,20 +425,27 @@ test("an editor's save of a covered user still works while an app hook writes a 
   });
 });
 
-test("a password sent by a non-canonical id stays judged when a hook nests a write and strips it", async () => {
-  await withNested("nested-then-strip-password", () =>
-    rejectsWith(
-      context.payload.update({
-        collection: "users",
-        data: { password: "takeover-attempt-password" },
-        id: `0${String(target.id)}`,
-        overrideAccess: false,
-        user: editor,
-      }),
-      "Forbidden",
-    ),
-  );
-  await expect(
-    login(context.payload, "target@example.test", "takeover-attempt-password"),
-  ).rejects.toThrow();
-});
+test.each([
+  (id: number | string) => `0${String(id)}`,
+  (id: number | string) => `${String(id)}e0`,
+  (id: number | string) => `${String(id)}.`,
+])(
+  "a password sent by a non-canonical id stays judged when a hook nests a write and strips it (%#)",
+  async (spell) => {
+    await withNested("nested-then-strip-password", () =>
+      rejectsWith(
+        context.payload.update({
+          collection: "users",
+          data: { password: "takeover-attempt-password" },
+          id: spell(target.id),
+          overrideAccess: false,
+          user: editor,
+        }),
+        "Forbidden",
+      ),
+    );
+    await expect(
+      login(context.payload, "target@example.test", "takeover-attempt-password"),
+    ).rejects.toThrow();
+  },
+);
