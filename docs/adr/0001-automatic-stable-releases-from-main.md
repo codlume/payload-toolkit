@@ -1,8 +1,8 @@
 # Automatic stable releases from main, no prerelease channel
 
-Both plugins were `0.x` and lived in one repo with squash-only merges and conventional PR titles. We chose independent release-please versions in manifest mode: every releasable merge to `main` produced a stable release, a breaking change (`!` in the PR title) bumped the minor while on `0.x`, and `1.0.0` needed an explicit `release-as` override. We chose pkg.pr.new Preview builds instead of a `next` dist-tag because no tool could promote a prerelease from a signal on a merged pull request, and on `0.x` a prerelease channel added little that a patch bump did not.
+Both plugins were `0.x` and lived in one repo with squash-only merges and conventional PR titles. We chose independent release-please versions in manifest mode: every releasable merge to `main` produced a stable release, a breaking change (`!` in the PR title) bumped the minor while on `0.x`, and `1.0.0` needed an explicit `release-as` override. We chose per-pull-request preview builds instead of a `next` dist-tag because no tool could promote a prerelease from a signal on a merged pull request, and on `0.x` a prerelease channel added little that a patch bump did not.
 
-The immediate-publication decision in this ADR was superseded by [ADR 0002](0002-maintainer-gated-stable-releases.md). Independent versions and stable releases remain unchanged. The pkg.pr.new pull request previews were later removed.
+The immediate-publication decision in this ADR was superseded by [ADR 0002](0002-maintainer-gated-stable-releases.md). Independent versions and stable releases remain unchanged. Pull request previews were later removed. No release step depended on them.
 
 ## Considered options
 
