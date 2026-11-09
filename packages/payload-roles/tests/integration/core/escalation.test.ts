@@ -93,7 +93,7 @@ test("an editor cannot create a role with an action they lack, over the Local AP
       },
     }),
   );
-  expect(paths).toEqual(["permissions.collections.pages.actions"]);
+  expect(paths).toEqual(["permissions"]);
 
   const response = await rest(context, await login(context.payload, users.rolesEditor.email))(
     "POST",
@@ -152,8 +152,8 @@ test("an editor cannot add an action they lack to an existing role, including th
 });
 
 test("a super admin still gets shape errors: publish without update, unknown slugs, inapplicable actions", async () => {
-  const paths = await validationPaths(
-    as(context.payload, users.superAdmin).create({
+  const refused: unknown = await as(context.payload, users.superAdmin)
+    .create({
       collection: "roles",
       data: {
         key: "shape",
@@ -166,13 +166,21 @@ test("a super admin still gets shape errors: publish without update, unknown slu
           },
         },
       },
-    }),
-  );
-  expect(paths.toSorted()).toEqual([
-    "permissions.collections.nothing.actions",
-    "permissions.collections.pages.actions",
-    "permissions.collections.posts.actions",
-  ]);
+    })
+    .catch((caught: unknown) => caught);
+  expect(refused).toMatchObject({
+    data: { errors: [{ path: "permissions" }] },
+    name: "ValidationError",
+  });
+  for (const issue of [
+    'permissions.collections.nothing.actions: "collections:nothing" is not managed',
+    'permissions.collections.pages.actions: Action "publish" requires "update"',
+    'permissions.collections.posts.actions: Action "publish" does not apply',
+  ]) {
+    expect(refused).toMatchObject({
+      data: { errors: [{ message: expect.stringContaining(issue) }] },
+    });
+  }
 });
 
 test("a user cannot assign themselves a role", async () => {
@@ -384,9 +392,7 @@ test("duplicating a user or a role runs the same checks against the merged docum
       id: roles.pagesWriter,
     }),
   );
-  expect(paths.every((path) => typeof path === "string" && path.startsWith("permissions."))).toBe(
-    true,
-  );
+  expect(paths).toEqual(["permissions"]);
 });
 
 test("anonymous signup on a public create keeps working but cannot carry roles or superAdmin", async () => {
