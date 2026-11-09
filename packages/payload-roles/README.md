@@ -255,6 +255,12 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   untrusted. A trusted write from app code inside an editor's write therefore needs its own Local
   API request, and a Local API request that mixes trusted and untrusted writes on one collection
   judges all of them as untrusted.
+- An app `beforeOperation` hook that changes `args.id` after the plugin recorded the write (for
+  example, resolving an alias to a document id) keeps the write untrusted, but the keys its
+  client sent are then judged only against the document the original id names. If the same
+  hook chain also starts a nested write on the target document and removes `password` from the
+  data, that password change is not judged. Keep id rewriting and password handling out of the
+  same hooks.
 - Operations started synchronously from app code, without an `await` between them, stack their
   records in one async context. From about the 64th of them (the 63rd on Node 22) every later
   write in that context is judged untrusted, and the records stay in memory until the context

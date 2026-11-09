@@ -113,7 +113,9 @@ export const createOperationScope = <Data>() => {
         return undefined;
       }
       // An entry that names another document lowers `trusted` but is not this document's to
-      // judge, so `all` and `trustedNamed` keep only the entries that may name this document.
+      // judge, so `all` keeps only the entries that may name this document. That narrowing is
+      // never a trust verdict: an app `beforeOperation` hook can change `args.id` after the
+      // entry was opened, so an entry can act on a document its recorded id does not name.
       const named = matches.filter(
         (entry) =>
           entry === innermost ||
@@ -121,10 +123,8 @@ export const createOperationScope = <Data>() => {
           document.id === undefined ||
           maybeSameId(entry.target.id, document.id),
       );
-      const shallow = (store?.depth ?? 0) <= MAX_DEPTH;
       return {
-        trusted: shallow && matches.every((entry) => entry.trusted),
-        trustedNamed: shallow && named.every((entry) => entry.trusted),
+        trusted: (store?.depth ?? 0) <= MAX_DEPTH && matches.every((entry) => entry.trusted),
         innermost: innermost.data,
         all: named.map((entry) => entry.data),
       };

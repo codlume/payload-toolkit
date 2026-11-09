@@ -25,7 +25,6 @@ describe.each(["05", "+5", " 5", "5 ", "5.0", "5.", "5e0", ".5e1", "005.00"])(
         all: ["nested", "outer"],
         innermost: "nested",
         trusted: false,
-        trustedNamed: false,
       });
     });
   },
@@ -39,7 +38,7 @@ describe.each([
   test("is judged with a trusted nested write on the canonical uuid", () => {
     expect(nestedTrustedInside(spelling, "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11")).toMatchObject({
       all: ["nested", "outer"],
-      trustedNamed: false,
+      trusted: false,
     });
   });
 });
@@ -49,7 +48,6 @@ test("an untrusted write on another document lowers trust but is not judged on t
     all: ["nested"],
     innermost: "nested",
     trusted: false,
-    trustedNamed: true,
   });
 });
 
@@ -61,7 +59,6 @@ test("records opened for another request are ignored", () => {
     all: ["own"],
     innermost: "own",
     trusted: true,
-    trustedNamed: true,
   });
 });
 
@@ -76,14 +73,14 @@ test("a chain deeper than the cap is never trusted", () => {
   for (let index = 0; index < 70; index += 1) {
     scope.open(page(index), request, true, index);
   }
-  expect(scope.lookup(page(69), request)).toMatchObject({ trusted: false, trustedNamed: false });
+  expect(scope.lookup(page(69), request)).toMatchObject({ trusted: false });
 });
 
 describe.each(["", " ", "\t", "\n"])("an untrusted write naming row 0 as %j", (spelling) => {
   test("is judged with a trusted nested write on row 0", () => {
     expect(nestedTrustedInside(spelling, 0)).toMatchObject({
       all: ["nested", "outer"],
-      trustedNamed: false,
+      trusted: false,
     });
   });
 });
