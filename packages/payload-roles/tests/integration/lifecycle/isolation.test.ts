@@ -329,6 +329,11 @@ type Effect = {
   run: (scene: Scene) => Promise<unknown>;
   nested: Doc;
   publishesOther: boolean;
+  /**
+   * Inside an untrusted restore, whose parent page is unknown until it is read, a trusted write
+   * to any page may be the restore's own document, so it is judged as the member's and refused.
+   */
+  insideRestore?: { nested: Doc; publishesOther: boolean };
 };
 
 const trustedPublishOther = ({ req, other }: Scene) =>
@@ -349,6 +354,10 @@ const effects: Effect[] = [
     name: "a trusted publish of another page",
     nested: { status: "fulfilled" },
     publishesOther: true,
+    insideRestore: {
+      nested: { reason: { name: "Forbidden" }, status: "rejected" },
+      publishesOther: false,
+    },
     run: trustedPublishOther,
   },
   {
@@ -361,6 +370,10 @@ const effects: Effect[] = [
     name: "a caught trusted update of a missing page",
     nested: { reason: { name: "NotFound" }, status: "rejected" },
     publishesOther: false,
+    insideRestore: {
+      nested: { reason: { name: "Forbidden" }, status: "rejected" },
+      publishesOther: false,
+    },
     run: ({ req }) =>
       context.payload.update({
         collection: "pages",
@@ -388,6 +401,16 @@ const effects: Effect[] = [
       value: [{ status: "fulfilled" }, { reason: { name: "Forbidden" }, status: "rejected" }],
     },
     publishesOther: true,
+    insideRestore: {
+      nested: {
+        status: "fulfilled",
+        value: [
+          { reason: { name: "Forbidden" }, status: "rejected" },
+          { reason: { name: "Forbidden" }, status: "rejected" },
+        ],
+      },
+      publishesOther: false,
+    },
     run: (scene) =>
       Promise.all([settle(trustedPublishOther(scene)), settle(untrustedPublishThird(scene))]),
   },
@@ -398,6 +421,16 @@ const effects: Effect[] = [
       value: [{ reason: { name: "Forbidden" }, status: "rejected" }, { status: "fulfilled" }],
     },
     publishesOther: true,
+    insideRestore: {
+      nested: {
+        status: "fulfilled",
+        value: [
+          { reason: { name: "Forbidden" }, status: "rejected" },
+          { reason: { name: "Forbidden" }, status: "rejected" },
+        ],
+      },
+      publishesOther: false,
+    },
     run: (scene) =>
       Promise.all([settle(untrustedPublishThird(scene)), settle(trustedPublishOther(scene))]),
   },
@@ -533,14 +566,16 @@ describe("nested calls from app hooks never carry trust into the operation aroun
       if (hook === "beforeOperation" || outer.outcome === "allowed") {
         expect(nested, `the app ${hook} hook ran its nested call`).toBeDefined();
       }
+      const expected =
+        request.kind === "restore" && effect.insideRestore ? effect.insideRestore : effect;
       if (nested) {
-        expect(nested, "the nested calls get their own decisions").toMatchObject(effect.nested);
+        expect(nested, "the nested calls get their own decisions").toMatchObject(expected.nested);
       }
       expect(
         await pages.stored(other),
         "a nested trusted publish that ran is stored even when the outer write is denied",
       ).toMatchObject(
-        nested && effect.publishesOther ? NESTED : { _status: "draft", title: "other" },
+        nested && expected.publishesOther ? NESTED : { _status: "draft", title: "other" },
       );
       expect(
         await pages.stored(third),
@@ -552,7 +587,7 @@ describe("nested calls from app hooks never carry trust into the operation aroun
 
 for (const transport of ["REST", "Local"] as const) {
   for (const hook of pageHooks) {
-    test(`an update-only ${transport} publish stays denied when an app ${hook} hook publishes the same page with trust`, async () => {
+    test(`an update-only ${transport} publish stays denied when an app ${hook} hook publishes the same page with trust, which is refused too`, async () => {
       const self = await pages.seed("N", "self");
 
       const { nested, outcome } = await during(
@@ -571,14 +606,15 @@ for (const transport of ["REST", "Local"] as const) {
         expect(nested, "beforeOperation app hooks run before any access decision").toBeDefined();
       }
       if (nested) {
-        expect(nested, "the nested trusted publish succeeds").toMatchObject({
-          status: "fulfilled",
-        });
+        expect(
+          nested,
+          "a trusted write to the document an untrusted write names is judged as the member's",
+        ).toMatchObject({ reason: { name: "Forbidden" }, status: "rejected" });
       }
       expect(
         await pages.stored(self),
-        "the page holds the nested trusted publish, never the outer write",
-      ).toMatchObject(nested ? NESTED : { _status: "draft", title: "self" });
+        "the page holds neither the outer write nor the refused nested publish",
+      ).toMatchObject({ _status: "draft", title: "self" });
     });
   }
 }

@@ -109,9 +109,11 @@ const setup = async (at: At, nested: Nested, label: string) => {
   return { otherId, outerId };
 };
 
+// A trusted write to the same document an untrusted write names is judged as the member's, so
+// the same-id nested call is refused too: the operation scope cannot tell it from a leak.
 const NESTED: readonly { nested: Nested; expected: string }[] = [
   { nested: "different-id", expected: "ok" },
-  { nested: "same-id", expected: "ok" },
+  { nested: "same-id", expected: "Forbidden" },
   { nested: "caught-error", expected: "NotFound" },
 ];
 

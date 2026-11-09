@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-
 import type {
   CollectionBeforeChangeHook,
   CollectionBeforeOperationHook,
@@ -16,11 +14,16 @@ import type {
   Enforcer,
   LifecycleModule,
   Resource,
-  ResourceId,
   WriteAccessArgs,
 } from "../contract.ts";
 import { can } from "../grants.ts";
 import { sameId } from "../resolve.ts";
+import {
+  createOperationScope,
+  type OperationTarget,
+  operationKind,
+  requestKeyOf,
+} from "../scope.ts";
 import {
   judge,
   type RequestView,
@@ -36,6 +39,7 @@ type Kind = RequestView["kind"];
 type Holds = (action: ActionId) => boolean;
 
 type Plan =
+  /** An outsider or a super admin: app access alone decides. */
   | { readonly kind: "exempt" }
   | {
       readonly kind: "enforce";
@@ -48,12 +52,14 @@ type Plan =
     };
 
 /**
- * Opened by `open` in core's first `beforeOperation` hook, the only `enterWith` that reaches the
- * operation's later hooks (G1).
+ * One operation's record, opened through core's operation scope in core's first `beforeOperation`
+ * hook (G1). The scope links it to the entry it replaces and finds every entry that covers a
+ * document under the same request, so a trusted operation an app hook starts synchronously
+ * cannot stand in for the outer member write.
  */
 type Frame = {
-  readonly resource: ResourceId;
   readonly kind: Kind;
+  /** This operation's own `overrideAccess === true`; the scope ANDs it with every covering entry. */
   readonly trusted: boolean;
   /** `Object.keys(args.data)` as the client sent it, before app hooks and field fills (G3, G7). */
   readonly bodyKeys: readonly string[];
@@ -62,17 +68,13 @@ type Frame = {
   plan: null | Plan;
 };
 
-const frames = new AsyncLocalStorage<Frame>();
+const frames = createOperationScope<Frame>();
 
 const KINDS: Readonly<Record<string, Kind>> = {
   create: "create",
   restoreVersion: "restore",
   update: "update",
 };
-
-/** `create` access serves create and duplicate; `update` access serves update and restore. */
-const servesKey = (kind: Kind, key: WriteAccessArgs["key"]) =>
-  key === "create" ? kind === "create" : kind !== "create";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -97,18 +99,41 @@ function refuse(
   throw new Forbidden(req.t);
 }
 
-type OpenArgs = { args?: unknown; operation: string; overrideAccess?: boolean | undefined };
+/**
+ * The documents an operation writes. Only an update by id names its document; a create, a bulk
+ * write, a restore (whose `args.id` is the version's) and every global write cover them all.
+ */
+const targetOf = (resource: Resource, operation: string, args: unknown): null | OperationTarget => {
+  const kind = operationKind(operation);
+  if (kind === undefined || KINDS[operation] === undefined) {
+    return null;
+  }
+  const id = isRecord(args) ? args.id : undefined;
+  return {
+    collection: resource.id,
+    kind,
+    id: resource.kind === "collection" && operation === "update" && isId(id) ? id : undefined,
+  };
+};
+
+type OpenArgs = {
+  args?: unknown;
+  operation: string;
+  overrideAccess?: boolean | undefined;
+  req: PayloadRequest;
+};
 
 const open =
   (resource: Resource) =>
-  ({ args, operation, overrideAccess }: OpenArgs): undefined => {
+  ({ args, operation, overrideAccess, req }: OpenArgs): undefined => {
     const kind = KINDS[operation];
-    if (kind !== undefined) {
+    const target = targetOf(resource, operation, args);
+    if (kind !== undefined && target !== null) {
       const source = isRecord(args) ? args : {};
-      frames.enterWith({
-        resource: resource.id,
+      const trusted = overrideAccess === true;
+      frames.open(target, requestKeyOf(req), trusted, {
         kind,
-        trusted: overrideAccess === true,
+        trusted,
         bodyKeys: isRecord(source.data) ? Object.keys(source.data) : [],
         draft: Boolean(source.draft),
         plan: null,
@@ -116,17 +141,26 @@ const open =
     }
   };
 
-const ownFrame = (enforcer: Enforcer, req: PayloadRequest, resource: Resource, kind: Kind) => {
-  const frame = frames.getStore();
-  if (
-    frame === undefined ||
-    frame.resource !== resource.id ||
-    frame.kind !== kind ||
-    frame.plan !== null
-  ) {
+/**
+ * The frames that may write `document` under this request, innermost first, and whether all of
+ * them are trusted. `all` keeps only the entries whose id may name this document, so a trusted
+ * write an app hook makes to another document is not judged as the member's. No covering frame
+ * refuses the write.
+ */
+const covering = (
+  enforcer: Enforcer,
+  req: PayloadRequest,
+  resource: Resource,
+  document: OperationTarget,
+) => {
+  const found =
+    frames.lookup(document, requestKeyOf(req)) ??
     refuse(enforcer, req, resource, "intent-missing", []);
-  }
-  return frame;
+  return {
+    innermost: found.innermost,
+    all: found.all,
+    trusted: found.all.every((frame) => frame.trusted),
+  };
 };
 
 /** Truthiness, because Payload branches on it. */
@@ -151,13 +185,21 @@ type PlanArgs = {
   files: Files;
 };
 
+/**
+ * Plans this operation's own frame, the innermost one covering its target. A frame that is
+ * already planned belongs to another operation, so the write is refused rather than guessed.
+ */
 const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArgs) => {
-  const kind = KINDS[operation];
-  if (kind === undefined) {
+  const target = targetOf(resource, operation, args);
+  if (target === null) {
     return;
   }
-  const frame = ownFrame(enforcer, req, resource, kind);
-  if (frame.trusted) {
+  const found = covering(enforcer, req, resource, target);
+  const frame = found.innermost;
+  if (frame.plan !== null) {
+    refuse(enforcer, req, resource, "intent-missing", []);
+  }
+  if (found.trusted) {
     frame.plan = { kind: "exempt" };
     return;
   }
@@ -169,18 +211,20 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
   const { capabilities, id: subjectId } = subject;
   const self = resource.slug === enforcer.options.userCollection;
   const holdsFor =
-    (target: unknown): Holds =>
+    (documentId: unknown): Holds =>
     (action) =>
       can(capabilities, resource.id, action) ||
-      (action === "update" && self && isId(target) && sameId(target, subjectId));
+      (action === "update" && self && isId(documentId) && sameId(documentId, subjectId));
   const source = isRecord(args) ? args : {};
-  const view = viewOf(frame, source, kind === "update" && files());
+  const view = viewOf(frame, source, frame.kind === "update" && files());
   const verdict = judge(
     resource,
     requestFacts(resource, view),
     // A restore's `args.id` is the version id, so its parent is unknown here; assume it may be
     // the member's own user and let beforeChange judge the real target.
-    holdsFor(kind === "update" ? source.id : kind === "restore" ? subjectId : undefined),
+    holdsFor(
+      frame.kind === "update" ? source.id : frame.kind === "restore" ? subjectId : undefined,
+    ),
   );
   // Payload deletes and writes an upload's files before beforeChange (G18), so such an update
   // must hold every possibility now.
@@ -192,50 +236,57 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
 
 type Row = Readonly<Record<string, unknown>>;
 
+type Enforced = { view: RequestView; holdsFor: (target: unknown) => Holds };
+
+/**
+ * The untrusted frames that must each allow a write to `document`. A trusted frame adds no
+ * permission; an exempt one is an outsider's or a super admin's. Lowered trust with nothing to
+ * judge (the scope's depth cap) refuses.
+ */
+const judged = (
+  enforcer: Enforcer,
+  req: PayloadRequest,
+  resource: Resource,
+  document: OperationTarget,
+): Enforced[] => {
+  const found = covering(enforcer, req, resource, document);
+  if (found.trusted) {
+    return [];
+  }
+  const plans = found.all.filter((frame) => !frame.trusted).map((frame) => frame.plan);
+  if (plans.length === 0 || plans.includes(null)) {
+    refuse(enforcer, req, resource, "intent-missing", []);
+  }
+  return plans.flatMap((current) => (current?.kind === "enforce" ? [current] : []));
+};
+
 type CheckArgs = {
   resource: Resource;
   enforcer: Enforcer;
-  operation: "create" | "update";
+  document: OperationTarget;
   data: Row;
-  originalDoc: unknown;
   req: PayloadRequest;
   readRow: () => Promise<null | Row>;
 };
 
-const check = async ({
-  resource,
-  enforcer,
-  operation,
-  data,
-  originalDoc,
-  req,
-  readRow,
-}: CheckArgs) => {
-  const frame = frames.getStore();
-  if (
-    frame === undefined ||
-    frame.resource !== resource.id ||
-    !servesKey(frame.kind, operation) ||
-    frame.plan === null
-  ) {
-    refuse(enforcer, req, resource, "intent-missing", []);
-  }
-  const current = frame.plan;
-  if (current.kind === "exempt") {
-    return;
-  }
-  const holds = current.holdsFor(operation === "update" ? idOf(originalDoc) : undefined);
-  const facts = settleAfter(resource, requestFacts(resource, current.view), data);
-  let verdict = judge(resource, facts, holds);
-  if (verdict.kind === "depends") {
-    const row = await readRow();
-    if (row === null) {
-      refuse(enforcer, req, resource, "target-missing", []);
+/** Each covering untrusted frame judges the data about to be written; the row is read once. */
+const check = async ({ resource, enforcer, document, data, req, readRow }: CheckArgs) => {
+  let row: null | Row | undefined;
+  for (const { view, holdsFor } of judged(enforcer, req, resource, document)) {
+    const holds = holdsFor(document.id);
+    const facts = settleAfter(resource, requestFacts(resource, view), data);
+    let verdict = judge(resource, facts, holds);
+    if (verdict.kind === "depends") {
+      // oxlint-disable-next-line no-await-in-loop -- one read, reused by every later frame
+      row ??= await readRow();
+      if (row === null) {
+        refuse(enforcer, req, resource, "target-missing", []);
+      }
+      verdict = judge(resource, settleBefore(resource, facts, row), holds);
     }
-    verdict = judge(resource, settleBefore(resource, facts, row), holds);
-  }
-  if (verdict.kind !== "allow") {
-    refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
+    if (verdict.kind !== "allow") {
+      refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
+    }
   }
 };
 
@@ -258,17 +309,12 @@ const settleGlobalRestore = async ({
   args,
   req,
 }: GlobalRestoreArgs) => {
-  const frame = frames.getStore();
-  if (
-    frame === undefined ||
-    frame.resource !== resource.id ||
-    frame.kind !== "restore" ||
-    frame.plan === null
-  ) {
-    refuse(enforcer, req, resource, "intent-missing", []);
-  }
-  const current = frame.plan;
-  if (current.kind === "exempt") {
+  const restores = judged(enforcer, req, resource, {
+    collection: resource.id,
+    id: undefined,
+    kind: "update",
+  }).filter(({ view }) => view.kind === "restore");
+  if (restores.length === 0) {
     return;
   }
   const versionId = isRecord(args) ? args.id : undefined;
@@ -287,16 +333,18 @@ const settleGlobalRestore = async ({
     throw typeof access === "object" ? new Forbidden(req.t) : new NotFound(req.t);
   }
   const row: unknown = await req.payload.db.findGlobal({ slug: global.slug, req });
-  const facts = settleBefore(
-    resource,
-    settleAfter(resource, requestFacts(resource, current.view), {
-      [STATUS]: current.view.draft ? "draft" : stored[STATUS],
-    }),
-    isRecord(row) ? row : {},
-  );
-  const verdict = judge(resource, facts, current.holdsFor(undefined));
-  if (verdict.kind !== "allow") {
-    refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
+  for (const { view, holdsFor } of restores) {
+    const facts = settleBefore(
+      resource,
+      settleAfter(resource, requestFacts(resource, view), {
+        [STATUS]: view.draft ? "draft" : stored[STATUS],
+      }),
+      isRecord(row) ? row : {},
+    );
+    const verdict = judge(resource, facts, holdsFor(undefined));
+    if (verdict.kind !== "allow") {
+      refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
+    }
   }
 };
 
@@ -311,16 +359,20 @@ const probeView = (key: WriteAccessArgs["key"], data: WriteAccessArgs["data"]): 
   data,
 });
 
-const requiredWriteActions = ({ resource, key, data }: WriteAccessArgs): ReadonlySet<ActionId> => {
-  const frame = frames.getStore();
-  const planned =
-    frame !== undefined &&
-    frame.resource === resource.id &&
-    servesKey(frame.kind, key) &&
-    frame.plan?.kind === "enforce"
-      ? frame.plan.view
-      : null;
-  const view = planned === null ? probeView(key, data) : { ...planned, data };
+/** The floor uses the innermost covering frame's plan; outside an operation it is a probe. */
+const requiredWriteActions = ({
+  resource,
+  key,
+  data,
+  id,
+  req,
+}: WriteAccessArgs): ReadonlySet<ActionId> => {
+  const found = frames.lookup(
+    { collection: resource.id, id: resource.kind === "collection" ? id : undefined, kind: key },
+    requestKeyOf(req),
+  );
+  const current = found?.innermost.plan;
+  const view = current?.kind === "enforce" ? { ...current.view, data } : probeView(key, data);
   return requiredActions(resource, requestFacts(resource, view));
 };
 
@@ -354,16 +406,15 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
     originalDoc,
     req,
   }) => {
+    const id = operation === "update" ? idOf(originalDoc) : null;
     await check({
       resource,
       enforcer,
-      operation,
+      document: { collection: resource.id, id: id ?? undefined, kind: operation },
       data,
-      originalDoc,
       req,
       // The main table only, trashed rows included.
       readRow: async () => {
-        const id = idOf(originalDoc);
         if (id === null) {
           return null;
         }
@@ -398,9 +449,8 @@ const globalHooks: LifecycleModule["globalHooks"] = (resource, enforcer) => {
     await check({
       resource,
       enforcer,
-      operation: "update",
+      document: { collection: resource.id, id: undefined, kind: "update" },
       data,
-      originalDoc: undefined,
       req,
       // An unsaved global is `{}` on drizzle (findGlobal.js) and falsy elsewhere, which Payload
       // also treats as never saved (globals/operations/update.js `globalExists`).
