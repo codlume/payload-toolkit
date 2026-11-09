@@ -43,19 +43,23 @@ export const requestKeyOf = (req: { payloadDataLoader?: unknown }): object =>
     ? req.payloadDataLoader
     : req;
 
-const NUMERIC = /^[+-]?\d+(?:\.\d+)?$/u;
+const UUID = /^\{?[\da-f]{8}-?[\da-f]{4}-?[\da-f]{4}-?[\da-f]{4}-?[\da-f]{12}\}?$/u;
+
+const idForm = (id: DefaultDocumentIDType) => {
+  const text = String(id).trim().toLowerCase();
+  const number = text === "" ? Number.NaN : Number(text);
+  if (Number.isFinite(number)) {
+    return `number:${number}`;
+  }
+  return UUID.test(text) ? `uuid:${text.replaceAll(/[{}-]/gu, "")}` : `text:${text}`;
+};
 
 /**
- * Whether two ids may name the same document. A caller's id can differ in form from the stored
- * one (`"05"` finds row 5, a uuid can differ in case), so this over-matches: matching only adds
- * an entry's sent fields to the judgement.
+ * Whether two ids may name the same document. Payload resolves many spellings of one id (`"05"`,
+ * `"5e0"`, `".5e1"` all find row 5; Postgres reads a uuid in any case, with or without hyphens
+ * and braces), so this over-matches: a match can only add an entry to the judgement.
  */
-const maybeSameId = (a: DefaultDocumentIDType, b: DefaultDocumentIDType) => {
-  const [left, right] = [String(a).trim().toLowerCase(), String(b).trim().toLowerCase()];
-  return NUMERIC.test(left) && NUMERIC.test(right)
-    ? Number(left) === Number(right)
-    : left === right;
-};
+const maybeSameId = (a: DefaultDocumentIDType, b: DefaultDocumentIDType) => idForm(a) === idForm(b);
 
 /** The kind of write a `beforeOperation` operation name performs, if it writes. */
 export const operationKind = (operation: string) => KINDS[operation];
@@ -104,23 +108,25 @@ export const createOperationScope = <Data>() => {
         }
       }
       const [innermost] = matches;
-      return innermost === undefined
-        ? undefined
-        : {
-            trusted: (store?.depth ?? 0) <= MAX_DEPTH && matches.every((entry) => entry.trusted),
-            innermost: innermost.data,
-            // Trust is lowered by every covering entry; the data of an entry that names another
-            // document is not this document's to judge.
-            all: matches
-              .filter(
-                (entry) =>
-                  entry === innermost ||
-                  entry.target.id === undefined ||
-                  document.id === undefined ||
-                  maybeSameId(entry.target.id, document.id),
-              )
-              .map((entry) => entry.data),
-          };
+      if (innermost === undefined) {
+        return undefined;
+      }
+      // An entry that names another document lowers `trusted` but is not this document's to
+      // judge, so `all` and `trustedNamed` keep only the entries that may name this document.
+      const named = matches.filter(
+        (entry) =>
+          entry === innermost ||
+          entry.target.id === undefined ||
+          document.id === undefined ||
+          maybeSameId(entry.target.id, document.id),
+      );
+      const shallow = (store?.depth ?? 0) <= MAX_DEPTH;
+      return {
+        trusted: shallow && matches.every((entry) => entry.trusted),
+        trustedNamed: shallow && named.every((entry) => entry.trusted),
+        innermost: innermost.data,
+        all: named.map((entry) => entry.data),
+      };
     },
   };
 };
