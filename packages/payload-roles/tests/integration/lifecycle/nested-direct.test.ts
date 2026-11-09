@@ -169,3 +169,36 @@ describe.each(["beforeValidate", "beforeChange"] as const)(
     });
   },
 );
+
+// Payload finds row 5 by "5e0" or "5." over the Local API; REST converts the id first.
+describe("an outer write that spells its document's id another way", () => {
+  const cases = (["beforeValidate", "beforeChange"] as const).flatMap((at) =>
+    ["e0", "."].map((suffix) => ({ at, suffix })),
+  );
+
+  test.each(cases)(
+    "(id + '$suffix', $at) stays refused over REST and the Local API with a direct trusted operation on the same document",
+    async ({ at, suffix }) => {
+      const restCase = await setup(at, "same-id", `spelled ${at} ${suffix} rest`);
+      const api = rest(context, await login(context.payload, users.updateOnly.email));
+      const response = await api("PATCH", `/pages/${restCase.outerId}${suffix}`, {
+        title: "edited without publish",
+      });
+      expect(response.status, "the outer live edit needs publish").toBe(403);
+      expect(await title(restCase.outerId)).toBe(`spelled ${at} ${suffix} rest outer`);
+
+      const localCase = await setup(at, "same-id", `spelled ${at} ${suffix} local`);
+      await rejectsWith(
+        context.payload.update({
+          collection: "pages",
+          data: { title: "edited without publish" },
+          id: `${String(localCase.outerId)}${suffix}`,
+          overrideAccess: false,
+          user: users.updateOnly,
+        }),
+        "Forbidden",
+      );
+      expect(await title(localCase.outerId)).toBe(`spelled ${at} ${suffix} local outer`);
+    },
+  );
+});
