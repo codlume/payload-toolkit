@@ -208,9 +208,15 @@ importers:
       '@types/react':
         specifier: 19.2.18
         version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.18)
       graphql:
         specifier: 16.14.2
         version: 16.14.2
+      jsdom:
+        specifier: 26.1.0
+        version: 26.1.0
       payload:
         specifier: 3.90.1
         version: 3.90.1(graphql@16.14.2)(typescript@5.9.3)
