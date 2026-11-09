@@ -1,12 +1,8 @@
-import { createRequire } from "node:module";
-
 import React, { type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import { UnpublishDocument } from "../../../src/admin/client/unpublish-document.tsx";
-
-const { renderToStaticMarkup }: { renderToStaticMarkup: (node: ReactNode) => string } =
-  createRequire(import.meta.url)("react-dom/server");
 
 type Confirm = () => Promise<void> | void;
 

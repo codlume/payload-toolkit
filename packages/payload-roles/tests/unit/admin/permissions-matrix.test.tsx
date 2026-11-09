@@ -1,15 +1,11 @@
-import { createRequire } from "node:module";
-
 import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { NO_CAPABILITIES } from "../../../src/grants.ts";
 import { PermissionsMatrix } from "../../../src/admin/client/permissions-matrix.tsx";
 import type { MatrixModel, ResourceId } from "../../../src/admin/model.ts";
 import { holding, modelOf } from "./fixture.ts";
-
-const { renderToStaticMarkup }: { renderToStaticMarkup: (element: React.ReactElement) => string } =
-  createRequire(import.meta.url)("react-dom/server");
 
 type FieldState = { value: unknown; errorMessage: string | undefined; showError: boolean };
 
