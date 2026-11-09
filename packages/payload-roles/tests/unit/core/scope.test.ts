@@ -78,3 +78,12 @@ test("a chain deeper than the cap is never trusted", () => {
   }
   expect(scope.lookup(page(69), request)).toMatchObject({ trusted: false, trustedNamed: false });
 });
+
+describe.each(["", " ", "\t", "\n"])("an untrusted write naming row 0 as %j", (spelling) => {
+  test("is judged with a trusted nested write on row 0", () => {
+    expect(nestedTrustedInside(spelling, 0)).toMatchObject({
+      all: ["nested", "outer"],
+      trustedNamed: false,
+    });
+  });
+});

@@ -47,7 +47,7 @@ const UUID = /^\{?[\da-f]{8}-?[\da-f]{4}-?[\da-f]{4}-?[\da-f]{4}-?[\da-f]{12}\}?
 
 const idForm = (id: DefaultDocumentIDType) => {
   const text = String(id).trim().toLowerCase();
-  const number = text === "" ? Number.NaN : Number(text);
+  const number = Number(text);
   if (Number.isFinite(number)) {
     return `number:${number}`;
   }
@@ -55,9 +55,10 @@ const idForm = (id: DefaultDocumentIDType) => {
 };
 
 /**
- * Whether two ids may name the same document. Payload resolves many spellings of one id (`"05"`,
- * `"5e0"`, `".5e1"` all find row 5; Postgres reads a uuid in any case, with or without hyphens
- * and braces), so this over-matches: a match can only add an entry to the judgement.
+ * Whether two ids may name the same document. Payload resolves many spellings of one id: `"05"`,
+ * `"5e0"` and `".5e1"` all find row 5, a blank id finds row 0, and a uuid matches in any case.
+ * This over-matches, also accepting uuid spellings Payload rejects, because a match can only add
+ * an entry to the judgement.
  */
 const maybeSameId = (a: DefaultDocumentIDType, b: DefaultDocumentIDType) => idForm(a) === idForm(b);
 
