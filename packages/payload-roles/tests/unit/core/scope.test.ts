@@ -134,15 +134,26 @@ test("widen leaves entries that already name the final document", () => {
   expect(scope.lookup(page(9), request)?.all).toEqual(["nested elsewhere"]);
 });
 
-test("widen settles the operation's own entry so a later widen leaves it alone", () => {
+test("widen never settles an entry narrowly, so a later widen can still widen it", () => {
   const scope = createOperationScope<string>();
   scope.open(page(5), request, false, "own");
   scope.widen("pages", "update", request, 5);
   scope.open(page(9), request, true, "nested elsewhere");
   scope.widen("pages", "update", request, 9);
   expect(scope.lookup(page(9), request)).toEqual({
-    all: ["nested elsewhere"],
+    all: ["nested elsewhere", "own"],
     innermost: "nested elsewhere",
     trusted: false,
   });
+});
+
+test("a trusted write covers its own document under any spelling of its id", () => {
+  const scope = createOperationScope<string>();
+  scope.open(page("7e0"), request, true, "trusted");
+  expect(scope.lookup(page(7), request)).toEqual({
+    all: ["trusted"],
+    innermost: "trusted",
+    trusted: true,
+  });
+  expect(scope.lookup(page(8), request)).toBeUndefined();
 });

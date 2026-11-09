@@ -119,8 +119,12 @@ const namedId = (operation: string, fields: Readonly<Record<string, unknown>>) =
   return isId(id) ? id : undefined;
 };
 
-/** Each recorded operation's `settle`, keyed by the args object Payload passes to its hooks. */
-const unsettled = new WeakMap<object, (id: SubjectId | undefined) => void>();
+/**
+ * Where the recorder leaves each operation's `settle` on the args object Payload passes to its
+ * hooks. An enumerable symbol key survives an app hook that returns `{ ...args }`, so the
+ * operation still finds its own record; only a freshly built args object loses it.
+ */
+const SETTLE = Symbol("payload-roles.settle");
 
 const createRecorder =
   (collection: string, keys: readonly string[]): LeadingBeforeOperation<CollectionOperationArgs> =>
@@ -136,7 +140,7 @@ const createRecorder =
         { raw: redact(pick(fields.data, keys)), superAdmins: null, removed: 0 },
       );
       if (isRecord(source)) {
-        unsettled.set(source, settle);
+        Reflect.set(source, SETTLE, settle);
       }
     }
     return undefined;
@@ -144,10 +148,10 @@ const createRecorder =
 
 /**
  * Runs after the app's `beforeOperation` hooks and records the id Payload will act on, which an
- * app hook may have changed (for example by resolving an alias). If the app replaced the args
- * object, the operation's own record cannot be told apart, so every unsettled record of this
- * collection and kind under the request that names another document is widened to name every
- * document.
+ * app hook may have changed (for example by resolving an alias). If an app hook built a fresh
+ * args object, the operation's own record cannot be told apart, so every unsettled record of
+ * this collection and kind under the request that names another document is widened to name
+ * every document.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
@@ -155,10 +159,10 @@ const createSettler =
     const kind = operationKind(operation);
     if (kind !== undefined) {
       const source: unknown = args;
-      const settle = isRecord(source) ? unsettled.get(source) : undefined;
-      if (settle && isRecord(source)) {
-        unsettled.delete(source);
-        settle(namedId(operation, source));
+      const settle: unknown = isRecord(source) ? Reflect.get(source, SETTLE) : undefined;
+      if (typeof settle === "function" && isRecord(source)) {
+        Reflect.deleteProperty(source, SETTLE);
+        Reflect.apply(settle, undefined, [namedId(operation, source)]);
       } else {
         scope.widen(
           collection,

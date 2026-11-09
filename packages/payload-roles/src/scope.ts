@@ -70,7 +70,7 @@ export const operationKind = (operation: string) => KINDS[operation];
 /**
  * An untrusted entry covers every document of its collection and kind: its `id` is as the caller
  * wrote it (`"05"` can find row 5), so an exact match could miss its own document and leave the
- * judgement to a trusted entry. Only trusted entries are narrowed to their id.
+ * judgement to a trusted entry. Only trusted entries are narrowed, to every spelling of their id.
  */
 const covers = (entry: Entry<unknown>, document: OperationTarget) =>
   entry.target.collection === document.collection &&
@@ -78,7 +78,7 @@ const covers = (entry: Entry<unknown>, document: OperationTarget) =>
   (!entry.trusted ||
     entry.target.id === undefined ||
     document.id === undefined ||
-    String(entry.target.id) === String(document.id));
+    maybeSameId(entry.target.id, document.id));
 
 /**
  * Per-operation records for the hooks of one operation, carried in an AsyncLocalStorage.
@@ -131,29 +131,19 @@ export const createOperationScope = <Data>() => {
       req: object,
       id: DefaultDocumentIDType | undefined,
     ) => {
-      let ownFound = false;
       for (let entry = storage.getStore(); entry !== undefined; entry = entry.parent) {
         const { target } = entry;
         if (
-          entry.settled ||
-          entry.req !== req ||
-          target.collection !== collection ||
-          target.kind !== kind ||
-          target.id === undefined
+          !entry.settled &&
+          entry.req === req &&
+          target.collection === collection &&
+          target.kind === kind &&
+          target.id !== undefined &&
+          (id === undefined || !maybeSameId(target.id, id))
         ) {
-          continue;
+          entry.target = { ...target, id: undefined };
+          entry.settled = true;
         }
-        if (id !== undefined && maybeSameId(target.id, id)) {
-          // The innermost unsettled entry that already names the final document is the
-          // operation's own: nested operations started before this point settled themselves.
-          if (!ownFound) {
-            ownFound = true;
-            entry.settled = true;
-          }
-          continue;
-        }
-        entry.target = { ...target, id: undefined };
-        entry.settled = true;
       }
     },
     /** The entries covering one document under one request, innermost first. */
