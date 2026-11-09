@@ -23,9 +23,6 @@ vi.mock("@payloadcms/ui", () => ({
   FieldDescription: () => null,
   FieldLabel: () => null,
   useField: () => ({ ...field, setValue: () => undefined }),
-  useForm: () => ({ dispatchFields: () => undefined, getFields: () => ({}) }),
-  useFormFields: (selector: (context: [Record<string, never>, () => void]) => unknown) =>
-    selector([{}, () => undefined]),
 }));
 
 beforeEach(() => {
@@ -195,5 +192,27 @@ describe("notices and links", () => {
     field.showError = true;
     field.errorMessage = "This field is required.";
     expect(render(modelOf(), {})).toContain("This field is required.");
+  });
+
+  test("puts each line of a refused save on the row it names, and the rest above the table", () => {
+    const model = modelOf();
+    const pages = model.rows.find((row) => row.id === "collections:pages");
+    const notHeld =
+      'You cannot grant action "delete" on "collections:pages" because you do not hold it.';
+    const shape = "permissions.collections: Permissions must be an object.";
+    field.errorMessage = `permissions.collections.pages.actions: ${notHeld}\n${shape}`;
+
+    expect(render(model, {})).not.toContain(notHeld);
+
+    field.showError = true;
+    const markup = render(model, {});
+    const pagesRow = markup
+      .split("<tr>")
+      .find((row) => row.includes(`aria-label="${pages?.label ?? ""}: Read"`));
+    expect(pagesRow).toContain(
+      `<span class="roles-matrix__error" role="alert">${notHeld.replaceAll('"', "&quot;")}</span>`,
+    );
+    expect(markup).toContain(`<li>${shape}</li>`);
+    expect(markup.split(notHeld.replaceAll('"', "&quot;")).length - 1).toBe(1);
   });
 });

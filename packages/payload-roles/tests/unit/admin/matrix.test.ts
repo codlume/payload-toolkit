@@ -8,10 +8,8 @@ import {
   type MatrixOp,
   type MatrixView,
   pickerWarning,
-  placeServerIssues,
+  placeFieldErrors,
   readMatrix,
-  serverIssueSignature,
-  takeServerIssues,
 } from "../../../src/admin/client/matrix.ts";
 import type { CellMode, MatrixModel } from "../../../src/admin/model.ts";
 import { holding, modelOf, registry } from "./fixture.ts";
@@ -399,44 +397,39 @@ describe("the Roles picker warning", () => {
 
 describe("server errors", () => {
   const model = modelOf();
-  const fields = {
-    name: { value: "Editor" },
-    permissions: { value: {}, errorPaths: ["permissions.collections.pages.actions"] },
-    "permissions.collections.pages.actions": { errorMessage: "row", value: null },
-    "permissions.collections": { errorMessage: "kind", value: null },
-    "permissions.collections.ghost.actions": { errorMessage: "ghost", value: null },
-    "permissions.globals.settings": { value: null },
-  };
+  const notHeld =
+    'You cannot grant action "publish" on "collections:pages" because you do not hold it.';
+  const needsUpdate = 'Action "publish" requires "update" on the same resource.';
+  const inapplicable = 'Action "create" does not apply to "globals:settings".';
 
-  test("every entry under the field is removed and its message kept", () => {
-    expect(takeServerIssues(fields, "permissions")).toEqual({
-      issues: [
-        { path: "permissions.collections.pages.actions", message: "row" },
-        { path: "permissions.collections", message: "kind" },
-        { path: "permissions.collections.ghost.actions", message: "ghost" },
-      ],
-      remove: [
-        "permissions.collections.pages.actions",
-        "permissions.collections",
-        "permissions.collections.ghost.actions",
-        "permissions.globals.settings",
-      ],
-    });
+  test("each line of core's field error lands on the row its path names", () => {
+    const message = [
+      `permissions.collections.pages.actions: ${notHeld}`,
+      `permissions.collections.pages.actions: ${needsUpdate}`,
+      `permissions.globals.settings.actions: ${inapplicable}`,
+    ].join("\n");
+    const placed = placeFieldErrors(model, message);
+    expect([...placed.byRow]).toEqual([
+      ["collections:pages", [notHeld, needsUpdate]],
+      ["globals:settings", [inapplicable]],
+    ]);
+    expect(placed.field).toEqual([]);
   });
 
-  test("the signature changes only with the entries under the field", () => {
-    const signature = serverIssueSignature(fields, "permissions");
-    expect(serverIssueSignature({ ...fields, name: { value: "Renamed" } }, "permissions")).toBe(
-      signature,
-    );
-    expect(
-      serverIssueSignature({ name: fields.name, permissions: fields.permissions }, "permissions"),
-    ).not.toBe(signature);
+  test("lines that name no row, and plain messages, stay at field level", () => {
+    const lines = [
+      "permissions.collections: Permissions must be an object.",
+      'permissions.collections.ghost.actions: "collections:ghost" is not managed by the roles plugin.',
+      "This field is required.",
+    ];
+    const placed = placeFieldErrors(model, lines.join("\n"));
+    expect(placed.byRow.size).toBe(0);
+    expect(placed.field).toEqual(lines);
   });
 
-  test("row paths land on their row and everything else above the table", () => {
-    const placed = placeServerIssues(model, takeServerIssues(fields, "permissions").issues);
-    expect([...placed.byRow]).toEqual([["collections:pages", ["row"]]]);
-    expect(placed.field).toEqual(["kind", "ghost"]);
+  test("no message places nothing", () => {
+    const placed = placeFieldErrors(model, "");
+    expect(placed.byRow.size).toBe(0);
+    expect(placed.field).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
-import { FieldDescription, FieldLabel, useField, useForm, useFormFields } from "@payloadcms/ui";
+import { FieldDescription, FieldLabel, useField } from "@payloadcms/ui";
 import type { JSONFieldClientProps } from "payload";
-import React, { type ChangeEvent, useId, useLayoutEffect, useMemo, useState } from "react";
+import React, { type ChangeEvent, useId, useMemo, useState } from "react";
 
 import type { Grant, MatrixModel, ResourceId, StorageKind } from "../model.ts";
 import {
@@ -9,11 +9,8 @@ import {
   grantableCells,
   type MatrixOp,
   pickerWarning,
-  placeServerIssues,
+  placeFieldErrors,
   readMatrix,
-  type ServerIssue,
-  serverIssueSignature,
-  takeServerIssues,
 } from "./matrix.ts";
 
 export type PermissionsMatrixProps = {
@@ -23,8 +20,6 @@ export type PermissionsMatrixProps = {
 };
 
 const EMPTY: Cells = new Set();
-
-const NO_ISSUES: readonly ServerIssue[] = [];
 
 const GROUPS: readonly { kind: StorageKind; label: string }[] = [
   { kind: "collections", label: "Collections" },
@@ -61,32 +56,6 @@ const CSS = `
 `;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
-/**
- * After a failed save Payload adds `${path}.*` form-state entries whose null values would
- * overwrite the permissions object on the next read of the form data. A layout effect runs
- * before the passive effects that read it, so the entries are captured and removed first.
- */
-const useServerIssues = (path: string, value: unknown): readonly ServerIssue[] => {
-  const signature = useFormFields(([fields]) => serverIssueSignature(fields, path));
-  const { dispatchFields, getFields } = useForm();
-  const [captured, setCaptured] = useState<{
-    value: unknown;
-    issues: readonly ServerIssue[];
-  } | null>(null);
-  useLayoutEffect(() => {
-    const fields = getFields();
-    const { issues, remove } = takeServerIssues(fields, path);
-    if (remove.length === 0) {
-      return;
-    }
-    for (const key of remove) {
-      dispatchFields({ type: "REMOVE", path: key });
-    }
-    setCaptured({ value: fields[path]?.value, issues });
-  }, [dispatchFields, getFields, path, signature]);
-  return captured !== null && captured.value === value ? captured.issues : NO_ISSUES;
-};
 
 const Notice = ({ children, error = false }: { children: React.ReactNode; error?: boolean }) => (
   <div className={`roles-matrix__notice${error ? " roles-matrix__notice--error" : ""}`}>
@@ -126,8 +95,8 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
     potentiallyStalePath: path,
   });
   const view = useMemo(() => readMatrix(model, value), [model, value]);
-  const serverIssues = useServerIssues(path, value);
-  const placed = useMemo(() => placeServerIssues(model, serverIssues), [model, serverIssues]);
+  const shownError = showError && typeof errorMessage === "string" ? errorMessage : "";
+  const placed = useMemo(() => placeFieldErrors(model, shownError), [model, shownError]);
   const [filter, setFilter] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [report, setReport] = useState<{
@@ -194,10 +163,7 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
   };
 
   const description = field.admin?.description;
-  const fieldErrors = [
-    ...placed.field,
-    ...(showError && typeof errorMessage === "string" && errorMessage !== "" ? [errorMessage] : []),
-  ];
+  const fieldErrors = placed.field;
   const columnCount = model.columns.length + 2;
 
   return (

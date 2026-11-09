@@ -22,12 +22,6 @@ export type Outcome = {
   skipped: readonly Grant[];
 };
 
-export type ServerIssue = { path: string; message: string };
-
-type FieldsSnapshot = Readonly<
-  Record<string, { errorMessage?: string | undefined; value?: unknown } | undefined>
->;
-
 type Index = {
   modes: ReadonlyMap<Grant, CellMode>;
   rows: ReadonlyMap<string, MatrixRow>;
@@ -231,43 +225,27 @@ export const pickerWarning = (model: MatrixModel, cells: Cells) => {
   return check !== null && check.assigns.some((cell) => cells.has(cell)) && !cells.has(check.needs);
 };
 
-const isServerKey = (key: string, path: string) => key.startsWith(`${path}.`);
-
-export const serverIssueSignature = (fields: FieldsSnapshot, path: string) =>
-  JSON.stringify(
-    Object.keys(fields)
-      .filter((key) => isServerKey(key, path))
-      .map((key) => [key, fields[key]?.errorMessage ?? ""]),
-  );
-
 /**
- * The phantom entries Payload's ADD_SERVER_ERRORS created under `path`, which must be removed
- * before the form reads its data: their null values overwrite the permissions object.
+ * Places the permissions field error. Core reports every cell issue as one line,
+ * `<issue path>: <message>`. A line whose path is a row's goes on that row, and every other line
+ * stays at field level.
  */
-export const takeServerIssues = (
-  fields: FieldsSnapshot,
-  path: string,
-): { issues: ServerIssue[]; remove: string[] } => {
-  const remove = Object.keys(fields).filter((key) => isServerKey(key, path));
-  const issues = remove.flatMap((key) => {
-    const message = fields[key]?.errorMessage;
-    return typeof message === "string" && message !== "" ? [{ path: key, message }] : [];
-  });
-  return { issues, remove };
-};
-
-export const placeServerIssues = (
+export const placeFieldErrors = (
   model: MatrixModel,
-  issues: readonly ServerIssue[],
+  message: string,
 ): { byRow: ReadonlyMap<ResourceId, readonly string[]>; field: readonly string[] } => {
   const byRow = new Map<ResourceId, string[]>();
   const field: string[] = [];
-  for (const issue of issues) {
-    const row = model.rows.find(({ path }) => path === issue.path);
+  for (const line of message.split("\n")) {
+    if (line === "") {
+      continue;
+    }
+    const at = line.indexOf(": ");
+    const row = at < 0 ? undefined : model.rows.find(({ path }) => path === line.slice(0, at));
     if (row) {
-      byRow.set(row.id, [...(byRow.get(row.id) ?? []), issue.message]);
+      byRow.set(row.id, [...(byRow.get(row.id) ?? []), line.slice(at + 2)]);
     } else {
-      field.push(issue.message);
+      field.push(line);
     }
   }
   return { byRow, field };

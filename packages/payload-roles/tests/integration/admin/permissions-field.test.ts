@@ -1,4 +1,5 @@
 import { createLocalReq, type Payload } from "payload";
+import { reduceFieldsToValues } from "payload/shared";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 import { PermissionsField } from "@codlume/payload-roles";
@@ -7,9 +8,8 @@ import { PermissionsMatrix } from "@codlume/payload-roles/client";
 import {
   applyOp,
   type Outcome,
-  placeServerIssues,
+  placeFieldErrors,
   readMatrix,
-  takeServerIssues,
 } from "../../../src/admin/client/matrix.ts";
 import type { Grant, MatrixModel } from "../../../src/admin/model.ts";
 import { type Actor, as, fresh, login, rest, seedRole, seedUser } from "../../helpers/actors.ts";
@@ -265,38 +265,69 @@ describe("stored values the matrix did not write", () => {
   });
 });
 
-test("a failed save's errors land on the row they name", async () => {
+type FormField = { value: unknown; initialValue: unknown; valid: boolean; errorMessage?: string };
+type FormState = Record<string, FormField>;
+type FormAction =
+  | { type: "ADD_SERVER_ERRORS"; errors: { path: string; message: string }[] }
+  | { type: "UPDATE"; path: string; value: unknown };
+
+const formModule: { fieldReducer: (state: FormState, action: FormAction) => FormState } =
+  await import(new URL("fieldReducer.js", import.meta.resolve("@payloadcms/ui/forms/Form")).href);
+
+const formField = (value: unknown): FormField => ({ initialValue: value, valid: true, value });
+
+const fieldErrorsOf = (json: unknown): { path: string; message: string }[] => {
+  const [error] = isRecord(json) && Array.isArray(json.errors) ? json.errors : [];
+  const data: unknown = isRecord(error) ? error.data : undefined;
+  return (isRecord(data) && Array.isArray(data.errors) ? data.errors : []).flatMap(
+    (entry: unknown) =>
+      isRecord(entry) && typeof entry.path === "string" && typeof entry.message === "string"
+        ? [{ path: entry.path, message: entry.message }]
+        : [],
+  );
+};
+
+test("a refused save shows each cell error on its row and the form keeps the value for the retry", async () => {
   const { payload } = context;
   const model = await modelFor(context, users.editor, roles.blank);
-  const permissions = {
+  const save = rest(context, await login(payload, users.editor.email));
+  const attempted = {
     collections: { ghost: { actions: ["read"] }, pages: { actions: ["read", "update", "delete"] } },
   };
-  const response = await rest(context, await login(payload, users.editor.email))(
-    "PATCH",
-    `/roles/${String(roles.blank)}`,
-    { permissions },
-  );
-  expect(response.status).toBe(400);
-  const [error] = Array.isArray(response.json?.errors) ? response.json.errors : [];
-  const data: unknown = isRecord(error) ? error.data : undefined;
-  const errors: unknown[] = isRecord(data) && Array.isArray(data.errors) ? data.errors : [];
-  // Payload's ADD_SERVER_ERRORS adds one form-state entry per error path.
-  const fields = Object.fromEntries([
-    ["permissions", { value: permissions }],
-    ...errors.flatMap((entry) =>
-      isRecord(entry) && typeof entry.path === "string" && typeof entry.message === "string"
-        ? [[entry.path, { errorMessage: entry.message, value: null }]]
-        : [],
-    ),
-  ]);
-  const { issues, remove } = takeServerIssues(fields, "permissions");
-  expect(remove).not.toContain("permissions");
-  const placed = placeServerIssues(model, issues);
+  let state: FormState = { permissions: formField({}) };
+  state = formModule.fieldReducer(state, { type: "UPDATE", path: "permissions", value: attempted });
+
+  const refused = await save("PATCH", `/roles/${String(roles.blank)}`, {
+    permissions: reduceFieldsToValues(state, true).permissions,
+  });
+  expect(refused.status).toBe(400);
+  const errors = fieldErrorsOf(refused.json);
+  expect(errors.map(({ path }) => path)).toEqual(["permissions"]);
+  state = formModule.fieldReducer(state, { type: "ADD_SERVER_ERRORS", errors });
+
+  expect(Object.keys(state)).toEqual(["permissions"]);
+  expect(reduceFieldsToValues(state, true).permissions).toEqual(attempted);
+  const errorMessage = state.permissions?.errorMessage ?? "";
+  const placed = placeFieldErrors(model, errorMessage);
   expect([...placed.byRow]).toEqual([
     [
       "collections:pages",
       ['You cannot grant action "delete" on "collections:pages" because you do not hold it.'],
     ],
   ]);
-  expect(placed.field).toEqual(['"collections:ghost" is not managed by the roles plugin.']);
+  expect(placed.field).toEqual([
+    'permissions.collections.ghost.actions: "collections:ghost" is not managed by the roles plugin.',
+  ]);
+
+  const retry = applyOp(model, new Set(), {
+    type: "cell",
+    cell: "collections:pages#read",
+    on: true,
+  }).value;
+  state = formModule.fieldReducer(state, { type: "UPDATE", path: "permissions", value: retry });
+  const retried = await save("PATCH", `/roles/${String(roles.blank)}`, {
+    permissions: reduceFieldsToValues(state, true).permissions,
+  });
+  expect(retried.status).toBe(200);
+  expect(await storedPermissions(payload, roles.blank)).toEqual(retry);
 });
