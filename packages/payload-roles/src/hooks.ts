@@ -113,6 +113,15 @@ type CollectionOperationArgs = Parameters<CollectionBeforeOperationHook>[0];
  * the operation's own continuation. It does no lookups and makes no decisions: Payload has not
  * checked access or validated the query yet.
  */
+/** The document an operation names up front: none for creates, bulk writes and restores. */
+const namedId = (operation: string, fields: Readonly<Record<string, unknown>>) => {
+  const id = operation === "update" || operation === "delete" ? fields.id : undefined;
+  return isId(id) ? id : undefined;
+};
+
+/** Each recorded operation's `settle`, keyed by the args object Payload passes to its hooks. */
+const unsettled = new WeakMap<object, (id: SubjectId | undefined) => void>();
+
 const createRecorder =
   (collection: string, keys: readonly string[]): LeadingBeforeOperation<CollectionOperationArgs> =>
   ({ args, operation, overrideAccess, req }) => {
@@ -120,13 +129,38 @@ const createRecorder =
     if (kind !== undefined) {
       const source: unknown = args;
       const fields = isRecord(source) ? source : {};
-      const id = kind !== "create" && operation !== "restoreVersion" ? fields.id : undefined;
-      scope.open(
-        { collection, kind, id: isId(id) ? id : undefined },
+      const settle = scope.open(
+        { collection, kind, id: namedId(operation, fields) },
         requestKeyOf(req),
         isTrusted(overrideAccess, req),
         { raw: redact(pick(fields.data, keys)), superAdmins: null, removed: 0 },
       );
+      if (isRecord(source)) {
+        unsettled.set(source, settle);
+      }
+    }
+    return undefined;
+  };
+
+/**
+ * Runs after the app's `beforeOperation` hooks and records the id Payload will act on, which an
+ * app hook may have changed (for example by resolving an alias). If the app replaced the args
+ * object, the operation's own record cannot be told apart, so every unsettled record of this
+ * collection and kind under the request is widened to name every document.
+ */
+const createSettler =
+  (collection: string): CollectionBeforeOperationHook =>
+  ({ args, operation, req }) => {
+    const kind = operationKind(operation);
+    if (kind !== undefined) {
+      const source: unknown = args;
+      const settle = isRecord(source) ? unsettled.get(source) : undefined;
+      if (settle && isRecord(source)) {
+        unsettled.delete(source);
+        settle(namedId(operation, source));
+      } else {
+        scope.widen(collection, kind, requestKeyOf(req));
+      }
     }
     return undefined;
   };
@@ -471,6 +505,7 @@ export type CoreCollectionHooks = Partial<
   Pick<CollectionHooks, "beforeChange" | "beforeDelete">
 > & {
   record?: LeadingBeforeOperation<CollectionOperationArgs>;
+  settle?: CollectionBeforeOperationHook;
 };
 
 /**
@@ -484,6 +519,7 @@ export const createCoreHooks = (enforcer: Enforcer, slug: string): CoreCollectio
     return {
       ...(options.enabled && {
         record: createRecorder(slug, userKeys(options)),
+        settle: createSettler(slug),
       }),
       beforeChange: [
         ...(options.enabled ? [createUsersWriteGuard(enforcer)] : []),
@@ -495,6 +531,7 @@ export const createCoreHooks = (enforcer: Enforcer, slug: string): CoreCollectio
   if (slug === options.rolesSlug && options.enabled) {
     return {
       record: createRecorder(slug, [options.permissionsField, "key"]),
+      settle: createSettler(slug),
       beforeChange: [createRolesWriteGuard(enforcer)],
       beforeDelete: [createRolesDeleteGuard(enforcer)],
     };
@@ -575,7 +612,7 @@ export const createHookTracker = () => {
       "beforeOperation",
       createOpener(core.record, lifecycle.leadingBeforeOperation),
       app?.beforeOperation,
-      lifecycle.beforeOperation ?? [],
+      [...(core.settle ? [core.settle] : []), ...(lifecycle.beforeOperation ?? [])],
     ),
     beforeChange: place(collections, slug, "beforeChange", [], app?.beforeChange, [
       ...(core.beforeChange ?? []),

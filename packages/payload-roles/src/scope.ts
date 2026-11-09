@@ -16,6 +16,8 @@ export type OperationTarget = {
 
 type Entry<Data> = {
   target: OperationTarget;
+  /** Set once the id Payload acts on is known, after the app's `beforeOperation` hooks. */
+  settled: boolean;
   req: object;
   trusted: boolean;
   data: Data;
@@ -94,10 +96,45 @@ const covers = (entry: Entry<unknown>, document: OperationTarget) =>
 export const createOperationScope = <Data>() => {
   const storage = new AsyncLocalStorage<Entry<Data>>();
   return {
-    /** Call synchronously in the first `beforeOperation` hook. */
+    /**
+     * Call synchronously in the first `beforeOperation` hook. App `beforeOperation` hooks run
+     * after it and may change `args.id`, so call the returned `settle` from a `beforeOperation`
+     * hook that runs after them, with the id Payload will act on.
+     */
     open: (target: OperationTarget, req: object, trusted: boolean, data: Data) => {
       const parent = storage.getStore();
-      storage.enterWith({ target, req, trusted, data, depth: (parent?.depth ?? 0) + 1, parent });
+      const entry: Entry<Data> = {
+        target,
+        settled: false,
+        req,
+        trusted,
+        data,
+        depth: (parent?.depth ?? 0) + 1,
+        parent,
+      };
+      storage.enterWith(entry);
+      return (id: DefaultDocumentIDType | undefined) => {
+        entry.target = { ...entry.target, id };
+        entry.settled = true;
+      };
+    },
+    /**
+     * When an operation's own `settle` cannot be found, makes every unsettled entry of that
+     * collection and kind under the request name every document, so its data is judged on all.
+     */
+    widen: (collection: string, kind: OperationKind, req: object) => {
+      for (let entry = storage.getStore(); entry !== undefined; entry = entry.parent) {
+        const { target } = entry;
+        if (
+          !entry.settled &&
+          entry.req === req &&
+          target.collection === collection &&
+          target.kind === kind
+        ) {
+          entry.target = { ...target, id: undefined };
+          entry.settled = true;
+        }
+      }
     },
     /** The entries covering one document under one request, innermost first. */
     lookup: (document: OperationTarget, req: object) => {
@@ -114,8 +151,8 @@ export const createOperationScope = <Data>() => {
       }
       // An entry that names another document lowers `trusted` but is not this document's to
       // judge, so `all` keeps only the entries that may name this document. That narrowing is
-      // never a trust verdict: an app `beforeOperation` hook can change `args.id` after the
-      // entry was opened, so an entry can act on a document its recorded id does not name.
+      // never a trust verdict; it relies on `settle` or `widen` having replaced an id that an
+      // app `beforeOperation` hook changed after the entry was opened.
       const named = matches.filter(
         (entry) =>
           entry === innermost ||

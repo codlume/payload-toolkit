@@ -84,3 +84,36 @@ describe.each(["", " ", "\t", "\n"])("an untrusted write naming row 0 as %j", (s
     });
   });
 });
+
+test("settle moves an entry to the document Payload acts on", () => {
+  const scope = createOperationScope<string>();
+  const settle = scope.open(page("alias:home"), request, false, "outer");
+  scope.open(page(5), request, true, "nested");
+  expect(scope.lookup(page(5), request)?.all).toEqual(["nested"]);
+  settle(5);
+  expect(scope.lookup(page(5), request)).toMatchObject({
+    all: ["nested", "outer"],
+    trusted: false,
+  });
+});
+
+test("widen makes unsettled entries of the collection name every document", () => {
+  const scope = createOperationScope<string>();
+  scope.open(page("alias:home"), request, false, "outer");
+  scope.open(page(5), request, true, "nested");
+  scope.widen("pages", "update", request);
+  expect(scope.lookup(page(5), request)).toMatchObject({
+    all: ["nested", "outer"],
+    trusted: false,
+  });
+});
+
+test("widen leaves settled entries and other requests alone", () => {
+  const scope = createOperationScope<string>();
+  scope.open(page(7), {}, false, "other request");
+  const settle = scope.open(page(7), request, false, "settled");
+  settle(7);
+  scope.open(page(5), request, true, "nested");
+  scope.widen("pages", "update", request);
+  expect(scope.lookup(page(5), request)?.all).toEqual(["nested"]);
+});
