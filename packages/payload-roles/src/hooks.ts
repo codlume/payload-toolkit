@@ -148,10 +148,9 @@ const createRecorder =
 
 /**
  * Runs after the app's `beforeOperation` hooks and records the id Payload will act on, which an
- * app hook may have changed (for example by resolving an alias). If an app hook built a fresh
- * args object, the operation's own record cannot be told apart, so every unsettled record of
- * this collection and kind under the request that names another document is widened to name
- * every document.
+ * app hook may have changed (for example by resolving an alias). It settles the record whose
+ * `settle` it finds on args, then widens every unsettled record of this collection and kind
+ * under the request that names another document, in case that `settle` was not its own.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
@@ -159,18 +158,16 @@ const createSettler =
     const kind = operationKind(operation);
     if (kind !== undefined) {
       const source: unknown = args;
+      const id = isRecord(source) ? namedId(operation, source) : undefined;
       const settle: unknown = isRecord(source) ? Reflect.get(source, SETTLE) : undefined;
       if (typeof settle === "function" && isRecord(source)) {
         Reflect.deleteProperty(source, SETTLE);
-        Reflect.apply(settle, undefined, [namedId(operation, source)]);
-      } else {
-        scope.widen(
-          collection,
-          kind,
-          requestKeyOf(req),
-          isRecord(source) ? namedId(operation, source) : undefined,
-        );
+        Reflect.apply(settle, undefined, [id]);
       }
+      // The settle found may be another operation's (app code can share and copy one args
+      // object across operations), so every other unsettled record naming a different document
+      // still widens. Widening never narrows, so this can only add to a judgement.
+      scope.widen(collection, kind, requestKeyOf(req), id);
     }
     return undefined;
   };
