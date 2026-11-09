@@ -113,27 +113,47 @@ export const createOperationScope = <Data>() => {
         parent,
       };
       storage.enterWith(entry);
+      // An entry opened without an id names every document; nothing an app hook does to
+      // `args.id` afterwards narrows it, since Payload's bulk and restore paths ignore that id.
       return (id: DefaultDocumentIDType | undefined) => {
-        entry.target = { ...entry.target, id };
+        entry.target = { ...entry.target, id: target.id === undefined ? undefined : id };
         entry.settled = true;
       };
     },
     /**
      * When an operation's own `settle` cannot be found, makes every unsettled entry of that
-     * collection and kind under the request name every document, so its data is judged on all.
+     * collection and kind under the request that names a document other than `id` name every
+     * document, so its data is judged on all of them.
      */
-    widen: (collection: string, kind: OperationKind, req: object) => {
+    widen: (
+      collection: string,
+      kind: OperationKind,
+      req: object,
+      id: DefaultDocumentIDType | undefined,
+    ) => {
+      let ownFound = false;
       for (let entry = storage.getStore(); entry !== undefined; entry = entry.parent) {
         const { target } = entry;
         if (
-          !entry.settled &&
-          entry.req === req &&
-          target.collection === collection &&
-          target.kind === kind
+          entry.settled ||
+          entry.req !== req ||
+          target.collection !== collection ||
+          target.kind !== kind ||
+          target.id === undefined
         ) {
-          entry.target = { ...target, id: undefined };
-          entry.settled = true;
+          continue;
         }
+        if (id !== undefined && maybeSameId(target.id, id)) {
+          // The innermost unsettled entry that already names the final document is the
+          // operation's own: nested operations started before this point settled themselves.
+          if (!ownFound) {
+            ownFound = true;
+            entry.settled = true;
+          }
+          continue;
+        }
+        entry.target = { ...target, id: undefined };
+        entry.settled = true;
       }
     },
     /** The entries covering one document under one request, innermost first. */

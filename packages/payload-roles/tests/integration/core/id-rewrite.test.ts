@@ -15,10 +15,22 @@ import { createTestPayload, fixtureCollections, type TestPayload } from "../../h
 type Rewrite = "mutate" | "replace";
 type Nested = "none" | "trusted" | "untrusted";
 
-const state: { rewrite: Rewrite; nested: Nested; strip: boolean } = {
+const state: {
+  rewrite: Rewrite;
+  nested: Nested;
+  strip: boolean;
+  bulkId: number | string | undefined;
+  replaceArgs: boolean;
+  touch: number | string | undefined;
+  touchError: unknown;
+} = {
   rewrite: "mutate",
   nested: "none",
   strip: false,
+  bulkId: undefined,
+  replaceArgs: false,
+  touch: undefined,
+  touchError: undefined,
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -27,8 +39,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const resolveAlias: CollectionBeforeOperationHook = async ({ args, req }) => {
   const source: unknown = args;
   const id = isRecord(source) ? source.id : undefined;
+  if (isRecord(source) && id === undefined && state.bulkId !== undefined) {
+    source.id = state.bulkId;
+  }
   if (typeof id !== "string" || !id.startsWith("alias:")) {
-    return args;
+    return state.replaceArgs ? { ...args } : args;
   }
   const row = await req.payload.db.findOne({
     collection: "users",
@@ -58,6 +73,15 @@ const nestAndStrip: CollectionBeforeChangeHook = async ({ data, originalDoc, req
         req,
       }).catch(() => undefined);
     }
+  }
+  if (state.touch !== undefined) {
+    const touch = state.touch;
+    state.touch = undefined;
+    await req.payload
+      .update({ collection: "users", data: {}, id: touch, req })
+      .catch((error: unknown) => {
+        state.touchError = error;
+      });
   }
   return state.strip
     ? Object.fromEntries(Object.entries(data).filter(([key]) => key !== "password"))
@@ -94,7 +118,14 @@ beforeAll(async () => {
 afterAll(async () => context.destroy());
 
 afterEach(async () => {
-  Object.assign(state, { nested: "none", strip: false });
+  Object.assign(state, {
+    bulkId: undefined,
+    nested: "none",
+    replaceArgs: false,
+    strip: false,
+    touch: undefined,
+    touchError: undefined,
+  });
   await context.payload.update({
     collection: "users",
     data: { password: PASSWORD },
@@ -154,4 +185,31 @@ test("a trusted Local API write by alias still works", async () => {
     where: { email: { equals: "target@example.test" } },
   });
   expect(row).toMatchObject({ superAdmin: true });
+});
+
+test("a bulk update whose args gain an id from an app hook still judges every matched row", async () => {
+  Object.assign(state, { bulkId: editor.id, nested: "trusted", strip: true });
+  const result = await as(context.payload, editor).updateMany({
+    collection: "users",
+    data: { password: ATTEMPT },
+    where: { email: { equals: "target@example.test" } },
+  });
+  expect(result.docs).toHaveLength(0);
+  await expect(login(context.payload, "target@example.test", ATTEMPT)).rejects.toThrow();
+});
+
+test("an app hook that returns a copy of args keeps trusted writes to other users working", async () => {
+  const bystander = await seedUser(context.payload, { email: "bystander@example.test" });
+  Object.assign(state, { replaceArgs: true, touch: ALIAS_TARGET_ID.value });
+  await as(context.payload, editor).update({
+    collection: "users",
+    data: { email: "bystander-renamed@example.test" },
+    id: bystander.id,
+  });
+  expect(state.touchError).toBeUndefined();
+  const row = await context.payload.db.findOne({
+    collection: "users",
+    where: { id: { equals: bystander.id } },
+  });
+  expect(row).toMatchObject({ email: "bystander-renamed@example.test" });
 });

@@ -101,7 +101,7 @@ test("widen makes unsettled entries of the collection name every document", () =
   const scope = createOperationScope<string>();
   scope.open(page("alias:home"), request, false, "outer");
   scope.open(page(5), request, true, "nested");
-  scope.widen("pages", "update", request);
+  scope.widen("pages", "update", request, 5);
   expect(scope.lookup(page(5), request)).toMatchObject({
     all: ["nested", "outer"],
     trusted: false,
@@ -114,6 +114,35 @@ test("widen leaves settled entries and other requests alone", () => {
   const settle = scope.open(page(7), request, false, "settled");
   settle(7);
   scope.open(page(5), request, true, "nested");
-  scope.widen("pages", "update", request);
+  scope.widen("pages", "update", request, 5);
   expect(scope.lookup(page(5), request)?.all).toEqual(["nested"]);
+});
+
+test("settle never narrows an entry opened without an id", () => {
+  const scope = createOperationScope<string>();
+  const settle = scope.open(page(undefined), request, false, "bulk");
+  scope.open(page(5), request, true, "nested");
+  settle(7);
+  expect(scope.lookup(page(5), request)).toMatchObject({ all: ["nested", "bulk"], trusted: false });
+});
+
+test("widen leaves entries that already name the final document", () => {
+  const scope = createOperationScope<string>();
+  scope.open(page(5), request, false, "own");
+  scope.open(page(9), request, true, "nested elsewhere");
+  scope.widen("pages", "update", request, 5);
+  expect(scope.lookup(page(9), request)?.all).toEqual(["nested elsewhere"]);
+});
+
+test("widen settles the operation's own entry so a later widen leaves it alone", () => {
+  const scope = createOperationScope<string>();
+  scope.open(page(5), request, false, "own");
+  scope.widen("pages", "update", request, 5);
+  scope.open(page(9), request, true, "nested elsewhere");
+  scope.widen("pages", "update", request, 9);
+  expect(scope.lookup(page(9), request)).toEqual({
+    all: ["nested elsewhere"],
+    innermost: "nested elsewhere",
+    trusted: false,
+  });
 });

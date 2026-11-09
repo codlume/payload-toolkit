@@ -146,7 +146,8 @@ const createRecorder =
  * Runs after the app's `beforeOperation` hooks and records the id Payload will act on, which an
  * app hook may have changed (for example by resolving an alias). If the app replaced the args
  * object, the operation's own record cannot be told apart, so every unsettled record of this
- * collection and kind under the request is widened to name every document.
+ * collection and kind under the request that names another document is widened to name every
+ * document.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
@@ -159,7 +160,12 @@ const createSettler =
         unsettled.delete(source);
         settle(namedId(operation, source));
       } else {
-        scope.widen(collection, kind, requestKeyOf(req));
+        scope.widen(
+          collection,
+          kind,
+          requestKeyOf(req),
+          isRecord(source) ? namedId(operation, source) : undefined,
+        );
       }
     }
     return undefined;
