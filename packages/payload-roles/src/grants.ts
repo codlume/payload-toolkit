@@ -93,7 +93,7 @@ export const parsePermissions = (raw: unknown, registry: Registry): Parsed => {
     return { grants: EMPTY_GRANTS, issues };
   }
   for (const kind of Object.keys(raw)) {
-    if (!(kind in KINDS)) {
+    if (!Object.hasOwn(KINDS, kind)) {
       issues.push({
         path: `permissions.${kind}`,
         resource: null,
