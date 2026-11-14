@@ -11,7 +11,7 @@ export type Before =
 
 export type After = {
   readonly published: "either" | "unchanged" | boolean;
-  readonly trashed: "unchanged" | boolean;
+  readonly trashed: "either" | "unchanged" | boolean;
 };
 
 export type Facts = {
@@ -127,23 +127,23 @@ const befores = (resource: RulesResource, before: Before): readonly RowState[] =
 };
 
 const possibleTransitions = (resource: RulesResource, facts: Facts): readonly Transition[] => {
-  if (!facts.writesMain && facts.write !== "create") {
-    return [
-      { write: facts.write, main: null, trashes: facts.after.trashed === true, files: facts.files },
-    ];
-  }
+  const { files, write } = facts;
   const { published, trashed } = facts.after;
+  if (!facts.writesMain && write !== "create") {
+    return (trashed === "either" ? [false, true] : [trashed === true]).map((trashes) => ({
+      write,
+      main: null,
+      trashes,
+      files,
+    }));
+  }
   return befores(resource, facts.before).flatMap((before) =>
-    (published === "either"
-      ? [false, true]
-      : [published === "unchanged" ? before.published : published]
-    ).map((after) => ({
-      write: facts.write,
-      main: {
-        before,
-        after: { published: after, trashed: trashed === "unchanged" ? before.trashed : trashed },
-      },
-    })),
+    cross(
+      published === "either"
+        ? [false, true]
+        : [published === "unchanged" ? before.published : published],
+      trashed === "either" ? [false, true] : [trashed === "unchanged" ? before.trashed : trashed],
+    ).map((after) => ({ write, main: { before, after } })),
   );
 };
 
@@ -245,7 +245,20 @@ const trashedAfter = (
   if (deletedAt !== undefined) {
     return deletedAt !== null;
   }
-  return view.kind === "create" ? false : "unchanged";
+  switch (view.kind) {
+    case "create":
+      return false;
+    // Payload writes the snapshot's `deletedAt`, and asks access with only its `_status`
+    // (restoreVersion.js:77-83,169-179).
+    case "restore":
+      return "either";
+    case "update":
+      return "unchanged";
+    default: {
+      const exhaustive: never = view.kind;
+      return exhaustive;
+    }
+  }
 };
 
 export const requestFacts = (resource: RulesResource, view: RequestView): Facts => {

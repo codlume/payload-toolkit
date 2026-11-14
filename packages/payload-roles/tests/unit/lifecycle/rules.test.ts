@@ -745,6 +745,17 @@ test("a key absent from the written data keeps the stored value, so a live edit 
   expect([...requiredActions(pages, trashed)]).toEqual(["update"]);
 });
 
+test("a restore's floor leaves the snapshot's trash state open, so a trashed snapshot needs trash, not publish", () => {
+  // Payload asks update access with only the snapshot's `_status` (restoreVersion.js:77-83).
+  const asked = requestFacts(pages, view({ kind: "restore", data: { _status: "published" } }));
+  const overN = (snapshot: Record<string, unknown>) => [
+    ...requiredActions(pages, settleBefore(pages, settleAfter(pages, asked, snapshot), N)),
+  ];
+  expect([...requiredActions(pages, asked)]).toEqual(["update", "readVersions"]);
+  expect(overN(TP)).toEqual(["update", "trash", "readVersions"]);
+  expect(overN(P)).toEqual(["update", "publish", "readVersions"]);
+});
+
 test("a draft save that may rewrite upload files needs publish, because Payload can delete live files", () => {
   const facts = requestFacts(
     pages,
