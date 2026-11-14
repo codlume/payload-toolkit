@@ -28,6 +28,7 @@ import {
   decideUserWrite,
   type ForbiddenReason,
   removesSuperAdmin,
+  sameValue,
   SENSITIVE_KEYS,
   type UserTarget,
 } from "./guards.ts";
@@ -436,7 +437,12 @@ const createRolesWriteGuard =
     if (operation === "update" && !row) {
       refuse("target-missing", ctx);
     }
-    const written = pick(data, [permissionsField, "key"]);
+    const sent = current.raws.some((raw) => permissionsField in raw);
+    const final = pick(data, [permissionsField, "key"]);
+    // Payload fills unsent fields from the stored document. Permissions the write leaves as
+    // stored are not judged, so a role stays editable when they are no longer valid.
+    const kept = row !== null && !sent && sameValue(final[permissionsField], row[permissionsField]);
+    const written = kept ? pick(final, ["key"]) : final;
     const decide = (raw: Readonly<Record<string, unknown>>) =>
       decideRoleWrite({
         editor: ctx.editor.capabilities,
@@ -451,7 +457,6 @@ const createRolesWriteGuard =
     }
     const { decision, canonical } = decide(written);
     throwDecision(decision, ctx);
-    const sent = current.raws.some((raw) => permissionsField in raw);
     return canonical && sent && isRecord(data) ? { ...data, [permissionsField]: canonical } : data;
   };
 
