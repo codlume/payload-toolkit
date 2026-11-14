@@ -114,6 +114,16 @@ test("a 200 sends the stock request, resets to draft and flips the published sta
   expect(setters.setHasPublishedDoc).toHaveBeenCalledWith(false);
 });
 
+test("a form reset that fails still reports the unpublish and flips the published state", async () => {
+  published();
+  ui.request.mockResolvedValue(new Response("{}", { status: 200 }));
+  ui.reset.mockRejectedValueOnce(new Error("form state unavailable"));
+  await confirm();
+
+  expect(ui.toast.success).toHaveBeenCalledWith("version:unpublishedSuccessfully");
+  expect(setters.setHasPublishedDoc).toHaveBeenCalledWith(false);
+});
+
 test("a refused request shows the server's message and changes nothing", async () => {
   published();
   ui.request.mockResolvedValue(

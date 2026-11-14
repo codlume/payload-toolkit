@@ -58,7 +58,8 @@ export const UnpublishDocument = () => {
       toast.error(unpublishErrorOf(json) ?? t("error:unPublishingDocument"));
       return;
     }
-    await reset({ ...data, _status: "draft" });
+    // The server has unpublished, so a failed form refresh must not hold back the success state.
+    reset({ ...data, _status: "draft" }).catch(() => {});
     toast.success(t("version:unpublishedSuccessfully"));
     setUnpublishedVersionCount(1);
     setMostRecentVersionIsAutosaved(false);
