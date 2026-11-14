@@ -4,7 +4,7 @@
 // Run from packages/payload-roles after `pnpm build`:
 //   node tests/integration/lifecycle/perf.bench.ts [--out results.json]
 // Env: BENCH_ITERATIONS (200), BENCH_WARMUP (30), BENCH_COUNT_ITERATIONS (5),
-//      BENCH_BASE_PAGES (1000), BENCH_BULK (20).
+//      BENCH_BASE_PAGES (1000), BENCH_BULK (20), BENCH_OPS (comma-separated op names; all).
 //
 // Two passes over one Payload instance. The timing pass measures each operation with nothing
 // wrapped. The counting pass then wraps every `payload.db` method and `enforcer.subject` and
@@ -33,6 +33,7 @@ const WARMUP = envInt("BENCH_WARMUP", 30);
 const COUNT_ITERATIONS = envInt("BENCH_COUNT_ITERATIONS", 5);
 const BASE_PAGES = envInt("BENCH_BASE_PAGES", 1000);
 const BULK = envInt("BENCH_BULK", 20);
+const ONLY_OPS = process.env.BENCH_OPS?.split(",").filter(Boolean);
 const outIndex = process.argv.indexOf("--out");
 const OUT = outIndex === -1 ? undefined : process.argv[outIndex + 1];
 
@@ -47,6 +48,9 @@ const PAGES_ACTIONS = [
   "unpublish",
   "readVersions",
 ];
+const SETTINGS_ACTIONS = ["read", "update", "publish", "unpublish", "readVersions"];
+/** No unpublish and no trash, so a write whose verdict turns on the stored row must read it. */
+const PARTIAL_ACTIONS = ["read", "update", "publish"];
 
 const packageDir = new URL("../../../", import.meta.url);
 const distFile = new URL("dist/index.mjs", packageDir).pathname;
@@ -61,12 +65,18 @@ const { payload } = context;
 await seedUser(payload, { email: "bootstrap@example.com" });
 const memberRole = await seedRole(payload, "pages-all", {
   collections: { pages: { actions: PAGES_ACTIONS } },
+  globals: { settings: { actions: SETTINGS_ACTIONS } },
+});
+const partialRole = await seedRole(payload, "pages-partial", {
+  collections: { pages: { actions: PARTIAL_ACTIONS } },
+  globals: { settings: { actions: [...PARTIAL_ACTIONS, "readVersions"] } },
 });
 const member = await seedUser(payload, { email: "member@example.com", roles: [memberRole] });
+const partial = await seedUser(payload, { email: "partial@example.com", roles: [partialRole] });
 const admin = await seedUser(payload, { email: "admin@example.com", superAdmin: true });
 
 type Side = {
-  name: "member" | "memberWarm" | "superAdmin" | "trusted";
+  name: "member" | "memberPartial" | "memberWarm" | "superAdmin" | "trusted";
   trusted: boolean;
   /** A new object per call, as each HTTP request has, except `memberWarm`, which reuses one. */
   user: () => Actor;
@@ -79,10 +89,17 @@ const SIDES: Side[] = [
   { name: "superAdmin", trusted: false, user: () => ({ ...admin }) },
   { name: "trusted", trusted: true, user: () => ({ ...member }) },
 ];
-const tokens = {
+/** Runs only in the operations that list it. */
+const PARTIAL: Side = { name: "memberPartial", trusted: false, user: () => ({ ...partial }) };
+const DEFAULT_SIDES = SIDES.map((side) => side.name);
+const WITH_PARTIAL: Side["name"][] = [...DEFAULT_SIDES, "memberPartial"];
+const REST_SIDES: Side["name"][] = ["member", "memberPartial", "superAdmin"];
+const tokens: Partial<Record<Side["name"], string>> = {
   member: await login(payload, member.email),
+  memberPartial: await login(payload, partial.email),
   superAdmin: await login(payload, admin.email),
 };
+const restAs = (side: Side) => rest(context, tokens[side.name] ?? null);
 
 type Api = ReturnType<typeof as>;
 
@@ -115,6 +132,21 @@ const seedPage = async (title: string, status: "draft" | "published" = "publishe
 const trash = (id: Id) =>
   payload.update({ collection: "pages", data: { deletedAt: new Date().toISOString() }, id });
 
+const storedSettings = async (): Promise<Row> => {
+  const row: unknown = await payload.db.findGlobal({ slug: "settings" });
+  return isRow(row) ? row : {};
+};
+
+const expectSettings = async (expected: Row) => {
+  const row = await storedSettings();
+  for (const [key, value] of Object.entries(expected)) {
+    if (row[key] !== value) {
+      return `settings ${key}=${JSON.stringify(row[key])}, expected ${JSON.stringify(value)}`;
+    }
+  }
+  return null;
+};
+
 const countPages = async () =>
   (await payload.count({ collection: "pages", trash: true })).totalDocs;
 
@@ -131,7 +163,18 @@ type Op = {
   check: (result: unknown, fixture: Fixture, ctx: Ctx) => Promise<null | string>;
 };
 
-const one = async (title: string) => ({ ids: [await seedPage(title)] });
+const one = async (title: string, status: "draft" | "published" = "published") => ({
+  ids: [await seedPage(title, status)],
+});
+const many = async (title: string, status: "draft" | "published" = "published") => {
+  const ids: Id[] = [];
+  for (let index = 0; index < BULK; index += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- fixture seeding, untimed
+    ids.push(await seedPage(`${title} ${index}`, status));
+  }
+  return { ids };
+};
+const none = async (): Promise<Fixture> => ({ ids: [] });
 const plain = async (_fixture: Fixture, title: string): Promise<Ctx> => ({ title });
 const first = (fixture: Fixture) => {
   const [id] = fixture.ids;
@@ -172,7 +215,7 @@ const bulkOk = (result: unknown, size: number) => {
     : `bulk wrote ${docs.length}/${size}, errors ${JSON.stringify(errors)}`;
 };
 
-const OPS: Op[] = [
+const ALL_OPS: Op[] = [
   {
     name: "createDraft",
     prepare: async () => ({ ids: [] }),
@@ -212,6 +255,7 @@ const OPS: Op[] = [
   },
   {
     name: "updateLiveEdit",
+    sides: WITH_PARTIAL,
     prepare: () => one("live base"),
     setup: plain,
     run: (side, fixture, { title }) =>
@@ -322,14 +366,8 @@ const OPS: Op[] = [
   },
   {
     name: `bulkUpdate${BULK}`,
-    prepare: async () => {
-      const ids: Id[] = [];
-      for (let index = 0; index < BULK; index += 1) {
-        // oxlint-disable-next-line no-await-in-loop -- fixture seeding, untimed
-        ids.push(await seedPage(`bulk base ${index}`));
-      }
-      return { ids };
-    },
+    sides: WITH_PARTIAL,
+    prepare: () => many("bulk base"),
     setup: plain,
     run: (side, fixture, { title }) =>
       apiOf(side, side.user()).updateMany({
@@ -345,17 +383,124 @@ const OPS: Op[] = [
     prepare: () => one("rest base"),
     setup: plain,
     run: (side, fixture, { title }) =>
-      rest(context, side.name === "superAdmin" ? tokens.superAdmin : tokens.member)(
-        "PATCH",
-        `/pages/${first(fixture)}`,
-        { _status: "published", title },
-      ),
+      restAs(side)("PATCH", `/pages/${first(fixture)}`, { _status: "published", title }),
     check: async (result, fixture, { title }) =>
       field(result, "status") === 200
         ? expectRow(first(fixture), { _status: "published", title })
         : `REST status ${String(field(result, "status"))}`,
   },
+  // A title edit of a draft page without the draft flag keeps it a draft. Without `unpublish`
+  // that is allowed only when the stored row is a draft too, so the lifecycle reads the row.
+  {
+    name: "editDraft",
+    sides: WITH_PARTIAL,
+    prepare: () => one("draft base", "draft"),
+    setup: plain,
+    run: (side, fixture, { title }) =>
+      apiOf(side, side.user()).update({ collection: "pages", data: { title }, id: first(fixture) }),
+    check: (_r, fixture, { title }) => expectRow(first(fixture), { _status: "draft", title }),
+  },
+  {
+    name: `bulkEditDraft${BULK}`,
+    sides: WITH_PARTIAL,
+    prepare: () => many("bulk draft base", "draft"),
+    setup: plain,
+    run: (side, fixture, { title }) =>
+      apiOf(side, side.user()).updateMany({
+        collection: "pages",
+        data: { title },
+        where: { id: { in: fixture.ids } },
+      }),
+    check: async (result, fixture, { title }) =>
+      bulkOk(result, BULK) ?? expectRow(fixture.ids.at(-1), { _status: "draft", title }),
+  },
+  // The admin asks for one document's permissions with the form state as the body.
+  {
+    name: "probeDocAccess",
+    sides: REST_SIDES,
+    prepare: () => one("probe base"),
+    setup: plain,
+    run: (side, fixture, { title }) =>
+      restAs(side)("POST", `/pages/access/${first(fixture)}`, { _status: "published", title }),
+    check: async (result) =>
+      field(result, "status") === 200 && field(field(result, "json"), "update") === true
+        ? null
+        : `doc access ${JSON.stringify(result)}`,
+  },
+  // The admin's per-render permissions call: every entity's access functions, no document.
+  {
+    name: "probeAccess",
+    sides: REST_SIDES,
+    prepare: none,
+    setup: plain,
+    run: (side) => restAs(side)("GET", "/access"),
+    check: async (result) =>
+      field(result, "status") === 200 &&
+      isRow(field(field(field(result, "json"), "collections"), "pages"))
+        ? null
+        : `access ${JSON.stringify(result)}`,
+  },
+  {
+    name: "globalUpdate",
+    sides: WITH_PARTIAL,
+    prepare: none,
+    setup: plain,
+    run: (side, _f, { title }) =>
+      payload.updateGlobal({
+        data: { _status: "published", siteName: title },
+        slug: "settings",
+        ...access(side, side.user()),
+      }),
+    check: (_r, _f, { title }) => expectSettings({ _status: "published", siteName: title }),
+  },
+  // As `editDraft`, for a global: the stored row decides for a member without `unpublish`.
+  {
+    name: "globalEditDraft",
+    sides: WITH_PARTIAL,
+    prepare: none,
+    setup: async (_f, title) => {
+      await payload.updateGlobal({ data: { _status: "draft" }, slug: "settings" });
+      return { title };
+    },
+    run: (side, _f, { title }) =>
+      payload.updateGlobal({
+        data: { siteName: title },
+        slug: "settings",
+        ...access(side, side.user()),
+      }),
+    check: (_r, _f, { title }) => expectSettings({ _status: "draft", siteName: title }),
+  },
+  {
+    name: "globalRestore",
+    sides: WITH_PARTIAL,
+    prepare: none,
+    setup: async (_f, title) => {
+      for (const siteName of [title, `${title} later`]) {
+        // oxlint-disable-next-line no-await-in-loop -- two versions in order, untimed
+        await payload.updateGlobal({ data: { _status: "published", siteName }, slug: "settings" });
+      }
+      const { docs } = await payload.findGlobalVersions({
+        depth: 0,
+        limit: 1,
+        slug: "settings",
+        where: { "version.siteName": { equals: title } },
+      });
+      const versionId = docs[0]?.id;
+      if (versionId === undefined) {
+        throw new Error(`no settings version named ${title}`);
+      }
+      return { title, versionId };
+    },
+    run: (side, _f, { versionId }) =>
+      payload.restoreGlobalVersion({
+        id: String(versionId),
+        slug: "settings",
+        ...access(side, side.user()),
+      }),
+    check: (_r, _f, { title }) => expectSettings({ _status: "published", siteName: title }),
+  },
 ];
+const OPS = ALL_OPS.filter((op) => !ONLY_OPS || ONLY_OPS.includes(op.name));
 
 type Counter = { active: boolean; calls: Map<string, number> };
 const counter: Counter = { active: false, calls: new Map() };
@@ -387,8 +532,11 @@ const callerOf = (stack: string | undefined) => {
 
 const DB_METHODS = [
   "count",
+  "countGlobalVersions",
   "countVersions",
   "create",
+  "createGlobal",
+  "createGlobalVersion",
   "createVersion",
   "deleteMany",
   "deleteOne",
@@ -400,6 +548,8 @@ const DB_METHODS = [
   "findOne",
   "findVersions",
   "queryDrafts",
+  "updateGlobal",
+  "updateGlobalVersion",
   "updateMany",
   "updateOne",
   "updateVersion",
@@ -453,7 +603,8 @@ const instrument = () => {
   };
 };
 
-const sidesOf = (op: Op) => SIDES.filter((side) => !op.sides || op.sides.includes(side.name));
+const sidesOf = (op: Op) =>
+  [...SIDES, PARTIAL].filter((side) => (op.sides ?? DEFAULT_SIDES).includes(side.name));
 
 const rotate = <T>(items: T[], by: number) => items.map((_, i) => items[(i + by) % items.length]!);
 
@@ -625,7 +776,10 @@ const report = {
       rolesDebug: false,
     },
     sides: {
-      member: "overrideAccess:false, role holds every pages action, new user object per call",
+      member:
+        "overrideAccess:false, role holds every pages and settings action, new user object per call",
+      memberPartial:
+        "as member, with read, update and publish only; runs in the operations that list it",
       memberWarm: "as member, one reused user object, so the capability memo is warm",
       superAdmin: "overrideAccess:false, superAdmin:true, new user object per call",
       trusted: "overrideAccess:true with the member as user: lifecycle plans trusted",
@@ -638,7 +792,7 @@ const report = {
 
 await context.destroy();
 
-const SIDE_NAMES = SIDES.map((side) => side.name);
+const SIDE_NAMES = [...SIDES, PARTIAL].map((side) => side.name);
 const pad = (text: string, width: number) => text.padEnd(width);
 const timed = (name: string, op: Op) => {
   const stats = timing[op.name]?.[name];
