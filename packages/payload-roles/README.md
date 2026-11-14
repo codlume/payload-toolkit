@@ -261,9 +261,10 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   adds a hook to a live hook list after startup puts it after the plugin's checks. In each case a
   hook added after the plugin's own runs after its checks, and an id it rewrites there is not
   judged. A `beforeOperation` hook that replaces `args.req` there leaves the write without the
-  plugin's record of it. The guards then treat that write as untrusted, assume that it changes a
-  password, and refuse it when it would demote, trash or delete a super admin. Register hooks in
-  the Payload config.
+  plugin's record of it on that request. If no other record covers the write, the guards treat it
+  as untrusted, assume that it changes a password, and refuse it when it would demote, trash or
+  delete a super admin. If app code makes a trusted write on that request, the editor's write can
+  go through as trusted. Register hooks in the Payload config.
 - An app hook that starts another write on the same collection under the same request, for
   example an exported operation called with `disableTransaction: true` or a Local API call that
   passes `req`, from any hook including `afterChange`, makes writes that untrusted records cover
@@ -279,11 +280,11 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   `args` it received, for example one it built key by key. Return `args` or a copy made with
   `{ ...args }`.
 - The plugin tells operations apart by a symbol key it puts on each operation's `args`. App code
-  that builds one operation's args from another operation's, for example args it saved in one
-  hook and returns from a hook of a nested operation, hands the plugin's record of the first
-  operation to the second. Each operation's writes can then be judged as the other's, so an
-  editor's write can go through as trusted. Build each operation's args only from the `args` its
-  own hooks receive.
+  that builds one operation's args from another operation's, in either direction, hands the
+  plugin's record of one operation to the other. An example is args saved in one hook and returned
+  from a hook of a nested operation. Each operation's writes can then be judged as the other's: an
+  editor's write can go through as trusted, or be judged without the password its client sent.
+  Build each operation's args only from the `args` its own hooks receive.
 - Operations started synchronously from app code, without an `await` between them, stack their
   records in one async context. From about the 64th of them (the 63rd on Node 22) every later
   write in that context is untrusted: the guards judge it with the editor's grants and the
