@@ -72,7 +72,7 @@ const lockOf = (input: ModelInput, granted: Grants): MatrixLock | null => {
 export const matrixModelOf = (input: ModelInput): MatrixModel => {
   const { registry, options, value } = input;
   const effective = options.enabled ? input.editor : ALL;
-  const parsed = parsePermissions(value, registry);
+  const parsed = checkPermissions(value, registry, ALL);
   const lock = lockOf(input, parsed.grants);
   const modeOf = (id: ResourceId, action: ActionId): CellMode => {
     const holds =
@@ -101,7 +101,7 @@ export const matrixModelOf = (input: ModelInput): MatrixModel => {
     stored: {
       fingerprint: JSON.stringify(value ?? null),
       granted: [...parsed.grants],
-      issues: checkPermissions(value, registry, ALL).issues.map((issue) => ({
+      issues: parsed.issues.map((issue) => ({
         row: issue.resource !== null && registry.has(issue.resource) ? issue.resource : null,
         message: describeCellIssue(issue),
       })),
@@ -169,6 +169,7 @@ const readableRoles = async (
       overrideAccess: false,
       pagination: false,
       req,
+      select: { name: true, [options.permissionsField]: true },
       ...(ownId !== undefined && { where: { id: { not_equals: ownId } } }),
     });
     return docs.flatMap((doc): CopySource[] => {
