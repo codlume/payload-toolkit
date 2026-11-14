@@ -9,6 +9,7 @@ import {
   type RulesResource,
   settleAfter,
   settleBefore,
+  viaLatestVersion,
 } from "../../../src/lifecycle/rules.ts";
 
 type Row = {
@@ -813,6 +814,84 @@ test("an allow before the row is read stays an allow for every stored row Payloa
                 ).toBe("allow");
               }
             }
+          }
+        }
+      }
+    }
+  }
+});
+
+// A body that sets a `deletedAt` date is left out. A trashed main row needs no trash to stay
+// trashed, and Payload asks delete access for such a body.
+test.each(ROWS.filter((entry) => typeof entry.view.data?.deletedAt !== "string"))(
+  "$id keeps the floor $floor once its latest version may differ from the main row",
+  (entry) => {
+    expect([
+      ...requiredActions(entry.resource, viaLatestVersion(entry.resource, requested(entry))),
+    ]).toEqual(entry.floor);
+  },
+);
+
+test("neither the pre-access check nor the access floor refuses a write the stored rows allow", () => {
+  const states = [N, P, TN, TP];
+  const bodies: Record<string, unknown>[] = [];
+  for (const content of [{}, { title: "x" }]) {
+    for (const status of [{}, { _status: "draft" }, { _status: "published" }]) {
+      for (const trashed of [{}, { deletedAt: null }, { deletedAt: DATE }]) {
+        bodies.push({ ...content, ...status, ...trashed });
+      }
+    }
+  }
+  const actions: ActionId[] = ["update", "publish", "unpublish", "trash", "readVersions"];
+  const subsets = Array.from({ length: 2 ** actions.length }, (_unused, mask) =>
+    actions.filter((_action, bit) => (mask & (1 << bit)) !== 0),
+  );
+  /** `planned` is the request before access; `asked` carries the data Payload asks access with. */
+  const admits = (
+    res: RulesResource,
+    planned: RequestView,
+    asked: RequestView,
+    written: Record<string, unknown>,
+    main: Record<string, unknown>,
+  ) => {
+    const precise = settleBefore(res, settleAfter(res, requestFacts(res, planned), written), main);
+    const preAccess = viaLatestVersion(res, requestFacts(res, planned));
+    const floor = [...requiredActions(res, viaLatestVersion(res, requestFacts(res, asked)))];
+    for (const held of subsets) {
+      const holds = holding(held);
+      if (judge(res, precise, holds).kind !== "allow") {
+        continue;
+      }
+      const label = JSON.stringify({ asked, held, main, written });
+      expect(judge(res, preAccess, holds).kind, label).not.toBe("deny");
+      expect(
+        floor.filter((action) => !holds(action)),
+        label,
+      ).toEqual([]);
+    }
+  };
+  for (const res of [pages, plain]) {
+    for (const main of states) {
+      // A drafts collection finds the document through its latest version, which keeps its own
+      // state. Without `trash: true` Payload finds only an untrashed document.
+      for (const found of res.drafts ? states : [main]) {
+        for (const data of bodies) {
+          for (const draft of [false, true]) {
+            for (const trash of found.deletedAt === null ? [false, true] : [true]) {
+              const request = view({ bodyKeys: Object.keys(data), data, draft, trash });
+              admits(res, request, request, { ...found, ...data }, main);
+            }
+          }
+        }
+      }
+      // A restore writes the snapshot, and Payload asks access with only its `_status`
+      // (restoreVersion.js:77-83). Payload itself refuses a restore over a trashed main row.
+      for (const status of main.deletedAt === null ? ["draft", "published"] : []) {
+        for (const deletedAt of [null, DATE]) {
+          for (const draft of [false, true]) {
+            const request = view({ kind: "restore", draft, data: undefined });
+            const asked = { ...request, data: { _status: draft ? "draft" : status } };
+            admits(res, request, asked, { _status: status, deletedAt }, main);
           }
         }
       }

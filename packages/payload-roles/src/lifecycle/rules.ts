@@ -252,8 +252,9 @@ const trashedAfter = (
     // (restoreVersion.js:77-83,169-179).
     case "restore":
       return "either";
+    // Without `trash: true` Payload finds only an untrashed document and fills `deletedAt` from it.
     case "update":
-      return "unchanged";
+      return view.trash ? "unchanged" : false;
     default: {
       const exhaustive: never = view.kind;
       return exhaustive;
@@ -290,22 +291,31 @@ const settled = <T extends boolean>(value: unknown, read: (value: unknown) => T)
   value === undefined ? "unchanged" : read(value);
 
 /**
+ * Widens the facts of an operation to every row its document may hold. A drafts collection finds
+ * the document through its latest version, whose `deletedAt` a draft save can change while the
+ * main row keeps its own (getLatestCollectionVersion.js). So the main row may be trashed even
+ * without `trash: true`, and a `deletedAt` the request leaves out is filled from that version.
+ */
+export const viaLatestVersion = (resource: RulesResource, facts: Facts): Facts =>
+  resource.drafts && facts.before.kind === "unknown"
+    ? {
+        ...facts,
+        before: { kind: "unknown", mayBeTrashed: true },
+        after:
+          facts.after.trashed === "unchanged" ? { ...facts.after, trashed: "either" } : facts.after,
+      }
+    : facts;
+
+/**
  * Pins the facts to the data `beforeChange` is about to write. Field `beforeValidate` has filled
  * every key by then (fields/hooks/beforeValidate/promise.js:182), so both values are definitive.
- * A drafts collection found the document through its latest version, whose `deletedAt` a draft
- * save can clear while the main row stays in the trash (getLatestCollectionVersion.js), so its
- * main row may be trashed even without `trash: true`.
  */
 export const settleAfter = (
   resource: RulesResource,
   facts: Facts,
   data: Readonly<Record<string, unknown>>,
 ): Facts => ({
-  ...facts,
-  before:
-    resource.drafts && facts.before.kind === "unknown"
-      ? { kind: "unknown", mayBeTrashed: true }
-      : facts.before,
+  ...viaLatestVersion(resource, facts),
   after: {
     published: !resource.drafts || settled(data[STATUS], (status) => status === "published"),
     trashed: resource.trash && settled(data.deletedAt, isSet),

@@ -33,6 +33,7 @@ import {
   settleAfter,
   settleBefore,
   STATUS,
+  viaLatestVersion,
 } from "./rules.ts";
 
 type Kind = RequestView["kind"];
@@ -239,17 +240,19 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
       (action === "update" && self && isId(documentId) && sameId(documentId, subjectId));
   const source = isRecord(args) ? args : {};
   const view = viewOf(frame, source, frame.kind === "update" && files());
+  const facts = requestFacts(resource, view);
+  // Payload deletes and writes an upload's files before beforeChange (G18), so such an update
+  // must hold every possibility of the request as sent. The wider view would ask every file
+  // replacement on a drafts collection with trash for `trash`.
   const verdict = judge(
     resource,
-    requestFacts(resource, view),
+    view.files ? facts : viaLatestVersion(resource, facts),
     // A restore's `args.id` is the version id, so its parent is unknown here; assume it may be
     // the member's own user and let beforeChange judge the real target.
     holdsFor(
       frame.kind === "update" ? source.id : frame.kind === "restore" ? subjectId : undefined,
     ),
   );
-  // Payload deletes and writes an upload's files before beforeChange (G18), so such an update
-  // must hold every possibility now.
   if (verdict.kind === "deny" || (view.files && verdict.kind !== "allow")) {
     refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
   }
@@ -407,7 +410,10 @@ const probeView = (key: WriteAccessArgs["key"], data: WriteAccessArgs["data"]): 
   data,
 });
 
-/** The floor uses the innermost covering frame's plan; outside an operation it is a probe. */
+/**
+ * The floor uses the innermost covering frame's plan. Outside an operation it is a probe, judged
+ * on the document as the admin shows it.
+ */
 const requiredWriteActions = ({
   resource,
   key,
@@ -420,8 +426,12 @@ const requiredWriteActions = ({
     requestKeyOf(req),
   );
   const current = found?.innermost.plan;
-  const view = current?.kind === "enforce" ? { ...current.view, data } : probeView(key, data);
-  return requiredActions(resource, requestFacts(resource, view));
+  return requiredActions(
+    resource,
+    current?.kind === "enforce"
+      ? viaLatestVersion(resource, requestFacts(resource, { ...current.view, data }))
+      : requestFacts(resource, probeView(key, data)),
+  );
 };
 
 const governs = (resource: Resource) => resource.drafts || resource.trash || resource.versions;

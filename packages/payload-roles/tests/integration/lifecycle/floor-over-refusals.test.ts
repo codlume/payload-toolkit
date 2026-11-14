@@ -122,3 +122,44 @@ describe("a live write that takes a trashed page out of the trash through its la
     expect(await mainRow(id)).toEqual({ [STATUS]: "draft", deletedAt: null });
   });
 });
+
+/** An untrashed draft whose latest version a draft save put in the trash. */
+const untrashedBehindTrashedVersion = async () => {
+  const { payload } = context;
+  const { id } = await payload.create({
+    collection: "pages",
+    data: { [STATUS]: "draft", title: "ahead" },
+  });
+  await tick();
+  await payload.update({ collection: "pages", data: { deletedAt: TRASHED }, draft: true, id });
+  await tick();
+  return id;
+};
+
+// The sweep did not find this one. It is the same fault with `trash: true`, where the access
+// floor refused the write too.
+describe("a status write that moves a page into the trash through its latest version", () => {
+  test("a trusted write stores it trashed", async () => {
+    const id = await untrashedBehindTrashedVersion();
+    await context.payload.update({
+      collection: "pages",
+      data: { [STATUS]: "published" },
+      id,
+      trash: true,
+    });
+    expect(await mainRow(id)).toEqual({ [STATUS]: "published", deletedAt: TRASHED });
+  });
+
+  test("needs only trash, as moving to the trash does (T1)", async () => {
+    const id = await untrashedBehindTrashedVersion();
+    await context.payload.update({
+      collection: "pages",
+      data: { [STATUS]: "published" },
+      id,
+      overrideAccess: false,
+      trash: true,
+      user: users.trashOnly,
+    });
+    expect(await mainRow(id)).toEqual({ [STATUS]: "published", deletedAt: TRASHED });
+  });
+});
