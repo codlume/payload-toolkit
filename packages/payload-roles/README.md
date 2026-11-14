@@ -74,6 +74,9 @@ other hook lists, so its checks always judge the data those hooks produce.
   Versions are kept for audit.
 - On the user collection: a `roles` relationship (`hasMany`, `maxDepth: 0`, not saved to the JWT), a
   `superAdmin` checkbox, and a hidden unique `rolesBootstrapClaim` field that the bootstrap uses.
+- On managed collections and globals, admin document controls listed after the app's own
+  `beforeDocumentControls`. A component the app already set in an edit slot, such as its own
+  `UnpublishButton`, keeps that slot and its own gating.
 
 Actions are `read`, `create`, `update`, `delete`, `trash`, `publish`, `unpublish`, `readVersions`
 and `unlock`. An action applies to a resource only when the config supports it: `trash` needs
@@ -103,7 +106,8 @@ Capabilities come from the user's roles, loaded by id on every request and union
 `superAdmin: true` passes the roles side for everything; app access still applies. A user with no
 roles, a dangling role id, or malformed `permissions` JSON gets nothing from that role. A resolver
 error grants nothing to every request that shared the lookup and logs once at error level.
-Capabilities are memoized per request user for five seconds, so a revoked grant lands on the
+Capabilities are memoized on the request's user object for five seconds. REST, GraphQL and the
+admin panel load a fresh user for every request, so a change to a user or to a role lands on that
 user's next request.
 
 The roles collection is readable and writable only by signed-in users of the user collection.
@@ -196,8 +200,9 @@ with `unpublish` alone cannot unpublish. Grant the full set for now.
 
 - Local API calls default to `overrideAccess: true`. They skip access functions and the guards.
   The guards on users and roles treat a write as trusted only when `overrideAccess` is `true`
-  and the request originated in-process (`req.payloadAPI === "local"`). The lifecycle module
-  states its own rule.
+  and the request originated in-process (`req.payloadAPI === "local"`). If an app
+  `beforeOperation` hook gives the write another `req`, that request must be local too. The
+  lifecycle module states its own rule.
 - A Local API call that passes an HTTP request's `req` keeps that request's origin. The guards then
   judge the body by `req.user`, so app code that sets `superAdmin` or `roles` on behalf of an HTTP
   request needs that request's user to be a super admin.
@@ -216,7 +221,7 @@ startup, and composes nothing. App access decides alone, which is fail-open. The
 `superAdmin` fields carry no plugin access rules either, so whoever the app lets update a user can
 set them, and the guards do not run. The roles collection still admits only signed-in users of the
 user collection. The bootstrap still runs so the first user can administer roles once enforcement
-is turned on.
+is turned on. The admin document controls are left as the app configured them.
 
 ## Debug diagnostics
 
@@ -239,8 +244,11 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   guards are the authority.
 - Drafts on the user collection are not supported, and startup rejects them. Payload's duplicate
   and publish start from the latest draft, while the guards judge the stored user.
-- Capability resolution is memoized per request user object for five seconds. A long-lived user
-  object held by Local API code can serve revoked grants for up to that long.
+- The plugin reads `superAdmin` and the role ids from the user object on the request and never
+  reloads them. Only the grants of those roles are reloaded, at most five seconds after they
+  change. Local API code that keeps a user object and passes it as `user` therefore keeps that
+  user's `superAdmin` flag and role ids for as long as it holds the object. Load the user again
+  after you change their roles or `superAdmin`.
 - The core test suites run on SQLite only. Payload's Postgres and MongoDB adapters are supported,
   and some feasibility gates ran on them, but the guards and the bootstrap were not run against
   them in this repository.
@@ -252,13 +260,24 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   without running `onInit`, a process that skips `onInit` never restores them, and app code that
   adds a hook to a live hook list after startup puts it after the plugin's checks. In each case a
   hook added after the plugin's own runs after its checks, and an id it rewrites there is not
-  judged. Register hooks in the Payload config.
+  judged. A `beforeOperation` hook that replaces `args.req` there leaves the write without the
+  plugin's record of it. The guards then treat that write as untrusted, assume that it changes a
+  password, and refuse it when it would demote, trash or delete a super admin. Register hooks in
+  the Payload config.
 - An app hook that starts another write on the same collection under the same request, for
   example an exported operation called with `disableTransaction: true` or a Local API call that
   passes `req`, from any hook including `afterChange`, makes writes that untrusted records cover
   count as untrusted. The guards then judge them with the editor's grants, and the lifecycle
   module refuses them. A trusted write from app code inside an editor's write therefore needs its
   own Local API request without `req`.
+- A request of its own does not keep a nested write trusted in two cases. Both concern a nested
+  write of the same kind on the same collection as the editor's write, such as an update inside
+  an update, and in both the plugin cannot yet tell which request the editor's write ends on. In
+  the first case, an app `beforeOperation` hook of the editor's write starts the nested write.
+  Start it from a later hook, such as `beforeChange`. In the second case, an app
+  `beforeOperation` hook on that collection returns an args object without the symbol keys of the
+  `args` it received, for example one it built key by key. Return `args` or a copy made with
+  `{ ...args }`.
 - Operations started synchronously from app code, without an `await` between them, stack their
   records in one async context. From about the 64th of them (the 63rd on Node 22) every later
   write in that context is untrusted: the guards judge it with the editor's grants and the

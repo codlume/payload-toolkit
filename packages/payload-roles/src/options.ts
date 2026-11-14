@@ -53,6 +53,7 @@ const RESERVED_USER_FIELDS: ReadonlySet<string> = new Set([
   "loginAttempts",
   "password",
   "resetPasswordExpiration",
+  "resetPasswordRequestedAt",
   "resetPasswordToken",
   "salt",
   "sessions",

@@ -28,7 +28,10 @@ import {
   decideUserWrite,
   type ForbiddenReason,
   removesSuperAdmin,
+  roleIdsRead,
+  sameValue,
   SENSITIVE_KEYS,
+  type StoredUser,
   type UserTarget,
 } from "./guards.ts";
 import { loadRoleGrants, normalizeRoleIds } from "./resolve.ts";
@@ -46,13 +49,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isId = (value: unknown): value is SubjectId =>
   typeof value === "string" || typeof value === "number";
 
+const isLocal = (req: { payloadAPI?: unknown }) => req.payloadAPI === "local";
+
 /**
  * A write is trusted only when access is overridden on a request that never left the
  * process. Payload's first-register runs `create({ overrideAccess: true })` on the anonymous
  * HTTP request, so `overrideAccess` alone cannot vouch for the body.
  */
-export const isTrusted = (overrideAccess: boolean | undefined, req: PayloadRequest) =>
-  overrideAccess === true && req.payloadAPI === "local";
+export const isTrusted = (overrideAccess: boolean | undefined, req: { payloadAPI?: unknown }) =>
+  overrideAccess === true && isLocal(req);
 
 /**
  * What `beforeOperation` records for the per-document hooks of one operation. Trust travels
@@ -65,21 +70,27 @@ type Operation = {
   superAdmins: null | Promise<number>;
   /** Active super admins this operation has already let go, so a bulk cannot remove them all. */
   removed: number;
+  /**
+   * Grants of the roles this operation has read, by `String(id)`, so a bulk write reads a role
+   * once however many of its users hold it.
+   */
+  roleGrants: Map<string, Promise<Grants | undefined>>;
 };
 
 const scope = createOperationScope<Operation>();
 
 /**
- * How one document hook judges its write: untrusted with nothing recorded when no record covers
- * it. Each covering record's raw keys are judged separately on top of the final data, so a record
- * can add a refusal but never hide what is written.
+ * How one document hook judges its write: untrusted, unseen and untallied when no record covers
+ * it. Each covering record's raw keys are judged separately on top of the final data, so a
+ * record can add a refusal but never hide what is written.
  */
 const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
   const found = scope.lookup(target, requestKeyOf(req));
   return {
-    trusted: found?.trusted ?? false,
-    raws: found?.all.map(({ raw }) => raw) ?? [],
-    tally: found?.innermost ?? { raw: {}, superAdmins: null, removed: 0 },
+    trusted: found?.trusted === true && isLocal(req),
+    raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
+    records: found?.all ?? [],
+    innermost: found?.innermost,
   };
 };
 
@@ -105,6 +116,12 @@ const redact = (raw: Record<string, unknown>) =>
   typeof raw.password === "string" && raw.password !== ""
     ? { ...raw, password: SENT_PASSWORD }
     : raw;
+
+/**
+ * The body judged for a write that no record covers. The guards did not see what the client
+ * sent, and a sent password is the one thing the final data cannot show, so they assume one.
+ */
+const UNSEEN: Readonly<Record<string, unknown>> = { password: SENT_PASSWORD };
 
 type CollectionOperationArgs = Parameters<CollectionBeforeOperationHook>[0];
 
@@ -137,7 +154,12 @@ const createRecorder =
         { collection, kind, id: namedId(operation, fields) },
         requestKeyOf(req),
         isTrusted(overrideAccess, req),
-        { raw: redact(pick(fields.data, keys)), superAdmins: null, removed: 0 },
+        {
+          raw: redact(pick(fields.data, keys)),
+          superAdmins: null,
+          removed: 0,
+          roleGrants: new Map(),
+        },
       );
       if (isRecord(source)) {
         Reflect.set(source, SETTLE, settle);
@@ -147,10 +169,11 @@ const createRecorder =
   };
 
 /**
- * Runs after the app's `beforeOperation` hooks and records the id Payload will act on, which an
- * app hook may have changed (for example by resolving an alias). It settles the record whose
- * `settle` it finds on args, then widens every unsettled record of this collection and kind
- * under the request that names another document, in case that `settle` was not its own.
+ * Runs after the app's `beforeOperation` hooks and records the id and the request Payload will
+ * act on, which an app hook may have changed (for example by resolving an alias, or by returning
+ * args with a new `req`). It settles the record whose `settle` it finds on args, then moves and
+ * widens every unsettled record of this collection and kind, in case that `settle` was not its
+ * own.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
@@ -159,15 +182,16 @@ const createSettler =
     if (kind !== undefined) {
       const source: unknown = args;
       const id = isRecord(source) ? namedId(operation, source) : undefined;
+      const final = requestKeyOf(isRecord(source) && isRecord(source.req) ? source.req : req);
       const settle: unknown = isRecord(source) ? Reflect.get(source, SETTLE) : undefined;
       if (typeof settle === "function" && isRecord(source)) {
         Reflect.deleteProperty(source, SETTLE);
-        Reflect.apply(settle, undefined, [id]);
+        Reflect.apply(settle, undefined, [id, final]);
       }
       // The settle found may be another operation's (app code can share and copy one args
-      // object across operations), so every other unsettled record naming a different document
-      // still widens. Widening never narrows, so this can only add to a judgement.
-      scope.widen(collection, kind, requestKeyOf(req), id);
+      // object across operations), or missing (an app hook can return newly built args), so
+      // every other unsettled record still moves, and widens when it names a different document.
+      scope.widen(collection, kind, final, id);
     }
     return undefined;
   };
@@ -270,11 +294,28 @@ const superAdminsBefore = (ctx: GuardContext, operation: Operation): Promise<num
       limit: 0,
       pagination: false,
       req: ctx.req,
+      select: { deletedAt: true, [ctx.enforcer.options.superAdminField]: true },
       where: { [ctx.enforcer.options.superAdminField]: { equals: true } },
     })
     .then(({ docs }) => docs.filter((doc) => isRecord(doc) && !isTrashed(doc)).length);
   return operation.superAdmins;
 };
+
+/**
+ * The records that count the super admins a write lets go: every record that covers it, since
+ * each document of a bulk can carry a nested record of its own. A write that no record covers is
+ * refused instead: Payload runs the documents of a bulk concurrently, so a count each document
+ * kept to itself would let one bulk remove every super admin.
+ */
+const removalRecords = (records: readonly Operation[], ctx: GuardContext) =>
+  records.length > 0 ? records : refuse("unrecorded-removal", ctx);
+
+/**
+ * The fewest super admins any of `records` has left. Call it after the last await, in the turn
+ * that decides and adds the removal, so the documents of a bulk see each other's removals.
+ */
+const superAdminsLeft = (records: readonly Operation[], before: readonly number[]) =>
+  Math.min(...records.map((record, index) => (before[index] ?? 0) - record.removed));
 
 const uniqueIds = (ids: Iterable<SubjectId>) => {
   const seen = new Map<string, SubjectId>();
@@ -284,25 +325,62 @@ const uniqueIds = (ids: Iterable<SubjectId>) => {
   return [...seen.values()];
 };
 
-const toTarget = (
-  ctx: GuardContext,
-  row: Record<string, unknown>,
-  roleGrants: ReadonlyMap<string, Grants>,
-): null | UserTarget => {
-  const { rolesField, superAdminField } = ctx.enforcer.options;
-  if (!isId(row.id)) {
-    return null;
+/**
+ * Grants of the given roles, each read once per recorded operation. Ids that name no role are
+ * absent from the result.
+ */
+const roleGrantsOf = async (
+  { enforcer, req }: GuardContext,
+  operation: Operation | undefined,
+  ids: readonly SubjectId[],
+): Promise<ReadonlyMap<string, Grants>> => {
+  const read = operation?.roleGrants;
+  if (!read) {
+    return loadRoleGrants(enforcer, req.payload, req, ids);
   }
-  const superAdmin = row[superAdminField] === true;
-  const roleIds = normalizeRoleIds(row[rolesField]);
-  const grants = roleIds.map((id) => roleGrants.get(String(id))).filter((g) => g !== undefined);
+  const unread = ids.filter((id) => !read.has(String(id)));
+  if (unread.length > 0) {
+    const loaded = loadRoleGrants(enforcer, req.payload, req, unread);
+    for (const id of unread) {
+      read.set(
+        String(id),
+        loaded.then((grants) => grants.get(String(id))),
+      );
+    }
+  }
+  const found = await Promise.all(
+    ids.map(async (id) => [String(id), await read.get(String(id))] as const),
+  );
+  const grants = new Map<string, Grants>();
+  for (const [key, held] of found) {
+    if (held) {
+      grants.set(key, held);
+    }
+  }
+  return grants;
+};
+
+const storedUser = (options: ResolvedOptions, row: Record<string, unknown>): null | StoredUser =>
+  isId(row.id)
+    ? {
+        id: row.id,
+        superAdmin: row[options.superAdminField] === true,
+        trashed: isTrashed(row),
+        roleIds: normalizeRoleIds(row[options.rolesField]),
+        doc: row,
+      }
+    : null;
+
+/** `roleGrants` must hold every role of `stored` whose grants the decision will read. */
+const toTarget = (stored: StoredUser, roleGrants: ReadonlyMap<string, Grants>): UserTarget => {
+  const grants = stored.roleIds
+    .map((id) => roleGrants.get(String(id)))
+    .filter((held) => held !== undefined);
   return {
-    id: row.id,
-    superAdmin,
-    trashed: isTrashed(row),
-    roleIds,
-    capabilities: superAdmin ? { kind: "all" } : { kind: "grants", grants: unionGrants(grants) },
-    doc: row,
+    ...stored,
+    capabilities: stored.superAdmin
+      ? { kind: "all" }
+      : { kind: "grants", grants: unionGrants(grants) },
   };
 };
 
@@ -335,42 +413,39 @@ const createUsersWriteGuard =
     const { options } = enforcer;
     const ctx = await guardContext(enforcer, req, options.userCollection, operation);
     const written = pick(data, userKeys(options));
-    const bodies = judgedBodies(written, current.raws);
     const row = operation === "update" ? await findRow(ctx, idOf(originalDoc)) : null;
-    const roleGrants = await loadRoleGrants(
-      enforcer,
-      req.payload,
-      req,
-      uniqueIds([
-        ...normalizeRoleIds(row?.[options.rolesField]),
-        ...bodies.flatMap((body) => normalizeRoleIds(body[options.rolesField])),
-      ]),
-    );
-    const target = row ? toTarget(ctx, row, roleGrants) : null;
-    if (operation === "update" && !target) {
+    const stored = row ? storedUser(options, row) : null;
+    if (operation === "update" && !stored) {
       refuse("target-missing", ctx);
     }
+    const requests = judgedBodies(written, current.raws).map((raw) => ({
+      editor: ctx.editor.capabilities,
+      editorId: ctx.editor.id,
+      raw,
+      target: stored,
+      fields: options,
+    }));
+    // Most writes change no role and no credential, and are judged without reading any role.
+    const roleGrants = await roleGrantsOf(
+      ctx,
+      current.innermost,
+      uniqueIds(requests.flatMap((request) => roleIdsRead(request))),
+    );
+    const target = stored ? toTarget(stored, roleGrants) : null;
     const removes = (body: Readonly<Record<string, unknown>>) =>
       target !== null && removesSuperAdmin(body, target, options);
-    const superAdminCount = bodies.some(removes)
-      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
-      : 0;
-    for (const body of bodies) {
-      throwDecision(
-        decideUserWrite({
-          editor: ctx.editor.capabilities,
-          editorId: ctx.editor.id,
-          raw: body,
-          target,
-          roleGrants,
-          superAdminCount,
-          fields: options,
-        }),
-        ctx,
-      );
+    const records = requests.some(({ raw }) => removes(raw))
+      ? removalRecords(current.records, ctx)
+      : [];
+    const before = await Promise.all(records.map((record) => superAdminsBefore(ctx, record)));
+    const superAdminCount = records.length > 0 ? superAdminsLeft(records, before) : 0;
+    for (const request of requests) {
+      throwDecision(decideUserWrite({ ...request, target, roleGrants, superAdminCount }), ctx);
     }
     if (removes(written)) {
-      current.tally.removed += 1;
+      for (const record of records) {
+        record.removed += 1;
+      }
     }
     return data;
   };
@@ -395,20 +470,21 @@ const createUsersDeleteGuard =
       req,
       normalizeRoleIds(row?.[options.rolesField]),
     );
-    const target = row ? toTarget(ctx, row, roleGrants) : null;
-    if (!target) {
+    const stored = row ? storedUser(options, row) : null;
+    if (!stored) {
       refuse("target-missing", ctx);
     }
-    const removal = target.superAdmin && !target.trashed;
-    const superAdminCount = removal
-      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
-      : 0;
+    const target = toTarget(stored, roleGrants);
+    const records =
+      target.superAdmin && !target.trashed ? removalRecords(current.records, ctx) : [];
+    const before = await Promise.all(records.map((record) => superAdminsBefore(ctx, record)));
+    const superAdminCount = records.length > 0 ? superAdminsLeft(records, before) : 0;
     throwDecision(
       decideUserDelete({ editor: ctx.editor.capabilities, target, superAdminCount }),
       ctx,
     );
-    if (removal) {
-      current.tally.removed += 1;
+    for (const record of records) {
+      record.removed += 1;
     }
   };
 
@@ -436,7 +512,12 @@ const createRolesWriteGuard =
     if (operation === "update" && !row) {
       refuse("target-missing", ctx);
     }
-    const written = pick(data, [permissionsField, "key"]);
+    const sent = current.raws.some((raw) => permissionsField in raw);
+    const final = pick(data, [permissionsField, "key"]);
+    // Payload fills unsent fields from the stored document. Permissions the write leaves as
+    // stored are not judged, so a role stays editable when they are no longer valid.
+    const kept = row !== null && !sent && sameValue(final[permissionsField], row[permissionsField]);
+    const written = kept ? pick(final, ["key"]) : final;
     const decide = (raw: Readonly<Record<string, unknown>>) =>
       decideRoleWrite({
         editor: ctx.editor.capabilities,
@@ -451,7 +532,6 @@ const createRolesWriteGuard =
     }
     const { decision, canonical } = decide(written);
     throwDecision(decision, ctx);
-    const sent = current.raws.some((raw) => permissionsField in raw);
     return canonical && sent && isRecord(data) ? { ...data, [permissionsField]: canonical } : data;
   };
 

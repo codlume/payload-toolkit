@@ -62,3 +62,35 @@ test("admin document controls render after the app's own instead of replacing th
     "plugin#GlobalControl",
   ]);
 });
+
+test("an app's own edit component keeps its slot, and the plugin's controls still follow the app's", async () => {
+  const source = sourceConfig();
+  const pages = source.collections?.find(({ slug }) => slug === "pages");
+  Object.assign(pages?.admin?.components?.edit ?? {}, { UnpublishButton: "app#Unpublish" });
+  const config = await rolesPlugin({ collections: ["pages"] })(source);
+
+  expect(config.collections?.find(({ slug }) => slug === "pages")?.admin?.components?.edit).toEqual(
+    {
+      PublishButton: "app#Publish",
+      UnpublishButton: "app#Unpublish",
+      beforeDocumentControls: ["app#Control", "plugin#Control"],
+    },
+  );
+});
+
+test("disabled mode leaves the app's admin components as the app wrote them", async () => {
+  const config = await rolesPlugin({
+    collections: ["pages"],
+    enabled: false,
+    globals: ["settings"],
+  })(sourceConfig());
+
+  const source = sourceConfig();
+  const find = (slug: string) => config.collections?.find((collection) => collection.slug === slug);
+  expect(find("pages")?.admin).toEqual(
+    source.collections?.find(({ slug }) => slug === "pages")?.admin,
+  );
+  expect(config.globals?.find(({ slug }) => slug === "settings")?.admin).toEqual(
+    source.globals?.find(({ slug }) => slug === "settings")?.admin,
+  );
+});
