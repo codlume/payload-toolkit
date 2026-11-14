@@ -131,3 +131,93 @@ test("union, can, missingFrom and covers agree with set semantics", () => {
   expect(covers({ kind: "grants", grants: b }, { kind: "all" })).toBe(false);
   expect(covers({ kind: "all" }, { kind: "all" })).toBe(true);
 });
+
+test("each dropped cell reports its path, resource and action", () => {
+  const { issues } = parsePermissions(
+    {
+      collections: {
+        missing: { actions: ["read"] },
+        pages: { actions: ["fly", 7] },
+        posts: { actions: ["publish"] },
+        users: { actions: "read" },
+      },
+    },
+    registry,
+  );
+  expect(issues).toEqual([
+    {
+      action: "read",
+      path: "permissions.collections.missing.actions",
+      reason: "unknown-resource",
+      resource: "collections:missing",
+    },
+    {
+      action: null,
+      path: "permissions.collections.pages.actions",
+      reason: "unknown-action",
+      resource: "collections:pages",
+    },
+    {
+      action: null,
+      path: "permissions.collections.pages.actions",
+      reason: "unknown-action",
+      resource: "collections:pages",
+    },
+    {
+      action: "publish",
+      path: "permissions.collections.posts.actions",
+      reason: "inapplicable",
+      resource: "collections:posts",
+    },
+    {
+      action: null,
+      path: "permissions.collections.users.actions",
+      reason: "malformed",
+      resource: "collections:users",
+    },
+  ]);
+});
+
+const summarize = (parsed: ReturnType<typeof parsePermissions>) => ({
+  grants: [...parsed.grants],
+  issues: parsed.issues.map((issue) => `${issue.path}:${issue.reason}`),
+});
+
+test("one stored value parses against each registry's own resources", () => {
+  const withoutDrafts = buildRegistry(
+    { collections: [{ slug: "pages" }, { slug: "roles" }], globals: [{ slug: "pages" }] },
+    { collections: ["pages"], globals: ["pages"], rolesSlug: "roles" },
+  );
+  const stored = {
+    collections: { pages: { actions: ["read", "publish"] }, posts: { actions: ["read"] } },
+    globals: { pages: { actions: ["read"] } },
+  };
+  const first = summarize(parsePermissions(stored, registry));
+
+  expect(first).toEqual({
+    grants: ["collections:pages#read", "collections:pages#publish", "collections:posts#read"],
+    issues: ["permissions.globals.pages.actions:unknown-resource"],
+  });
+  expect(summarize(parsePermissions(stored, withoutDrafts))).toEqual({
+    grants: ["collections:pages#read", "globals:pages#read"],
+    issues: [
+      "permissions.collections.pages.actions:inapplicable",
+      "permissions.collections.posts.actions:unknown-resource",
+    ],
+  });
+  expect(summarize(parsePermissions(stored, registry))).toEqual(first);
+});
+
+test("a union keeps each cell once, in first-seen order", () => {
+  const union = unionGrants([
+    grantsOf(["collections:posts#read", "collections:pages#read"]),
+    grantsOf(["collections:pages#read", "collections:pages#update"]),
+    grantsOf([]),
+  ]);
+  expect([...union]).toEqual([
+    "collections:posts#read",
+    "collections:pages#read",
+    "collections:pages#update",
+  ]);
+  expect([...unionGrants([])]).toEqual([]);
+});

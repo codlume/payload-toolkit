@@ -73,6 +73,9 @@ export type UserTarget = {
   doc: Readonly<Record<string, unknown>>;
 };
 
+/** A stored user before the grants of its roles are read. */
+export type StoredUser = Omit<UserTarget, "capabilities">;
+
 const isId = (value: unknown): value is SubjectId =>
   typeof value === "string" || typeof value === "number";
 
@@ -188,7 +191,7 @@ export type UserWriteInput = {
   fields: Fields;
 };
 
-const roleChanges = (incoming: readonly SubjectId[] | undefined, target: null | UserTarget) => {
+const roleChanges = (incoming: readonly SubjectId[] | undefined, target: null | StoredUser) => {
   if (incoming === undefined) {
     return null;
   }
@@ -196,6 +199,45 @@ const roleChanges = (incoming: readonly SubjectId[] | undefined, target: null | 
   const added = incoming.filter((id) => !current.some((c) => sameId(c, id)));
   const removed = current.filter((id) => !incoming.some((i) => sameId(i, id)));
   return added.length + removed.length === 0 ? null : { added, removed };
+};
+
+type UserWriteRequest = Pick<UserWriteInput, "editor" | "editorId" | "fields" | "raw"> & {
+  target: null | StoredUser;
+};
+
+/**
+ * What one body asks for, from the body and the stored row alone. `changes` and `takeover` are
+ * the only two gates behind which `decideUserWrite` reads role grants.
+ */
+const readUserWrite = ({ editor, editorId, raw, target, fields }: UserWriteRequest) => {
+  const { body, errors } = parsePrivileged(raw, fields);
+  const all = editor.kind === "all";
+  const isSelf = target !== null && editorId !== null && sameId(target.id, editorId);
+  return {
+    body,
+    errors,
+    all,
+    isSelf,
+    changes: roleChanges(body.roleIds, target),
+    /** Another member changes a sensitive key, so the target's capabilities are compared. */
+    takeover: target !== null && !isSelf && !all && sensitiveChange(raw, target.doc),
+  };
+};
+
+/**
+ * The roles whose grants `decideUserWrite` reads for one body: those the body adds or removes,
+ * and the target's own when its capabilities are compared. The hook loads only these, so this
+ * may name more roles than the decision reads but never fewer.
+ */
+export const roleIdsRead = (request: UserWriteRequest): readonly SubjectId[] => {
+  const { errors, changes, takeover } = readUserWrite(request);
+  if (errors.length > 0) {
+    return [];
+  }
+  return [
+    ...(changes ? [...changes.added, ...changes.removed] : []),
+    ...(takeover ? (request.target?.roleIds ?? []) : []),
+  ];
 };
 
 export const decideUserWrite = ({
@@ -207,12 +249,16 @@ export const decideUserWrite = ({
   superAdminCount,
   fields,
 }: UserWriteInput): Decision => {
-  const { body, errors } = parsePrivileged(raw, fields);
+  const { body, errors, all, isSelf, changes, takeover } = readUserWrite({
+    editor,
+    editorId,
+    raw,
+    target,
+    fields,
+  });
   if (errors.length > 0) {
     return { kind: "invalid", errors };
   }
-  const all = editor.kind === "all";
-  const isSelf = target !== null && editorId !== null && sameId(target.id, editorId);
   const currentSuper = target?.superAdmin ?? false;
 
   if (body.superAdmin !== undefined && body.superAdmin !== currentSuper && !all) {
@@ -222,7 +268,6 @@ export const decideUserWrite = ({
     return forbidden("last-super-admin");
   }
 
-  const changes = roleChanges(body.roleIds, target);
   if (changes) {
     if (!all && isSelf) {
       return forbidden("own-roles");
@@ -244,7 +289,7 @@ export const decideUserWrite = ({
     }
   }
 
-  if (target && !isSelf && !all && sensitiveChange(raw, target.doc)) {
+  if (target && takeover) {
     if (target.superAdmin) {
       return forbidden("target-super-admin");
     }

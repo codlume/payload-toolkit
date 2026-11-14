@@ -5,6 +5,7 @@ import {
   type CollectionBeforeChangeHook,
   type CollectionBeforeOperationHook,
   createLocalReq,
+  type PayloadRequest,
 } from "payload";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 
@@ -12,31 +13,35 @@ import { type Actor, as, login, PASSWORD, rest, seedRole, seedUser } from "../..
 import { rejectsWith } from "../../helpers/expect.ts";
 import { createTestPayload, fixtureCollections, type TestPayload } from "../../helpers/payload.ts";
 
-/** How the app hook hands over the new request: on a copy of args, on new args, or in place. */
-const FOLLOWED = ["copy", "rebuilt", "in place"] as const;
+/**
+ * How the app hook hands over the new request: on a copy of args, on new args, or in place. Both
+ * of the last two at once leaves nothing that ties the final args to the request the operation
+ * began on.
+ */
+const HANDOVERS = ["copy", "rebuilt", "in place", "in place and rebuilt"] as const;
 
-/** Both at once leaves nothing that ties the final args to the request the operation began on. */
-const LOST = "in place and rebuilt";
+/** A request of its own, or one derived from the first that shares its data loader. */
+const REQUESTS = ["new", "derived"] as const;
 
-const HANDOVERS = [...FOLLOWED, LOST] as const;
-
-const state: { handover: (typeof HANDOVERS)[number]; api: "local" | "REST" } = {
-  api: "local",
-  handover: "copy",
-};
+const state: {
+  handover: (typeof HANDOVERS)[number];
+  api: "local" | "REST";
+  request: (typeof REQUESTS)[number];
+} = { api: "local", handover: "copy", request: "new" };
 
 const swapRequest: CollectionBeforeOperationHook = async ({ args, operation, req }) => {
   if (operation !== "update") {
     return args;
   }
-  const swapped = Object.assign(
-    await createLocalReq(req.user ? { user: req.user } : {}, req.payload),
-    { payloadAPI: state.api },
-  );
+  const base: PayloadRequest =
+    state.request === "derived"
+      ? Object.create(req)
+      : await createLocalReq(req.user ? { user: req.user } : {}, req.payload);
+  const swapped = Object.assign(base, { payloadAPI: state.api });
   if (state.handover === "in place") {
     return Object.assign(args, { req: swapped });
   }
-  if (state.handover === LOST) {
+  if (state.handover === "in place and rebuilt") {
     Object.assign(args, { req: swapped });
   }
   const next = { ...args, req: swapped };
@@ -65,6 +70,7 @@ beforeAll(async () => {
       collection.slug === "users"
         ? Object.assign(collection, {
             auth: { maxLoginAttempts: 0 },
+            fields: [{ name: "nickname", type: "text" }],
             hooks: { beforeChange: [dropPassword], beforeOperation: [swapRequest] },
           })
         : collection,
@@ -83,9 +89,13 @@ beforeAll(async () => {
 beforeEach(() => {
   state.api = "local";
   state.handover = "copy";
+  state.request = "new";
 });
 
 afterAll(() => context.destroy());
+
+const stored = (id: number | string) =>
+  context.payload.db.findOne({ collection: "users", where: { id: { equals: id } } });
 
 const logsIn = (email: string, password: string) =>
   login(context.payload, email, password).then(
@@ -137,9 +147,29 @@ describe.each(HANDOVERS)("when an app hook swaps the request (%s)", (handover) =
 
     expect(await logsIn(plain.email, password)).toBe(true);
   });
-});
 
-describe.each(FOLLOWED)("when an app hook swaps the request (%s)", (handover) => {
+  test("an editor can still make a harmless edit to a super admin", async () => {
+    state.handover = handover;
+    const nickname = `by editor, ${handover}`;
+
+    await as(context.payload, editor).update({
+      collection: "users",
+      data: { nickname },
+      id: target.id,
+    });
+
+    expect(await stored(target.id)).toMatchObject({ nickname });
+  });
+
+  test("a trusted Local API edit of a super admin still goes through", async () => {
+    state.handover = handover;
+    const nickname = `trusted, ${handover}`;
+
+    await context.payload.update({ collection: "users", data: { nickname }, id: target.id });
+
+    expect(await stored(target.id)).toMatchObject({ nickname });
+  });
+
   test("a trusted Local API write still goes through", async () => {
     state.handover = handover;
 
@@ -158,15 +188,19 @@ describe.each(FOLLOWED)("when an app hook swaps the request (%s)", (handover) =>
   });
 });
 
-test("a trusted write is judged once a hook moves it to a request that is not local", async () => {
-  state.api = "REST";
+describe.each(REQUESTS)("when an app hook moves a trusted write to a %s request", (request) => {
+  test("the write is judged once that request is not local", async () => {
+    state.api = "REST";
+    state.request = request;
 
-  await rejectsWith(
-    context.payload.update({ collection: "users", data: { superAdmin: true }, id: plain.id }),
-    "Forbidden",
-  );
+    const attempt = context.payload.update({
+      collection: "users",
+      data: { superAdmin: true },
+      id: plain.id,
+    });
+    await attempt.catch(() => undefined);
 
-  expect(
-    await context.payload.db.findOne({ collection: "users", where: { id: { equals: plain.id } } }),
-  ).toMatchObject({ superAdmin: false });
+    expect(await stored(plain.id)).toMatchObject({ superAdmin: false });
+    await rejectsWith(attempt, "Forbidden");
+  });
 });

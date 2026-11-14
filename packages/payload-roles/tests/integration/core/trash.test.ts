@@ -29,6 +29,26 @@ beforeAll(async () => {
 
 afterAll(() => context.destroy());
 
+test("a super admin in the trash does not count as one that remains", async () => {
+  const { payload } = context;
+
+  await rejectsWith(
+    as(payload, active).update({
+      collection: "users",
+      data: { superAdmin: false },
+      id: active.id,
+    }),
+    "Forbidden",
+  );
+  await rejectsWith(
+    as(payload, active).delete({ collection: "users", id: active.id }),
+    "Forbidden",
+  );
+  expect(await payload.findByID({ collection: "users", id: active.id })).toMatchObject({
+    superAdmin: true,
+  });
+});
+
 test("a trashed super admin can be deleted permanently while one active super admin remains", async () => {
   const { payload } = context;
   const admin = rest(context, await login(payload, active.email));

@@ -17,8 +17,6 @@ export const CAPABILITIES_TTL_MS = 5000;
 
 type Entry = { expiresAt: number; promise: Promise<Capabilities> };
 
-const memo = new WeakMap<object, Entry>();
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -66,6 +64,7 @@ export const loadRoleGrants = async (
     collection: deps.options.rolesSlug,
     limit: ids.length,
     pagination: false,
+    select: { [deps.options.permissionsField]: true },
     where: { id: { in: [...ids] } },
     ...(req && { req }),
   });
@@ -100,6 +99,10 @@ export const capabilitiesOfUser = async (
 };
 
 export const createResolver = (deps: RoleLoader): Enforcer["subject"] => {
+  // Per resolver: the answer depends on this enforcer's registry and options, so another
+  // plugin instance handed the same user object must not be served it.
+  const memo = new WeakMap<object, Entry>();
+
   const resolve = (req: PayloadRequest, user: Record<string, unknown>): Promise<Capabilities> => {
     const now = Date.now();
     const hit = memo.get(user);
