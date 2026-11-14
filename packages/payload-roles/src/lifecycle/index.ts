@@ -69,6 +69,8 @@ type Frame = {
   readonly bodyKeys: readonly string[];
   /** The raw `draft` flag. Restore reads it before any hook runs (restoreVersion.js:24). */
   readonly draft: boolean;
+  /** The request the operation began on, before an app hook could hand Payload another one. */
+  readonly began: PayloadRequest;
   plan: null | Plan;
 };
 
@@ -147,6 +149,7 @@ const open =
         trusted,
         bodyKeys: isRecord(source.data) ? Object.keys(source.data) : [],
         draft: Boolean(source.draft),
+        began: req,
         plan: null,
       });
       if (isRecord(args)) {
@@ -156,18 +159,20 @@ const open =
   };
 
 /**
- * Records the id Payload will act on, which an app `beforeOperation` hook may have rewritten (an
- * alias, say), so a trusted frame names its real document. Then, as core does, widens every other
- * unsettled frame of this collection and kind that names another document, in case the settle
- * found was not this operation's own: widening never narrows, so it can only add to a judgement.
+ * Records the id and the request Payload will act on, which an app `beforeOperation` hook may
+ * have changed (an alias, say, or args with a new `req`), so a trusted frame names its real
+ * document and every frame answers to the request its document hooks run on. Then, as core does,
+ * widens every other unsettled frame of this collection and kind, in case the settle found was
+ * not this operation's own: widening never narrows, so it can only add to a judgement.
  */
 const settleTarget = (args: unknown, target: OperationTarget, req: PayloadRequest) => {
+  const key = requestKeyOf(req);
   const settle: unknown = isRecord(args) ? Reflect.get(args, SETTLE) : undefined;
   if (typeof settle === "function" && isRecord(args)) {
     Reflect.deleteProperty(args, SETTLE);
-    Reflect.apply(settle, undefined, [target.id]);
+    Reflect.apply(settle, undefined, [target.id, key]);
   }
-  frames.widen(target.collection, target.kind, requestKeyOf(req), target.id);
+  frames.widen(target.collection, target.kind, key, target.id);
 };
 
 /**
@@ -220,6 +225,7 @@ type PlanArgs = {
   enforcer: Enforcer;
   operation: string;
   args: unknown;
+  /** The request the operation's hooks leave it with; its frame is settled and found under it. */
   req: PayloadRequest;
   files: Files;
 };
@@ -243,7 +249,11 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
     frame.plan = { kind: "trusted" };
     return;
   }
-  const subject = await enforcer.subject(req);
+  // Payload reads `req` again from the args its hooks return only for a collection create or
+  // update. A restore and every global write check access on the request they began on
+  // (operations/restoreVersion.js:24, globals/operations/update.js:25).
+  const acting = resource.kind === "collection" && frame.kind !== "restore" ? req : frame.began;
+  const subject = await enforcer.subject(acting);
   if (subject.kind === "outsider" || subject.capabilities.kind === "all") {
     frame.plan = { kind: "exempt" };
     return;
@@ -466,13 +476,16 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
     return {};
   }
   const trailing: CollectionBeforeOperationHook = async ({ args, collection, operation, req }) => {
+    // Payload hands every hook the request of the args it began with, so after an app hook
+    // returns args with a new `req` only `args.req` is the request the operation goes on with.
+    const final = args.req ?? req;
     await plan({
       resource,
       enforcer,
       operation,
       args,
-      req,
-      files: () => Boolean(collection.upload) && touchesFiles(req),
+      req: final,
+      files: () => Boolean(collection.upload) && touchesFiles(final),
     });
   };
   const beforeChange: CollectionBeforeChangeHook = async ({
