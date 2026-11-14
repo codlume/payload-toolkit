@@ -125,6 +125,13 @@ type OpenArgs = {
   req: PayloadRequest;
 };
 
+/**
+ * Where `open` leaves each operation's `settle` on the args object Payload passes to its hooks.
+ * An enumerable symbol key survives an app hook that returns `{ ...args }`, so the trailing hook
+ * still finds it; a freshly built args object loses it, and `widen` covers that case.
+ */
+const SETTLE = Symbol("payload-roles.lifecycle.settle");
+
 const open =
   (resource: Resource) =>
   ({ args, operation, overrideAccess, req }: OpenArgs): undefined => {
@@ -133,15 +140,33 @@ const open =
     if (kind !== undefined && target !== null) {
       const source = isRecord(args) ? args : {};
       const trusted = overrideAccess === true;
-      frames.open(target, requestKeyOf(req), trusted, {
+      const settle = frames.open(target, requestKeyOf(req), trusted, {
         kind,
         trusted,
         bodyKeys: isRecord(source.data) ? Object.keys(source.data) : [],
         draft: Boolean(source.draft),
         plan: null,
       });
+      if (isRecord(args)) {
+        Reflect.set(args, SETTLE, settle);
+      }
     }
   };
+
+/**
+ * Records the id Payload will act on, which an app `beforeOperation` hook may have rewritten (an
+ * alias, say), so a trusted frame names its real document. Then, as core does, widens every other
+ * unsettled frame of this collection and kind that names another document, in case the settle
+ * found was not this operation's own: widening never narrows, so it can only add to a judgement.
+ */
+const settleTarget = (args: unknown, target: OperationTarget, req: PayloadRequest) => {
+  const settle: unknown = isRecord(args) ? Reflect.get(args, SETTLE) : undefined;
+  if (typeof settle === "function" && isRecord(args)) {
+    Reflect.deleteProperty(args, SETTLE);
+    Reflect.apply(settle, undefined, [target.id]);
+  }
+  frames.widen(target.collection, target.kind, requestKeyOf(req), target.id);
+};
 
 /**
  * The frames that may write `document` under this request, innermost first. Trust is the scope's
@@ -189,6 +214,7 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
   if (target === null) {
     return;
   }
+  settleTarget(args, target, req);
   const found = covering(enforcer, req, resource, target);
   const frame = found.innermost;
   if (frame.plan !== null) {

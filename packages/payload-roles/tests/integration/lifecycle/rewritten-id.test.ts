@@ -25,6 +25,8 @@ let context: TestPayload;
 let users: Record<"articles" | "bins" | "superAdmin", Actor>;
 let variant: Variant = "plain";
 let nested: null | Nested = null;
+/** Whether the alias hook returns a freshly built args object instead of `{ ...args }`. */
+let freshArgs = false;
 const TRASHED = "2026-01-01T00:00:00.000Z";
 
 /** An app hook that runs a direct trusted operation covering the document being written. */
@@ -72,7 +74,13 @@ const resolveAlias: CollectionBeforeOperationHook = async ({ args, req }) => {
         req,
         where: { title: { equals: id.slice("slug:".length) } },
       });
-      return { ...args, id: found?.id ?? id };
+      const resolved = { ...args, id: found?.id ?? id };
+      if (freshArgs) {
+        for (const key of Object.getOwnPropertySymbols(resolved)) {
+          Reflect.deleteProperty(resolved, key);
+        }
+      }
+      return resolved;
     }
   }
   return args;
@@ -132,6 +140,7 @@ afterAll(() => context.destroy());
 beforeEach(() => {
   nested = null;
   variant = "plain";
+  freshArgs = false;
 });
 
 const bin = async (title: string) =>
@@ -302,6 +311,57 @@ describe("a nested trusted operation that is laxer than the outer write it runs 
       expect((await binRow(id))?.deletedAt, "the bin stays in the trash").toBe(TRASHED);
     },
   );
+});
+
+describe("a trusted write through an id an app hook rewrites", () => {
+  test.each([false, true])(
+    "a default Local API update by an app alias is stored (fresh args object: %s)",
+    async (fresh) => {
+      const id = await article(`trusted alias ${String(fresh)}`);
+      freshArgs = fresh;
+
+      await context.payload.update({
+        collection: "articles",
+        data: { title: `trusted alias edited ${String(fresh)}` },
+        id: `slug:trusted alias ${String(fresh)}`,
+      });
+
+      expect(await articleTitle(id)).toBe(`trusted alias edited ${String(fresh)}`);
+    },
+  );
+
+  test("a default Local API restore from trash by a spelled id is stored", async () => {
+    const id = await bin("trusted spelled");
+
+    await context.payload.update({
+      collection: "bins",
+      data: { deletedAt: null },
+      id: `${String(id)}e0`,
+      trash: true,
+    });
+
+    expect((await binRow(id))?.deletedAt ?? null).toBeNull();
+  });
+
+  test("an update-only member's aliased live edit stays refused when the alias hook builds fresh args", async () => {
+    const id = await article("member fresh alias");
+    freshArgs = true;
+    nested = "same-document";
+    variant = "draft";
+
+    await rejectsWith(
+      context.payload.update({
+        collection: "articles",
+        data: { title: "edited without publish" },
+        id: "slug:member fresh alias",
+        overrideAccess: false,
+        user: users.articles,
+      }),
+      "Forbidden",
+    );
+
+    expect(await articleTitle(id)).toBe("member fresh alias");
+  });
 });
 
 describe("controls without the nested trusted operation", () => {
