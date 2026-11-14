@@ -171,9 +171,9 @@ const createRecorder =
 /**
  * Runs after the app's `beforeOperation` hooks and records the id and the request Payload will
  * act on, which an app hook may have changed (for example by resolving an alias, or by returning
- * args with a new `req`). It settles the record whose `settle` it finds on args, then moves and
- * widens every unsettled record of this collection and kind, in case that `settle` was not its
- * own.
+ * args with a new `req`). It settles the record whose `settle` it finds on args when that record
+ * is the innermost unsettled one, then moves and widens every unsettled record of this
+ * collection and kind, in case that `settle` was missing or not its own.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
