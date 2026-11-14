@@ -13,7 +13,12 @@ import { rejectsWith } from "../../helpers/expect.ts";
 import { createTestPayload, fixtureCollections, type TestPayload } from "../../helpers/payload.ts";
 
 /** How the app hook hands over the new request: on a copy of args, on new args, or in place. */
-const HANDOVERS = ["copy", "rebuilt", "in place"] as const;
+const FOLLOWED = ["copy", "rebuilt", "in place"] as const;
+
+/** Both at once leaves nothing that ties the final args to the request the operation began on. */
+const LOST = "in place and rebuilt";
+
+const HANDOVERS = [...FOLLOWED, LOST] as const;
 
 const state: { handover: (typeof HANDOVERS)[number]; api: "local" | "REST" } = {
   api: "local",
@@ -31,8 +36,11 @@ const swapRequest: CollectionBeforeOperationHook = async ({ args, operation, req
   if (state.handover === "in place") {
     return Object.assign(args, { req: swapped });
   }
+  if (state.handover === LOST) {
+    Object.assign(args, { req: swapped });
+  }
   const next = { ...args, req: swapped };
-  if (state.handover === "rebuilt") {
+  if (state.handover !== "copy") {
     // An app that builds its own args object copies the string keys it knows.
     for (const key of Object.getOwnPropertySymbols(next)) {
       Reflect.deleteProperty(next, key);
@@ -117,6 +125,21 @@ describe.each(HANDOVERS)("when an app hook swaps the request (%s)", (handover) =
     await rejectsWith(attempt, "Forbidden");
   });
 
+  test("an editor can still change the password of a user they cover", async () => {
+    state.handover = handover;
+    const password = `covered ${handover}`;
+
+    await as(context.payload, editor).update({
+      collection: "users",
+      data: { password },
+      id: plain.id,
+    });
+
+    expect(await logsIn(plain.email, password)).toBe(true);
+  });
+});
+
+describe.each(FOLLOWED)("when an app hook swaps the request (%s)", (handover) => {
   test("a trusted Local API write still goes through", async () => {
     state.handover = handover;
 

@@ -83,16 +83,16 @@ const unrecordedTally = (request: object) => {
 };
 
 /**
- * How one document hook judges its write: untrusted with nothing recorded when no record covers
- * it. Each covering record's raw keys are judged separately on top of the final data, so a record
- * can add a refusal but never hide what is written.
+ * How one document hook judges its write: untrusted and unseen when no record covers it. Each
+ * covering record's raw keys are judged separately on top of the final data, so a record can add
+ * a refusal but never hide what is written.
  */
 const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
   const request = requestKeyOf(req);
   const found = scope.lookup(target, request);
   return {
     trusted: found?.trusted ?? false,
-    raws: found?.all.map(({ raw }) => raw) ?? [],
+    raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
     tally: found?.innermost ?? unrecordedTally(request),
   };
 };
@@ -119,6 +119,12 @@ const redact = (raw: Record<string, unknown>) =>
   typeof raw.password === "string" && raw.password !== ""
     ? { ...raw, password: SENT_PASSWORD }
     : raw;
+
+/**
+ * The body judged for a write that no record covers. The guards did not see what the client
+ * sent, and a sent password is the one thing the final data cannot show, so they assume one.
+ */
+const UNSEEN: Readonly<Record<string, unknown>> = { password: SENT_PASSWORD };
 
 type CollectionOperationArgs = Parameters<CollectionBeforeOperationHook>[0];
 
