@@ -1,4 +1,4 @@
-import { createLocalReq, type Plugin } from "payload";
+import { createLocalReq, type FieldAccess, type Plugin } from "payload";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 import { PermissionsField } from "@codlume/payload-roles";
@@ -11,21 +11,17 @@ vi.mock("@codlume/payload-roles/client", () => ({ PermissionsMatrix: () => null 
 const BLIND = "blind@example.com";
 
 /** An app's field access that hides every role's permissions from one user. */
-const hidePermissionsFromBlind: Plugin = (config) => ({
-  ...config,
-  collections: (config.collections ?? []).map((collection) =>
-    collection.slug === "roles"
-      ? {
-          ...collection,
-          fields: collection.fields.map((field) =>
-            "name" in field && field.name === "permissions"
-              ? { ...field, access: { read: ({ req }) => req.user?.email !== BLIND } }
-              : field,
-          ),
-        }
-      : collection,
-  ),
-});
+const hidePermissionsFromBlind: Plugin = (config) => {
+  const roles = config.collections?.find((collection) => collection.slug === "roles");
+  const permissions = roles?.fields.find(
+    (field) => "name" in field && field.name === "permissions",
+  );
+  const read: FieldAccess = ({ req }) => req.user?.email !== BLIND;
+  if (permissions) {
+    Object.assign(permissions, { access: { read } });
+  }
+  return config;
+};
 // The roles collection exists only once the roles plugin, ordered last, has run.
 hidePermissionsFromBlind.order = Number.MAX_SAFE_INTEGER;
 
