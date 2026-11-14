@@ -151,12 +151,39 @@ test("the stored user row decides, not the user prop", async () => {
   expect(await rendered(payload, PAGES, deleted, pageId)).toEqual(STOCK);
 });
 
-test("the viewer's stored roles are ids, which the resolver reloads", async () => {
-  const row = await context.payload.db.findOne({
-    collection: "users",
-    where: { id: { equals: actors.full.id } },
+const queries = async (payload: Payload, work: () => Promise<unknown>) => {
+  const findOne = vi.spyOn(payload.db, "findOne");
+  const find = vi.spyOn(payload.db, "find");
+  try {
+    await work();
+    const reads = await Promise.all(findOne.mock.results.map(({ value }) => value));
+    return {
+      calls: [...findOne.mock.calls, ...find.mock.calls].map(([{ collection }]) => collection),
+      reads,
+    };
+  } finally {
+    findOne.mockRestore();
+    find.mockRestore();
+  }
+};
+
+test("one document view resolves the viewer once, from the stored row's role ids alone", async () => {
+  const { payload } = context;
+  const viewer = await viewerProp(payload, actors.full);
+
+  const { calls, reads } = await queries(payload, () => rendered(payload, PAGES, viewer, pageId));
+  expect(calls).toEqual(["users", "roles"]);
+  expect(reads).toEqual([{ id: actors.full.id, roles: [expect.any(Number)], superAdmin: false }]);
+});
+
+test("a forged super admin prop on a member shares one lookup and follows the stored row", async () => {
+  const { payload } = context;
+  const forged = { ...(await viewerProp(payload, actors.updateOnly)), superAdmin: true };
+
+  const { calls } = await queries(payload, async () => {
+    expect(await rendered(payload, PAGES, forged, pageId)).toEqual(HIDDEN);
   });
-  expect(row).toMatchObject({ roles: [expect.any(Number)] });
+  expect(calls).toEqual(["users", "roles"]);
 });
 
 test("a resource the plugin does not manage keeps stock", async () => {
