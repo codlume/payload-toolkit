@@ -16,10 +16,25 @@ import { PermissionsMatrix } from "../../../src/admin/client/permissions-matrix.
 import type { MatrixModel } from "../../../src/admin/model.ts";
 import { matrixModelOf } from "../../../src/admin/server/build-model.ts";
 
-const harness = vi.hoisted((): { initial: unknown; renders: number } => ({
+const harness = vi.hoisted((): { initial: unknown; renders: number; tableRows: number } => ({
   initial: undefined,
   renders: 0,
+  tableRows: 0,
 }));
+
+// Counts <tr> elements created, so a click shows how many table rows React re-rendered.
+vi.mock("react/jsx-dev-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react/jsx-dev-runtime")>();
+  return {
+    ...actual,
+    jsxDEV: (...args: Parameters<typeof actual.jsxDEV>) => {
+      if (args[0] === "tr") {
+        harness.tableRows += 1;
+      }
+      return actual.jsxDEV(...args);
+    },
+  };
+});
 
 vi.mock("@payloadcms/ui", async () => {
   const { useState } = await import("react");
@@ -186,26 +201,30 @@ const payloadOf = ({ model }: { model: MatrixModel }) => ({
   rows: model.rows.length,
 });
 
+const median = (values: number[]) => values.toSorted((a, b) => a - b)[10] ?? 0;
+
 /** React's dev build reports per-commit render time; the median of 21 clicks is the metric. */
 const clickRenderMs = async () => {
   await mount(largeCase);
   const durations: number[] = [];
+  const tableRows: number[] = [];
   const clickFrom = async (index: number): Promise<void> => {
     if (index === 21) {
       return;
     }
     lastDuration = 0;
+    harness.tableRows = 0;
     await act(async () => {
       grantableBoxes()[index % 7]?.click();
     });
     durations.push(lastDuration);
+    tableRows.push(harness.tableRows);
     await clickFrom(index + 1);
   };
   await clickFrom(0);
   const renders = harness.renders;
   await unmount();
-  durations.sort((a, b) => a - b);
-  return { medianRenderMs: durations[10] ?? 0, renders };
+  return { medianRenderMs: median(durations), tableRowsPerClick: median(tableRows), renders };
 };
 
 const metrics = {

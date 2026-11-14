@@ -11,8 +11,7 @@ export type MatrixView =
 
 export type MatrixOp =
   | { type: "cell"; cell: Grant; on: boolean }
-  | { type: "row"; row: ResourceId }
-  | { type: "column"; action: ActionId; rows: readonly ResourceId[] }
+  | { type: "toggle"; cells: readonly Grant[] }
   | { type: "copy"; source: CopySource }
   | { type: "clean" };
 
@@ -25,7 +24,6 @@ export type Outcome = {
 type Index = {
   modes: ReadonlyMap<Grant, CellMode>;
   rows: ReadonlyMap<string, MatrixRow>;
-  byId: ReadonlyMap<ResourceId, MatrixRow>;
 };
 
 const indexes = new WeakMap<MatrixModel, Index>();
@@ -49,7 +47,6 @@ const indexOf = (model: MatrixModel): Index => {
   const index: Index = {
     modes,
     rows: new Map(model.rows.map((row) => [`${row.kind}.${row.slug}`, row])),
-    byId: new Map(model.rows.map((row) => [row.id, row])),
   };
   indexes.set(model, index);
   return index;
@@ -127,33 +124,33 @@ export const readMatrix = (model: MatrixModel, value: unknown): MatrixView => {
     : { status: "unreadable" };
 };
 
+export const sourceCells = (model: MatrixModel, source: CopySource): Cells => {
+  const cells = new Set<Grant>();
+  model.rows.forEach((row, index) => {
+    const bits = source.granted[index] ?? 0;
+    model.columns.forEach(({ action }, bit) => {
+      if (row.cells[action] !== undefined && (bits & (1 << bit)) !== 0) {
+        cells.add(grantOf(row.id, action));
+      }
+    });
+  });
+  return cells;
+};
+
 export const grantableCells = (row: MatrixRow, actions: readonly ActionId[]): Grant[] =>
   actions.filter((action) => row.cells[action] === "grantable").map((a) => grantOf(row.id, a));
 
-const toggle = (cells: Cells, targets: readonly Grant[]) => {
-  const on = !targets.every((cell) => cells.has(cell));
-  return new Map(targets.map((cell) => [cell, on]));
-};
-
 const intentOf = (model: MatrixModel, cells: Cells, op: MatrixOp): Map<Grant, boolean> => {
-  const { byId } = indexOf(model);
   switch (op.type) {
     case "cell": {
       return new Map([[op.cell, op.on]]);
     }
-    case "row": {
-      const row = byId.get(op.row);
-      return row ? toggle(cells, grantableCells(row, applicable(model, row))) : new Map();
-    }
-    case "column": {
-      const targets = op.rows.flatMap((id) => {
-        const row = byId.get(id);
-        return row ? grantableCells(row, [op.action]) : [];
-      });
-      return toggle(cells, targets);
+    case "toggle": {
+      const on = !op.cells.every((cell) => cells.has(cell));
+      return new Map(op.cells.map((cell) => [cell, on]));
     }
     case "copy": {
-      const source = new Set(op.source.granted);
+      const source = sourceCells(model, op.source);
       return new Map(
         model.rows.flatMap((row) =>
           applicable(model, row).map((action): [Grant, boolean] => {

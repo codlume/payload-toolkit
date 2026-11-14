@@ -6,6 +6,7 @@ import {
   type ActionId,
   type Capabilities,
   enforcerOf,
+  type Grant,
   type Grants,
   type Registry,
   type ResolvedOptions,
@@ -20,14 +21,7 @@ import {
   NO_CAPABILITIES,
   parsePermissions,
 } from "../../grants.ts";
-import type {
-  Assignment,
-  CellMode,
-  CopySource,
-  MatrixLock,
-  MatrixModel,
-  MatrixRow,
-} from "../model.ts";
+import type { Assignment, CellMode, MatrixLock, MatrixModel, MatrixRow } from "../model.ts";
 
 type PermissionsFieldInput = Pick<
   JSONFieldServerProps,
@@ -48,6 +42,9 @@ const ACTION_LABELS: Record<ActionId, string> = {
 
 const ALL: Capabilities = { kind: "all" };
 
+/** A role the editor may copy from, as the server parsed it. */
+export type RoleGrants = { id: string; name: string; granted: readonly Grant[] };
+
 export type ModelInput = {
   registry: Registry;
   options: Pick<ResolvedOptions, "enabled" | "rolesSlug" | "userCollection">;
@@ -57,7 +54,7 @@ export type ModelInput = {
   existing: boolean;
   path: string;
   value: unknown;
-  copySources: readonly CopySource[];
+  copySources: readonly RoleGrants[];
   assignment: Assignment | null;
 };
 
@@ -72,7 +69,7 @@ const lockOf = (input: ModelInput, granted: Grants): MatrixLock | null => {
 export const matrixModelOf = (input: ModelInput): MatrixModel => {
   const { registry, options, value } = input;
   const effective = options.enabled ? input.editor : ALL;
-  const parsed = parsePermissions(value, registry);
+  const parsed = checkPermissions(value, registry, ALL);
   const lock = lockOf(input, parsed.grants);
   const modeOf = (id: ResourceId, action: ActionId): CellMode => {
     const holds =
@@ -92,23 +89,41 @@ export const matrixModelOf = (input: ModelInput): MatrixModel => {
       ),
     };
   });
+  const columns = ACTION_IDS.filter((action) =>
+    [...registry.values()].some((resource) => resource.actions.has(action)),
+  ).map((action) => ({ action, label: ACTION_LABELS[action] }));
+  const places = new Map<Grant, { row: number; bit: number }>();
+  rows.forEach((row, index) => {
+    columns.forEach(({ action }, bit) => {
+      if (row.cells[action] !== undefined) {
+        places.set(grantId(row.id, action), { row: index, bit });
+      }
+    });
+  });
   const users = registry.get(`collections:${options.userCollection}`);
   return {
     rows,
-    columns: ACTION_IDS.filter((action) =>
-      [...registry.values()].some((resource) => resource.actions.has(action)),
-    ).map((action) => ({ action, label: ACTION_LABELS[action] })),
+    columns,
     stored: {
       fingerprint: JSON.stringify(value ?? null),
       granted: [...parsed.grants],
-      issues: checkPermissions(value, registry, ALL).issues.map((issue) => ({
+      issues: parsed.issues.map((issue) => ({
         row: issue.resource !== null && registry.has(issue.resource) ? issue.resource : null,
         message: describeCellIssue(issue),
       })),
     },
     lock,
     enforced: options.enabled,
-    copySources: input.copySources,
+    copySources: input.copySources.map(({ id, name, granted }) => {
+      const bits = rows.map(() => 0);
+      for (const cell of granted) {
+        const at = places.get(cell);
+        if (at) {
+          bits[at.row] = (bits[at.row] ?? 0) | (1 << at.bit);
+        }
+      }
+      return { id, name, granted: bits };
+    }),
     assignment: input.assignment,
     pickerCheck: users
       ? {
@@ -161,7 +176,7 @@ const readableRoles = async (
   registry: Registry,
   options: ResolvedOptions,
   ownId: number | string | undefined,
-): Promise<CopySource[]> => {
+): Promise<RoleGrants[]> => {
   try {
     const { docs } = await req.payload.find({
       collection: options.rolesSlug,
@@ -169,9 +184,10 @@ const readableRoles = async (
       overrideAccess: false,
       pagination: false,
       req,
+      select: { name: true, [options.permissionsField]: true },
       ...(ownId !== undefined && { where: { id: { not_equals: ownId } } }),
     });
-    return docs.flatMap((doc): CopySource[] => {
+    return docs.flatMap((doc): RoleGrants[] => {
       if (!(options.permissionsField in doc)) {
         return [];
       }

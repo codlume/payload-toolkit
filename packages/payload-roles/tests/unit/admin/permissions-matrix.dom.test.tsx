@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, onTestFinished, test, vi } from "vitest";
 
 import { PermissionsMatrix } from "../../../src/admin/client/permissions-matrix.tsx";
 import type { MatrixModel, ResourceId } from "../../../src/admin/model.ts";
@@ -280,5 +280,32 @@ describe("stored and server-reported problems", () => {
     });
     expect(value).toEqual(snapshot);
     expect(harness.formTouches).toBe(0);
+  });
+
+  test("identical messages each render once, with no React key warning", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    onTestFinished(() => {
+      errors.mockRestore();
+    });
+    const stored = { collections: { pages: { actions: ["bogus", "nope"] } } };
+    const notHeld =
+      'You cannot grant action "delete" on "collections:pages" because you do not hold it.';
+    const shape = "permissions.collections: Permissions must be an object.";
+    harness.showError = true;
+    harness.errorMessage = [
+      `permissions.collections.pages.actions: ${notHeld}`,
+      `permissions.collections.pages.actions: ${notHeld}`,
+      shape,
+      shape,
+    ].join("\n");
+    await mount(modelOf({ labels, value: stored }), stored);
+
+    const issues = [...container.querySelectorAll("li")].filter((li) =>
+      li.textContent.startsWith("Unknown action"),
+    );
+    expect(issues).toHaveLength(2);
+    expect(box("Pages: Read").closest("tr")?.querySelectorAll('[role="alert"]')).toHaveLength(2);
+    expect(container.querySelectorAll('ul[role="alert"] li')).toHaveLength(2);
+    expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/u);
   });
 });

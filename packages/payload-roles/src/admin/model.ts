@@ -43,7 +43,8 @@ export type StoredReading = {
 
 export type MatrixLock = { kind: "read-only" } | { kind: "not-covered"; missing: readonly Grant[] };
 
-export type CopySource = { id: string; name: string; granted: readonly Grant[] };
+/** `granted[i]` is `rows[i]`'s grants as bits: bit `j` is set when the role grants `columns[j]`. */
+export type CopySource = { id: string; name: string; granted: readonly number[] };
 
 export type Assignment = { count: number; href: string };
 

@@ -10,6 +10,7 @@ import {
   type Outcome,
   placeFieldErrors,
   readMatrix,
+  sourceCells,
 } from "../../../src/admin/client/matrix.ts";
 import type { Grant, MatrixModel } from "../../../src/admin/model.ts";
 import { type Actor, as, fresh, login, rest, seedRole, seedUser } from "../../helpers/actors.ts";
@@ -213,7 +214,8 @@ describe("access-honoring reads", () => {
       "limited",
       "strong",
     ]);
-    expect(model.copySources.find(({ name }) => name === "strong")?.granted.toSorted()).toEqual([
+    const strong = model.copySources.find(({ name }) => name === "strong");
+    expect(strong && [...sourceCells(model, strong)].toSorted()).toEqual([
       "collections:pages#delete",
       "collections:pages#read",
     ]);
