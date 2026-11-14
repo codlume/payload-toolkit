@@ -231,11 +231,12 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
       ),
     [layout, needle],
   );
-  const columnTargets = useMemo(
+  const headers = useMemo(
     () =>
-      model.columns.map((column) =>
-        visible.flatMap((entry) => grantableCells(entry.row, [column.action])),
-      ),
+      model.columns.map((column) => ({
+        column,
+        targets: visible.flatMap((entry) => grantableCells(entry.row, [column.action])),
+      })),
     [model, visible],
   );
   const describe = (list: readonly Grant[]) =>
@@ -414,15 +415,15 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
           <thead>
             <tr>
               <th scope="col">Resource</th>
-              {model.columns.map((column, bit) => (
+              {headers.map(({ column, targets }) => (
                 <th key={column.action} scope="col">
                   {column.label}
                   <ToggleButton
-                    clears={allChecked(cells, columnTargets[bit] ?? [])}
+                    clears={allChecked(cells, targets)}
                     disabled={!canEdit}
                     onToggle={onToggle}
                     subject={`${column.label} on shown resources`}
-                    targets={columnTargets[bit] ?? []}
+                    targets={targets}
                   />
                 </th>
               ))}
