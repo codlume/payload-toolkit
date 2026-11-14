@@ -96,10 +96,6 @@ _Avoid_: Any merge, package-touching commit
 A releasable merge whose pull request title carries the `!` marker. While a plugin is on a `0.x` version it bumps the minor; every other releasable merge bumps the patch.
 _Avoid_: Major bump, BREAKING CHANGE footer
 
-**Preview build**:
-An installable build of a Payload plugin made from an open pull request, for trying the change before it merges. Not a release: no version, no tag, nothing on npm.
-_Avoid_: Prerelease, next channel, canary
-
 **Release pull request**:
 The pending version bumps and changelog entries for one or more Payload plugins. Its merge sets the release boundary and authorizes publication.
 _Avoid_: Feature pull request, manual release
