@@ -124,7 +124,6 @@ export const readMatrix = (model: MatrixModel, value: unknown): MatrixView => {
     : { status: "unreadable" };
 };
 
-/** The cells a copy source grants, decoded from its row-aligned bits. */
 export const sourceCells = (model: MatrixModel, source: CopySource): Cells => {
   const cells = new Set<Grant>();
   model.rows.forEach((row, index) => {
