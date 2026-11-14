@@ -27,7 +27,8 @@ export type ForbiddenReason =
   | "target-missing"
   | "target-not-covered"
   | "target-super-admin"
-  | "unknown-role";
+  | "unknown-role"
+  | "unrecorded-removal";
 
 export type Decision =
   | { kind: "allow" }

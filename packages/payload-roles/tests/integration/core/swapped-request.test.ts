@@ -12,7 +12,8 @@ const HANDOVERS = ["copy", "in place and rebuilt"] as const;
 const state: {
   handover: (typeof HANDOVERS)[number] | "one cached request";
   cached: PayloadRequest | undefined;
-} = { cached: undefined, handover: "copy" };
+  late: PayloadRequest | undefined;
+} = { cached: undefined, handover: "copy", late: undefined };
 
 const swapRequest: CollectionBeforeOperationHook = async ({ args, operation, req }) => {
   const shared = state.handover === "one cached request";
@@ -34,6 +35,14 @@ const swapRequest: CollectionBeforeOperationHook = async ({ args, operation, req
   return next;
 };
 
+const swapLate: CollectionBeforeOperationHook = async ({ args, operation, req }) => {
+  if (operation !== "update") {
+    return args;
+  }
+  state.late ??= await createLocalReq(req.user ? { user: req.user } : {}, req.payload);
+  return { ...args, req: state.late };
+};
+
 let context: TestPayload;
 let first: Actor;
 let second: Actor;
@@ -50,6 +59,7 @@ beforeEach(async () => {
   });
   state.cached = undefined;
   state.handover = "copy";
+  state.late = undefined;
   first = await seedUser(context.payload, { email: "first@example.com", superAdmin: true });
   second = await seedUser(context.payload, { email: "second@example.com", superAdmin: true });
   third = await seedUser(context.payload, { email: "third@example.com", superAdmin: true });
@@ -102,4 +112,16 @@ test("writes moved onto one long-lived request cannot add up to no super admin",
   expect([demoted.status, deleted.status]).toEqual([200, 200]);
   expect(await activeSuperAdmins()).toBe(1);
   expect(last.status).toBe(403);
+});
+
+test("writes that a hook added after startup moves to its own request remove no super admin", async () => {
+  const call = await asFirst();
+  context.payload.collections.users?.config.hooks.beforeOperation.push(swapLate);
+
+  const demoted = await call("PATCH", `/users/${second.id}`, { superAdmin: false });
+  const deleted = await call("DELETE", `/users/${third.id}`);
+  const last = await call("PATCH", `/users/${first.id}`, { superAdmin: false });
+
+  expect(await activeSuperAdmins()).toBe(2);
+  expect([demoted.status, deleted.status, last.status]).toEqual([403, 200, 403]);
 });

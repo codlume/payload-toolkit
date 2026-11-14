@@ -72,38 +72,24 @@ type Operation = {
   removed: number;
   /**
    * Grants of the roles this operation has read, by `String(id)`, so a bulk write reads a role
-   * once however many of its users hold it. A write that no record covers has none and
-   * remembers nothing.
+   * once however many of its users hold it.
    */
-  roleGrants?: Map<string, Promise<Grants | undefined>>;
+  roleGrants: Map<string, Promise<Grants | undefined>>;
 };
 
 const scope = createOperationScope<Operation>();
 
 /**
- * The tally for documents no record covers, one per request. Payload runs the documents of a
- * bulk concurrently, so a tally per document would let one bulk remove every super admin.
- */
-const unrecorded = new WeakMap<object, Operation>();
-
-const unrecordedTally = (request: object) => {
-  const tally: Operation = unrecorded.get(request) ?? { raw: {}, superAdmins: null, removed: 0 };
-  unrecorded.set(request, tally);
-  return tally;
-};
-
-/**
- * How one document hook judges its write: untrusted and unseen when no record covers it. Each
- * covering record's raw keys are judged separately on top of the final data, so a record can add
- * a refusal but never hide what is written.
+ * How one document hook judges its write: untrusted, unseen and untallied when no record covers
+ * it. Each covering record's raw keys are judged separately on top of the final data, so a
+ * record can add a refusal but never hide what is written.
  */
 const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
-  const request = requestKeyOf(req);
-  const found = scope.lookup(target, request);
+  const found = scope.lookup(target, requestKeyOf(req));
   return {
     trusted: found?.trusted === true && isLocal(req),
     raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
-    tally: found?.innermost ?? unrecordedTally(request),
+    tally: found?.innermost,
   };
 };
 
@@ -314,6 +300,14 @@ const superAdminsBefore = (ctx: GuardContext, operation: Operation): Promise<num
   return operation.superAdmins;
 };
 
+/**
+ * The record that counts the super admins a write's operation lets go. A write that no record
+ * covers is refused instead: Payload runs the documents of a bulk concurrently, so a count each
+ * document kept to itself would let one bulk remove every super admin.
+ */
+const removalTally = (tally: Operation | undefined, ctx: GuardContext) =>
+  tally ?? refuse("unrecorded-removal", ctx);
+
 const uniqueIds = (ids: Iterable<SubjectId>) => {
   const seen = new Map<string, SubjectId>();
   for (const id of ids) {
@@ -328,10 +322,10 @@ const uniqueIds = (ids: Iterable<SubjectId>) => {
  */
 const roleGrantsOf = async (
   { enforcer, req }: GuardContext,
-  operation: Operation,
+  operation: Operation | undefined,
   ids: readonly SubjectId[],
 ): Promise<ReadonlyMap<string, Grants>> => {
-  const read = operation.roleGrants;
+  const read = operation?.roleGrants;
   if (!read) {
     return loadRoleGrants(enforcer, req.payload, req, ids);
   }
@@ -431,14 +425,15 @@ const createUsersWriteGuard =
     const target = stored ? toTarget(stored, roleGrants) : null;
     const removes = (body: Readonly<Record<string, unknown>>) =>
       target !== null && removesSuperAdmin(body, target, options);
-    const superAdminCount = requests.some(({ raw }) => removes(raw))
-      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
-      : 0;
+    const tally = requests.some(({ raw }) => removes(raw))
+      ? removalTally(current.tally, ctx)
+      : undefined;
+    const superAdminCount = tally ? (await superAdminsBefore(ctx, tally)) - tally.removed : 0;
     for (const request of requests) {
       throwDecision(decideUserWrite({ ...request, target, roleGrants, superAdminCount }), ctx);
     }
-    if (removes(written)) {
-      current.tally.removed += 1;
+    if (tally && removes(written)) {
+      tally.removed += 1;
     }
     return data;
   };
@@ -468,16 +463,15 @@ const createUsersDeleteGuard =
       refuse("target-missing", ctx);
     }
     const target = toTarget(stored, roleGrants);
-    const removal = target.superAdmin && !target.trashed;
-    const superAdminCount = removal
-      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
-      : 0;
+    const tally =
+      target.superAdmin && !target.trashed ? removalTally(current.tally, ctx) : undefined;
+    const superAdminCount = tally ? (await superAdminsBefore(ctx, tally)) - tally.removed : 0;
     throwDecision(
       decideUserDelete({ editor: ctx.editor.capabilities, target, superAdminCount }),
       ctx,
     );
-    if (removal) {
-      current.tally.removed += 1;
+    if (tally) {
+      tally.removed += 1;
     }
   };
 

@@ -260,7 +260,10 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   without running `onInit`, a process that skips `onInit` never restores them, and app code that
   adds a hook to a live hook list after startup puts it after the plugin's checks. In each case a
   hook added after the plugin's own runs after its checks, and an id it rewrites there is not
-  judged. Register hooks in the Payload config.
+  judged. A `beforeOperation` hook that replaces `args.req` there leaves the write without the
+  plugin's record of it. The guards then treat that write as untrusted, assume that it changes a
+  password, and refuse it when it would demote, trash or delete a super admin. Register hooks in
+  the Payload config.
 - An app hook that starts another write on the same collection under the same request, for
   example an exported operation called with `disableTransaction: true` or a Local API call that
   passes `req`, from any hook including `afterChange`, makes writes that untrusted records cover
