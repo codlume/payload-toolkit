@@ -97,6 +97,55 @@ test("settle moves an entry to the document Payload acts on", () => {
   });
 });
 
+test("settle makes an entry answer to the request an app hook swapped in, and to the old one", () => {
+  const scope = createOperationScope<string>();
+  const swapped = {};
+  const settle = scope.open(page(5), request, false, "own");
+  expect(scope.lookup(page(5), swapped)).toBeUndefined();
+  settle(5, { req: swapped, trusted: true });
+  expect(scope.lookup(page(5), swapped)).toEqual({
+    all: ["own"],
+    innermost: "own",
+    trusted: false,
+  });
+  expect(scope.lookup(page(5), request)).toEqual({
+    all: ["own"],
+    innermost: "own",
+    trusted: false,
+  });
+});
+
+describe.each([
+  { expected: true, swappedIs: "trusted", trusted: true },
+  { expected: false, swappedIs: "untrusted", trusted: false },
+])("a trusted entry moved to a request that is $swappedIs", ({ expected, trusted }) => {
+  test(`is ${expected ? "still" : "no longer"} trusted under either request`, () => {
+    const scope = createOperationScope<string>();
+    const swapped = {};
+    const settle = scope.open(page(5), request, true, "own");
+    settle(5, { req: swapped, trusted });
+    expect(scope.lookup(page(5), swapped)?.trusted).toBe(expected);
+    expect(scope.lookup(page(5), request)?.trusted).toBe(expected);
+  });
+});
+
+test("rekey moves unsettled entries of the collection and kind, and leaves the others", () => {
+  const scope = createOperationScope<string>();
+  const swapped = {};
+  scope.open({ collection: "posts", kind: "update", id: 5 }, request, false, "posts");
+  scope.open(page(5), {}, false, "other request");
+  scope.open(page(5), request, true, "unsettled");
+  const settle = scope.open(page(5), request, false, "settled");
+  settle(5);
+  scope.rekey("pages", "update", request, { req: swapped, trusted: false });
+  expect(scope.lookup(page(5), swapped)).toEqual({
+    all: ["unsettled"],
+    innermost: "unsettled",
+    trusted: false,
+  });
+  expect(scope.lookup(page(5), request)?.all).toEqual(["settled", "unsettled"]);
+});
+
 test("widen makes unsettled entries of the collection name every document", () => {
   const scope = createOperationScope<string>();
   scope.open(page("alias:home"), request, false, "outer");
