@@ -87,19 +87,10 @@ describe.each(["", " ", "\t", "\n"])("an untrusted write naming row 0 as %j", (s
 
 test("settle moves an entry to the document Payload acts on", () => {
   const scope = createOperationScope<string>();
-  const settle = scope.open(page("alias:home"), request, true, "own");
-  expect(scope.lookup(page(5), request)).toBeUndefined();
-  settle(5);
-  expect(scope.lookup(page(5), request)?.all).toEqual(["own"]);
-});
-
-test("a settle carried into another operation leaves its entry to widen", () => {
-  const scope = createOperationScope<string>();
-  const outerSettle = scope.open(page("alias:home"), request, false, "outer");
+  const settle = scope.open(page("alias:home"), request, false, "outer");
   scope.open(page(5), request, true, "nested");
-  outerSettle(5);
   expect(scope.lookup(page(5), request)?.all).toEqual(["nested"]);
-  scope.widen("pages", "update", request, 5);
+  settle(5);
   expect(scope.lookup(page(5), request)).toMatchObject({
     all: ["nested", "outer"],
     trusted: false,

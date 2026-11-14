@@ -278,6 +278,12 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   `beforeOperation` hook on that collection returns an args object without the symbol keys of the
   `args` it received, for example one it built key by key. Return `args` or a copy made with
   `{ ...args }`.
+- The plugin tells operations apart by a symbol key it puts on each operation's `args`. App code
+  that builds one operation's args from another operation's, for example args it saved in one
+  hook and returns from a hook of a nested operation, hands the plugin's record of the first
+  operation to the second. Each operation's writes can then be judged as the other's, so an
+  editor's write can go through as trusted. Build each operation's args only from the `args` its
+  own hooks receive.
 - Operations started synchronously from app code, without an `await` between them, stack their
   records in one async context. From about the 64th of them (the 63rd on Node 22) every later
   write in that context is untrusted: the guards judge it with the editor's grants and the

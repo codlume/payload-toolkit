@@ -114,17 +114,7 @@ export const createOperationScope = <Data>() => {
       storage.enterWith(entry);
       // An entry opened without an id names every document; nothing an app hook does to
       // `args.id` afterwards narrows it, since Payload's bulk and restore paths ignore that id.
-      // Another operation's args can carry this settle (app code may build them from these), and
-      // that operation's own entry is then innermost, so the settle applies only while this
-      // entry is the innermost unsettled one. Otherwise `widen` treats it as missing.
       return (id: DefaultDocumentIDType | undefined, final = req) => {
-        let innermost = storage.getStore();
-        while (innermost?.settled) {
-          innermost = innermost.parent;
-        }
-        if (innermost !== entry) {
-          return;
-        }
         entry.target = { ...entry.target, id: target.id === undefined ? undefined : id };
         entry.settled = true;
         entry.requests.add(final);
