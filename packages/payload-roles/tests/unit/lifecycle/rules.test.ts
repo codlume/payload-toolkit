@@ -177,7 +177,7 @@ const ROWS: Row[] = [
     { _status: "published" },
     ["update", "publish"],
     ["update", "publish"],
-    "---",
+    "-r-",
   ),
   row(
     "U2 publish PD, status-only",
@@ -187,7 +187,7 @@ const ROWS: Row[] = [
     { _status: "published" },
     ["update", "publish"],
     ["update", "publish"],
-    "---",
+    "-r-",
   ),
   row(
     "U2 publish N, draft:true with a published body",
@@ -197,7 +197,7 @@ const ROWS: Row[] = [
     { _status: "published" },
     ["update", "publish"],
     ["update", "publish"],
-    "---",
+    "-r-",
   ),
   row(
     "U3 non-draft content edit of P",
@@ -207,7 +207,7 @@ const ROWS: Row[] = [
     { _status: "published" },
     ["update"],
     ["update", "publish"],
-    "---",
+    "-r-",
   ),
   row(
     "U4 status-only unpublish of P",
@@ -277,7 +277,7 @@ const ROWS: Row[] = [
     { _status: "published" },
     ["update"],
     ["update", "publish"],
-    "---",
+    "-r-",
   ),
   row(
     "T1 move to trash from N",
@@ -287,7 +287,7 @@ const ROWS: Row[] = [
     { _status: "draft", deletedAt: DATE },
     ["trash"],
     ["trash"],
-    "---",
+    "-rr",
   ),
   row(
     "T1 move to trash from P",
@@ -297,7 +297,7 @@ const ROWS: Row[] = [
     { _status: "published", deletedAt: DATE },
     ["trash"],
     ["trash"],
-    "---",
+    "-rr",
   ),
   row(
     "T1 move to trash from PD",
@@ -307,7 +307,7 @@ const ROWS: Row[] = [
     { _status: "draft", deletedAt: DATE },
     ["trash"],
     ["trash"],
-    "---",
+    "-rr",
   ),
   row(
     "T2 restore from trash as draft",
@@ -355,7 +355,7 @@ const ROWS: Row[] = [
     { _status: "published", deletedAt: DATE },
     ["update", "trash"],
     ["update", "trash"],
-    "---",
+    "-rr",
   ),
   row(
     "R1 restore a published version over N",
@@ -489,7 +489,7 @@ const ROWS: Row[] = [
     { _status: "published", deletedAt: null },
     ["update", "publish"],
     ["update", "publish"],
-    "---",
+    "--r",
   ),
   row(
     "X2 copy-to-locale on PD",
@@ -513,7 +513,7 @@ const ROWS: Row[] = [
     { _status: "published" },
     ["update", "publish"],
     ["update", "publish"],
-    "---",
+    "-r-",
   ),
   row(
     "J1 scheduled unpublish of P",
@@ -753,4 +753,58 @@ test("a draft save that may rewrite upload files needs publish, because Payload 
   expect([...requiredActions(pages, facts)]).toEqual(["update", "publish"]);
   const noFile = requestFacts(pages, view({ bodyKeys: ["alt"], data: { alt: "x" }, draft: true }));
   expect([...requiredActions(pages, noFile)]).toEqual(["update"]);
+});
+
+test("an allow before the row is read stays an allow for every stored row Payload can reach", () => {
+  const bodies: Record<string, unknown>[] = [
+    {},
+    { title: "x" },
+    { _status: "draft" },
+    { _status: "published" },
+    { deletedAt: null },
+    { deletedAt: DATE },
+    { _status: "published", deletedAt: null },
+  ];
+  const states = [
+    { _status: "draft", deletedAt: null },
+    { _status: "published", deletedAt: null },
+    { _status: "draft", deletedAt: DATE },
+    { _status: "published", deletedAt: DATE },
+  ];
+  const actions: ActionId[] = ["update", "publish", "unpublish", "trash"];
+  const subsets = Array.from({ length: 2 ** actions.length }, (_unused, mask) =>
+    actions.filter((_action, bit) => (mask & (1 << bit)) !== 0),
+  );
+  for (const res of [pages, plain]) {
+    for (const data of bodies) {
+      for (const draft of [false, true]) {
+        for (const trash of [false, true]) {
+          const planned = requestFacts(
+            res,
+            view({ bodyKeys: Object.keys(data), data, draft, trash }),
+          );
+          // A drafts collection finds a document through its latest version, so its main row can
+          // be trashed even without `trash: true`; otherwise Payload filters trashed rows out.
+          const reachable = states.filter(
+            (candidate) => trash || res.drafts || candidate.deletedAt === null,
+          );
+          for (const fill of states) {
+            const facts = settleAfter(res, planned, { ...fill, ...data });
+            for (const held of subsets) {
+              const holds = (action: ActionId) => held.includes(action);
+              if (judge(res, facts, holds).kind !== "allow") {
+                continue;
+              }
+              for (const candidate of reachable) {
+                expect(
+                  judge(res, settleBefore(res, facts, candidate), holds).kind,
+                  JSON.stringify({ candidate, data, draft, fill, held, trash }),
+                ).toBe("allow");
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 });
