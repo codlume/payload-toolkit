@@ -6,6 +6,7 @@ import type {
   GlobalBeforeOperationHook,
   PayloadRequest,
   SanitizedGlobalConfig,
+  SelectIncludeType,
 } from "payload";
 import { combineQueries, executeAccess, Forbidden, NotFound } from "payload";
 
@@ -321,6 +322,12 @@ const check = async ({ resource, enforcer, document, data, req, readRow }: Check
   }
 };
 
+/** The columns `settleBefore` reads, so a row read fetches no other field and joins no table. */
+const stateSelect = (resource: Resource): SelectIncludeType => ({
+  ...(resource.drafts && { [STATUS]: true }),
+  ...(resource.trash && { deletedAt: true }),
+});
+
 type GlobalRestoreArgs = {
   resource: Resource;
   enforcer: Enforcer;
@@ -369,7 +376,11 @@ const settleGlobalRestore = async ({
   if (!isRecord(stored)) {
     throw typeof access === "object" ? new Forbidden(req.t) : new NotFound(req.t);
   }
-  const row: unknown = await req.payload.db.findGlobal({ slug: global.slug, req });
+  const row: unknown = await req.payload.db.findGlobal({
+    slug: global.slug,
+    req,
+    select: stateSelect(resource),
+  });
   for (const { view, holdsFor } of restores) {
     const facts = settleBefore(
       resource,
@@ -427,6 +438,7 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
   if (!governs(resource)) {
     return {};
   }
+  const select = stateSelect(resource);
   const trailing: CollectionBeforeOperationHook = async ({ args, collection, operation, req }) => {
     await plan({
       resource,
@@ -458,6 +470,7 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
         const row: unknown = await req.payload.db.findOne({
           collection: resource.slug,
           req,
+          select,
           where: { id: { equals: id } },
         });
         return isRecord(row) ? row : null;
@@ -476,6 +489,7 @@ const globalHooks: LifecycleModule["globalHooks"] = (resource, enforcer) => {
   if (!governs(resource)) {
     return {};
   }
+  const select = stateSelect(resource);
   const trailing: GlobalBeforeOperationHook = async ({ args, global, operation, req }) => {
     await plan({ resource, enforcer, operation, args, req, files: () => false });
     if (operation === "restoreVersion") {
@@ -492,7 +506,7 @@ const globalHooks: LifecycleModule["globalHooks"] = (resource, enforcer) => {
       // An unsaved global is `{}` on drizzle (findGlobal.js) and falsy elsewhere, which Payload
       // also treats as never saved (globals/operations/update.js `globalExists`).
       readRow: async () => {
-        const row: unknown = await req.payload.db.findGlobal({ slug: resource.slug, req });
+        const row: unknown = await req.payload.db.findGlobal({ slug: resource.slug, req, select });
         return isRecord(row) ? row : {};
       },
     });
