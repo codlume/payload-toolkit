@@ -27,6 +27,7 @@ vi.mock("@payloadcms/ui", () => ({
     return null;
   },
   toast: ui.toast,
+  useAuth: () => ({ user: { id: 1 } }),
   useConfig: () => ({ config: { routes: { api: "/api" }, serverURL: "" } }),
   useDocumentInfo: () => ui.info,
   useForm: () => ({ reset: ui.reset }),
@@ -80,6 +81,17 @@ test("an unpublished, trashed or unsaved document offers nothing", () => {
   expect(published({ hasPublishedDoc: false })).toBe("");
   expect(published({ isTrashed: true })).toBe("");
   expect(published({ id: undefined })).toBe("");
+});
+
+test("a document another editor holds offers nothing, while the viewer's own lock does", () => {
+  expect(published({ documentIsLocked: true, currentEditor: { id: 2, email: "b@x.io" } })).toBe("");
+  expect(published({ documentIsLocked: true, currentEditor: 2 })).toBe("");
+  expect(published({ documentIsLocked: true, currentEditor: { id: 1 } })).toBe(
+    '<button type="button">version:unpublish</button>',
+  );
+  expect(published({ documentIsLocked: false, currentEditor: { id: 2 } })).toBe(
+    '<button type="button">version:unpublish</button>',
+  );
 });
 
 test("a 200 sends the stock request, resets to draft and flips the published state", async () => {
