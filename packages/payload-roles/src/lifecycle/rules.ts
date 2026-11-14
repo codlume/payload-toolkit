@@ -254,11 +254,11 @@ export const requestFacts = (resource: RulesResource, view: RequestView): Facts 
     write: writeOf(resource, view),
     writesMain: writesMainOf(resource, view, status),
     files: view.files,
-    // Without `trash: true` Payload filters trashed rows out (updateByID.js:121, update.js:134).
     before:
       view.kind === "create"
         ? { kind: "absent" }
-        : { kind: "unknown", mayBeTrashed: view.kind === "update" && view.trash },
+        : // Without `trash: true` Payload filters trashed main rows out of the request.
+          { kind: "unknown", mayBeTrashed: view.kind === "update" && view.trash },
     after: {
       published: publishedAfter(resource, view, status),
       trashed: trashedAfter(resource, view, view.data?.deletedAt),
@@ -277,8 +277,11 @@ const settled = <T extends boolean>(value: unknown, read: (value: unknown) => T)
   value === undefined ? "unchanged" : read(value);
 
 /**
- * Field `beforeValidate` has filled every key before `beforeChange`
- * (fields/hooks/beforeValidate/promise.js:182), so both values are definitive.
+ * Pins the facts to the data `beforeChange` is about to write. Field `beforeValidate` has filled
+ * every key by then (fields/hooks/beforeValidate/promise.js:182), so both values are definitive.
+ * A drafts collection found the document through its latest version, whose `deletedAt` a draft
+ * save can clear while the main row stays in the trash (getLatestCollectionVersion.js), so its
+ * main row may be trashed even without `trash: true`.
  */
 export const settleAfter = (
   resource: RulesResource,
@@ -286,6 +289,10 @@ export const settleAfter = (
   data: Readonly<Record<string, unknown>>,
 ): Facts => ({
   ...facts,
+  before:
+    resource.drafts && facts.before.kind === "unknown"
+      ? { kind: "unknown", mayBeTrashed: true }
+      : facts.before,
   after: {
     published: !resource.drafts || settled(data[STATUS], (status) => status === "published"),
     trashed: resource.trash && settled(data.deletedAt, isSet),
