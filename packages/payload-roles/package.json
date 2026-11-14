@@ -42,6 +42,7 @@
   },
   "scripts": {
     "build": "vp pack",
+    "bench": "pnpm build && node bench/run.mjs",
     "test:build": "pnpm build && node --test tests/build/*.test.mjs",
     "test:unit": "pnpm build && vitest run tests/unit",
     "test:integration": "pnpm build && vitest run tests/integration --maxWorkers=1"
