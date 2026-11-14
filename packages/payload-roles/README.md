@@ -106,7 +106,8 @@ Capabilities come from the user's roles, loaded by id on every request and union
 `superAdmin: true` passes the roles side for everything; app access still applies. A user with no
 roles, a dangling role id, or malformed `permissions` JSON gets nothing from that role. A resolver
 error grants nothing to every request that shared the lookup and logs once at error level.
-Capabilities are memoized per request user for five seconds, so a revoked grant lands on the
+Capabilities are memoized on the request's user object for five seconds. REST, GraphQL and the
+admin panel load a fresh user for every request, so a change to a user or to a role lands on that
 user's next request.
 
 The roles collection is readable and writable only by signed-in users of the user collection.
@@ -242,8 +243,11 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   guards are the authority.
 - Drafts on the user collection are not supported, and startup rejects them. Payload's duplicate
   and publish start from the latest draft, while the guards judge the stored user.
-- Capability resolution is memoized per request user object for five seconds. A long-lived user
-  object held by Local API code can serve revoked grants for up to that long.
+- The plugin reads `superAdmin` and the role ids from the user object on the request and never
+  reloads them. Only the grants of those roles are reloaded, at most five seconds after they
+  change. Local API code that keeps a user object and passes it as `user` therefore keeps that
+  user's `superAdmin` flag and role ids for as long as it holds the object. Load the user again
+  after you change their roles or `superAdmin`.
 - The core test suites run on SQLite only. Payload's Postgres and MongoDB adapters are supported,
   and some feasibility gates ran on them, but the guards and the bootstrap were not run against
   them in this repository.
