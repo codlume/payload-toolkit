@@ -74,6 +74,9 @@ other hook lists, so its checks always judge the data those hooks produce.
   Versions are kept for audit.
 - On the user collection: a `roles` relationship (`hasMany`, `maxDepth: 0`, not saved to the JWT), a
   `superAdmin` checkbox, and a hidden unique `rolesBootstrapClaim` field that the bootstrap uses.
+- On managed collections and globals, admin document controls listed after the app's own
+  `beforeDocumentControls`. A component the app already set in an edit slot, such as its own
+  `UnpublishButton`, keeps that slot and its own gating.
 
 Actions are `read`, `create`, `update`, `delete`, `trash`, `publish`, `unpublish`, `readVersions`
 and `unlock`. An action applies to a resource only when the config supports it: `trash` needs
@@ -216,7 +219,7 @@ startup, and composes nothing. App access decides alone, which is fail-open. The
 `superAdmin` fields carry no plugin access rules either, so whoever the app lets update a user can
 set them, and the guards do not run. The roles collection still admits only signed-in users of the
 user collection. The bootstrap still runs so the first user can administer roles once enforcement
-is turned on.
+is turned on. The admin document controls are left as the app configured them.
 
 ## Debug diagnostics
 

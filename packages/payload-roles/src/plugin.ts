@@ -56,7 +56,7 @@ const wrapGlobalAccess = (
   ),
 });
 
-/** Admin slots win over the app's, except `beforeDocumentControls`, where both lists render. */
+/** A component the app set keeps its slot; `beforeDocumentControls` renders the app's list, then the plugin's. */
 const mergeSlots = <Slots extends { beforeDocumentControls?: unknown[] }>(
   app: Slots | undefined,
   ours: Slots,
@@ -65,7 +65,7 @@ const mergeSlots = <Slots extends { beforeDocumentControls?: unknown[] }>(
     ...(app?.beforeDocumentControls ?? []),
     ...(ours.beforeDocumentControls ?? []),
   ];
-  return { ...app, ...ours, ...(controls.length > 0 && { beforeDocumentControls: controls }) };
+  return { ...ours, ...app, ...(controls.length > 0 && { beforeDocumentControls: controls }) };
 };
 
 const transformCollection = (
@@ -84,7 +84,7 @@ const transformCollection = (
   const core = createCoreHooks(enforcer, collection.slug);
   const lifecycleHooks =
     options.enabled && resource ? lifecycle.collectionHooks(resource, enforcer) : {};
-  const edit = resource ? admin.collectionEdit(resource) : undefined;
+  const edit = options.enabled && resource ? admin.collectionEdit(resource) : undefined;
   return {
     ...withFields,
     ...(options.enabled &&
