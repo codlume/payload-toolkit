@@ -147,8 +147,32 @@ const possibleTransitions = (resource: RulesResource, facts: Facts): readonly Tr
   );
 };
 
-const actionSets = (resource: RulesResource, facts: Facts) =>
-  possibleTransitions(resource, facts).map((transition) => transitionActions(resource, transition));
+const beforeKey = (before: Before) =>
+  before.kind === "known"
+    ? `k${before.row.published}${before.row.trashed}`
+    : before.kind === "unknown"
+      ? `u${before.mayBeTrashed}`
+      : "a";
+
+/** Per resource, by facts. The facts of one resource take at most 1344 values. */
+const memo = new WeakMap<RulesResource, Map<string, readonly ReadonlySet<ActionId>[]>>();
+
+const actionSets = (resource: RulesResource, facts: Facts) => {
+  const key = `${facts.write}|${facts.writesMain}|${facts.files}|${beforeKey(facts.before)}|${facts.after.published}|${facts.after.trashed}`;
+  let byFacts = memo.get(resource);
+  if (byFacts === undefined) {
+    byFacts = new Map();
+    memo.set(resource, byFacts);
+  }
+  let sets = byFacts.get(key);
+  if (sets === undefined) {
+    sets = possibleTransitions(resource, facts).map((transition) =>
+      transitionActions(resource, transition),
+    );
+    byFacts.set(key, sets);
+  }
+  return sets;
+};
 
 export const requiredActions = (resource: RulesResource, facts: Facts): ReadonlySet<ActionId> => {
   const sets = actionSets(resource, facts);

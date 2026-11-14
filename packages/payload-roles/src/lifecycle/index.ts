@@ -232,11 +232,13 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
   }
   const { capabilities, id: subjectId } = subject;
   const self = resource.slug === enforcer.options.userCollection;
-  const holdsFor =
-    (documentId: unknown): Holds =>
-    (action) =>
-      can(capabilities, resource.id, action) ||
-      (action === "update" && self && isId(documentId) && sameId(documentId, subjectId));
+  const held = new Set(
+    [...resource.actions].filter((action) => can(capabilities, resource.id, action)),
+  );
+  const holds: Holds = (action) => held.has(action);
+  const holdsOwn: Holds = (action) => action === "update" || held.has(action);
+  const holdsFor = (documentId: unknown) =>
+    self && isId(documentId) && sameId(documentId, subjectId) ? holdsOwn : holds;
   const source = isRecord(args) ? args : {};
   const view = viewOf(frame, source, frame.kind === "update" && files());
   const verdict = judge(
@@ -407,6 +409,12 @@ const probeView = (key: WriteAccessArgs["key"], data: WriteAccessArgs["data"]): 
   data,
 });
 
+const NOTHING: ReadonlySet<ActionId> = new Set();
+const ONLY: Readonly<Record<WriteAccessArgs["key"], ReadonlySet<ActionId>>> = {
+  create: new Set(["create"]),
+  update: new Set(["update"]),
+};
+
 /** The floor uses the innermost covering frame's plan; outside an operation it is a probe. */
 const requiredWriteActions = ({
   resource,
@@ -415,6 +423,10 @@ const requiredWriteActions = ({
   id,
   req,
 }: WriteAccessArgs): ReadonlySet<ActionId> => {
+  // No hooks run for it, so no frame exists and the key itself is the whole answer.
+  if (!resource.drafts && !resource.trash && !resource.versions) {
+    return resource.actions.has(key) ? ONLY[key] : NOTHING;
+  }
   const found = frames.lookup(
     { collection: resource.id, id: resource.kind === "collection" ? id : undefined, kind: key },
     requestKeyOf(req),
