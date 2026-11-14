@@ -345,7 +345,13 @@ const settleGlobalRestore = async ({
     id: undefined,
     kind: "update",
   }).filter(({ view }) => view.kind === "restore");
-  if (restores.length === 0) {
+  // A subject who holds what every stored version and row could require needs no read here;
+  // Payload then answers a missing or unreadable version itself.
+  const settled = restores.every(
+    ({ view, holdsFor }) =>
+      judge(resource, requestFacts(resource, view), holdsFor(undefined)).kind === "allow",
+  );
+  if (settled) {
     return;
   }
   const versionId = isRecord(args) ? args.id : undefined;
