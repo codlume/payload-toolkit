@@ -164,13 +164,6 @@ Release-please still decides release eligibility, versions, and which changes th
 pending Release pull request contains. Merging that pull request remains the only
 publication approval.
 
-## Preview builds
-
-A pull request that touches `packages/**` publishes installable Preview builds
-through pkg.pr.new. Its GitHub App comments the install commands on the pull
-request. A Preview build has no npm version, git tag, GitHub Release, or
-changelog entry.
-
 ## Recovering a failed Release run
 
 Use "Re-run failed jobs" on the failed workflow run. The Release run checks
