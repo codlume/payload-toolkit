@@ -2,6 +2,7 @@ import {
   Button,
   ConfirmationModal,
   toast,
+  useAuth,
   useConfig,
   useDocumentInfo,
   useForm,
@@ -9,6 +10,7 @@ import {
   useTranslation,
 } from "@payloadcms/ui";
 import { requests } from "@payloadcms/ui/shared";
+import { extractID } from "payload/shared";
 import React from "react";
 
 import { unpublishErrorOf, unpublishTarget } from "./unpublish-request.ts";
@@ -17,7 +19,9 @@ export const UnpublishDocument = () => {
   const {
     id,
     collectionSlug,
+    currentEditor,
     data,
+    documentIsLocked,
     globalSlug,
     hasPublishedDoc,
     isTrashed,
@@ -31,11 +35,15 @@ export const UnpublishDocument = () => {
       serverURL,
     },
   } = useConfig();
+  const { user } = useAuth();
   const { i18n, t } = useTranslation();
   const { reset } = useForm();
   const { toggleModal } = useModal();
   const target = unpublishTarget({ api, serverURL, collectionSlug, globalSlug, id });
-  if (!hasPublishedDoc || isTrashed || !target) {
+  // Stock hides its menu once the viewer goes read-only on another editor's lock, and the server
+  // refuses the request while that lock holds.
+  const lockedByOther = documentIsLocked && currentEditor && extractID(currentEditor) !== user?.id;
+  if (!hasPublishedDoc || isTrashed || lockedByOther || !target) {
     return null;
   }
   const modalSlug = `roles-unpublish-${collectionSlug ?? globalSlug}-${id ?? ""}`;
@@ -50,7 +58,8 @@ export const UnpublishDocument = () => {
       toast.error(unpublishErrorOf(json) ?? t("error:unPublishingDocument"));
       return;
     }
-    await reset({ ...data, _status: "draft" });
+    // The server has unpublished, so a failed form refresh must not hold back the success state.
+    reset({ ...data, _status: "draft" }).catch(() => {});
     toast.success(t("version:unpublishedSuccessfully"));
     setUnpublishedVersionCount(1);
     setMostRecentVersionIsAutosaved(false);

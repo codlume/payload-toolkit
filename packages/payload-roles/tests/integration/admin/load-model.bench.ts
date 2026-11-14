@@ -115,7 +115,8 @@ describe(`permissions field server render, ${ROLES} roles`, () => {
     await render(superAdmin);
   });
 
+  // A fresh prop object per view, as Payload creates per request, so no view reuses another's.
   bench("unpublish slots, one document view (member)", async () => {
-    await documentView(await viewerProp(member));
+    await documentView({ ...memberViewer });
   });
 });

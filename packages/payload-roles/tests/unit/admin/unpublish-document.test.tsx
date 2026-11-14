@@ -27,6 +27,7 @@ vi.mock("@payloadcms/ui", () => ({
     return null;
   },
   toast: ui.toast,
+  useAuth: () => ({ user: { id: 1 } }),
   useConfig: () => ({ config: { routes: { api: "/api" }, serverURL: "" } }),
   useDocumentInfo: () => ui.info,
   useForm: () => ({ reset: ui.reset }),
@@ -82,6 +83,17 @@ test("an unpublished, trashed or unsaved document offers nothing", () => {
   expect(published({ id: undefined })).toBe("");
 });
 
+test("a document another editor holds offers nothing, while the viewer's own lock does", () => {
+  expect(published({ documentIsLocked: true, currentEditor: { id: 2, email: "b@x.io" } })).toBe("");
+  expect(published({ documentIsLocked: true, currentEditor: 2 })).toBe("");
+  expect(published({ documentIsLocked: true, currentEditor: { id: 1 } })).toBe(
+    '<button type="button">version:unpublish</button>',
+  );
+  expect(published({ documentIsLocked: false, currentEditor: { id: 2 } })).toBe(
+    '<button type="button">version:unpublish</button>',
+  );
+});
+
 test("a 200 sends the stock request, resets to draft and flips the published state", async () => {
   published();
   ui.request.mockResolvedValue(new Response("{}", { status: 200 }));
@@ -99,6 +111,16 @@ test("a 200 sends the stock request, resets to draft and flips the published sta
   expect(ui.toast.error).not.toHaveBeenCalled();
   expect(setters.setUnpublishedVersionCount).toHaveBeenCalledWith(1);
   expect(setters.setMostRecentVersionIsAutosaved).toHaveBeenCalledWith(false);
+  expect(setters.setHasPublishedDoc).toHaveBeenCalledWith(false);
+});
+
+test("a form reset that fails still reports the unpublish and flips the published state", async () => {
+  published();
+  ui.request.mockResolvedValue(new Response("{}", { status: 200 }));
+  ui.reset.mockRejectedValueOnce(new Error("form state unavailable"));
+  await confirm();
+
+  expect(ui.toast.success).toHaveBeenCalledWith("version:unpublishedSuccessfully");
   expect(setters.setHasPublishedDoc).toHaveBeenCalledWith(false);
 });
 
