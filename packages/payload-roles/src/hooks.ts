@@ -294,6 +294,7 @@ const superAdminsBefore = (ctx: GuardContext, operation: Operation): Promise<num
       limit: 0,
       pagination: false,
       req: ctx.req,
+      select: { deletedAt: true, [ctx.enforcer.options.superAdminField]: true },
       where: { [ctx.enforcer.options.superAdminField]: { equals: true } },
     })
     .then(({ docs }) => docs.filter((doc) => isRecord(doc) && !isTrashed(doc)).length);

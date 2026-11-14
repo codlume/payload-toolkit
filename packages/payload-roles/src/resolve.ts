@@ -64,6 +64,7 @@ export const loadRoleGrants = async (
     collection: deps.options.rolesSlug,
     limit: ids.length,
     pagination: false,
+    select: { [deps.options.permissionsField]: true },
     where: { id: { in: [...ids] } },
     ...(req && { req }),
   });
