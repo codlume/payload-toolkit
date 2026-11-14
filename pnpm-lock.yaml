@@ -191,6 +191,45 @@ importers:
         specifier: 4.1.9
         version: 4.1.9(@types/node@26.2.0)(@vitest/browser-preview@4.1.9)(jsdom@26.1.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(sass@1.77.4)(tsx@4.22.4))
 
+  packages/payload-roles:
+    devDependencies:
+      '@payloadcms/db-sqlite':
+        specifier: 3.90.1
+        version: 3.90.1(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))
+      '@payloadcms/graphql':
+        specifier: 3.90.1
+        version: 3.90.1(graphql@16.14.2)(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))(typescript@5.9.3)
+      '@payloadcms/ui':
+        specifier: 3.90.1
+        version: 3.90.1(@types/react@19.2.18)(monaco-editor@0.56.0)(next@15.4.11(@playwright/test@1.58.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.77.4))(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.18)
+      graphql:
+        specifier: 16.14.2
+        version: 16.14.2
+      jsdom:
+        specifier: 26.1.0
+        version: 26.1.0
+      payload:
+        specifier: 3.90.1
+        version: 3.90.1(graphql@16.14.2)(typescript@5.9.3)
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.9
+        version: 4.1.9(@types/node@26.2.0)(@vitest/browser-preview@4.1.9)(jsdom@26.1.0)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(sass@1.77.4)(tsx@4.22.4))
+
   tools/release-tools:
     devDependencies:
       '@types/node':
@@ -1684,10 +1723,20 @@ packages:
     peerDependencies:
       payload: 3.88.0
 
+  '@payloadcms/db-sqlite@3.90.1':
+    resolution: {integrity: sha512-JtDGZ/6Tbf4O3oBjydWxSK8k/dmuJ0girZZpcA0moA5mjG8UZZYEJtCTLclM/R/Eq6ELndpUQNFqflz2DgO0DQ==}
+    peerDependencies:
+      payload: 3.90.1
+
   '@payloadcms/drizzle@3.88.0':
     resolution: {integrity: sha512-qtPVSLjAFnQl1GwaQPhmnYTwCCWgTnRm4ps5yJxmN3RPdLF6S77gvqZMnC4HTeH7YADQJW3nFgQCVYExxWE6hA==}
     peerDependencies:
       payload: 3.88.0
+
+  '@payloadcms/drizzle@3.90.1':
+    resolution: {integrity: sha512-7iKm4RHzkrtSETVnt36DlpoCWQsUUIO5+YfBwe81g4vYai+wWSlyEz8dXUZGrIHbwsaojqJ2Qxdt+DetQlNVPw==}
+    peerDependencies:
+      payload: 3.90.1
 
   '@payloadcms/graphql@3.88.0':
     resolution: {integrity: sha512-ync+bPFl0UacwBs1wVQkPlaSWWQJc4LjGG9OuRHEW7wYW3aeVQ+H2zfdFL6/cVJGP3zOq+XIlvYYw8G86Ki+Vw==}
@@ -1695,6 +1744,13 @@ packages:
     peerDependencies:
       graphql: ^16.8.1
       payload: 3.88.0
+
+  '@payloadcms/graphql@3.90.1':
+    resolution: {integrity: sha512-Xj/m2hIS/CiWUm+5KW9Z+WFc5iZILtYBWcespFdTWg+y3+NDqaJIYAu7fdv6Gjbmb33S7EGU19fjufd9Ie2/lA==}
+    hasBin: true
+    peerDependencies:
+      graphql: ^16.8.1
+      payload: 3.90.1
 
   '@payloadcms/live-preview-react@3.88.0':
     resolution: {integrity: sha512-Pmlo1xczmOetyyC4rhtp50b0/biYE62+w09hKImN26v8DBNCqZ8b699mknOCo60mar4V4KrlvksCpL9t2e0dHA==}
@@ -1729,12 +1785,24 @@ packages:
   '@payloadcms/translations@3.88.0':
     resolution: {integrity: sha512-AZVQjjW5pKxO+K9ODeh6yw6/EfXK1hxGPw55KzzDC5srO3hjNskgyWtkauKvbz+S0+xFspANbRc4OD/Rg/74WA==}
 
+  '@payloadcms/translations@3.90.1':
+    resolution: {integrity: sha512-O+pbNk2+5cqKV1UxuAE5/xX6DlapvvFR04/mKnanPBPqzBBCqQ8LKUhSr9Au4Fki9rYwIv1AwI4kuztmzxTvmQ==}
+
   '@payloadcms/ui@3.88.0':
     resolution: {integrity: sha512-iwQhHPDn4Oj2bPg1UV467BoxfUNo1rUmD8jMZaw2Vtt/nmxAPl3W3CWN/CsOX/yITuPuGHJxznOg4PZNMF3gEg==}
     engines: {node: ^18.20.2 || >=20.9.0}
     peerDependencies:
       next: '>=15.2.9 <15.3.0 || >=15.3.9 <15.4.0 || >=15.4.11 <15.5.0 || >=16.2.6 <17.0.0'
       payload: 3.88.0
+      react: ^19.0.1 || ^19.1.2 || ^19.2.1
+      react-dom: ^19.0.1 || ^19.1.2 || ^19.2.1
+
+  '@payloadcms/ui@3.90.1':
+    resolution: {integrity: sha512-tLzrp+cJgQybkl/54r89CLrN71zKYvg50oO0tlNHYvh2B4DpZJILie6C+U33qjxed0IS17hc9DBRkwQWD6H7aA==}
+    engines: {node: ^18.20.2 || >=20.9.0}
+    peerDependencies:
+      next: '>=15.2.9 <15.3.0 || >=15.3.9 <15.4.0 || >=15.4.11 <15.5.0 || >=16.3.3 <17.0.0'
+      payload: 3.90.1
       react: ^19.0.1 || ^19.1.2 || ^19.2.1
       react-dom: ^19.0.1 || ^19.1.2 || ^19.2.1
 
@@ -1845,6 +1913,9 @@ packages:
   '@smithy/core@3.33.2':
     resolution: {integrity: sha512-CUGXpnPkVdjUCbix+83sWLW9VFgQOm44MDOx/ihITJMAnOZKvL8YYIc7DR9pP/tZ8CIRvMiON/TucvygqbHO3w==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -1871,6 +1942,9 @@ packages:
 
   '@swc/helpers@0.5.15':
     resolution: {integrity: sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g==}
+
+  '@swc/helpers@0.5.24':
+    resolution: {integrity: sha512-6tcXo4kA8HgGO7AVmawB57RYi/piBPYVHVcO6dXjX+SZw8GoHmi262sp4v2Ha2kNP9Cx84qei27yT+fjS1lxgg==}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -2939,6 +3013,13 @@ packages:
     peerDependencies:
       graphql: ^16.8.1
 
+  payload@3.90.1:
+    resolution: {integrity: sha512-72lVmcihjE7fqIqelLx9GhxpgFEYjlVKkMq1W0XCfXo52CAafUUF3qjhAq97MZNMRvXDc8M812kwiiREQM7/6A==}
+    engines: {node: ^18.20.2 || >=20.9.0}
+    hasBin: true
+    peerDependencies:
+      graphql: ^16.8.1
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -3125,6 +3206,10 @@ packages:
     resolution: {integrity: sha512-vcF3Ckow6g939GMA4PeU7b2K/9FALXk2KF9J87txdHzXbUF9XRQRwSxcAs/fGaTnJeBFd7UoV22j3lzMLdM0Pw==}
     engines: {node: '>=14.0.0'}
     hasBin: true
+
+  sax@1.6.1:
+    resolution: {integrity: sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==}
+    engines: {node: '>=11.0.0'}
 
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
@@ -4688,6 +4773,50 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@payloadcms/db-sqlite@3.90.1(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))':
+    dependencies:
+      '@libsql/client': 0.14.0
+      '@payloadcms/drizzle': 3.90.1(@libsql/client@0.14.0)(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))
+      console-table-printer: 2.12.1
+      drizzle-kit: 0.31.7
+      drizzle-orm: 0.45.2(@libsql/client@0.14.0)
+      payload: 3.90.1(graphql@16.14.2)(typescript@5.9.3)
+      prompts: 2.4.2
+      to-snake-case: 1.0.0
+      uuid: 13.0.2
+    transitivePeerDependencies:
+      - '@aws-sdk/client-rds-data'
+      - '@cloudflare/workers-types'
+      - '@electric-sql/pglite'
+      - '@libsql/client-wasm'
+      - '@neondatabase/serverless'
+      - '@op-engineering/op-sqlite'
+      - '@opentelemetry/api'
+      - '@planetscale/database'
+      - '@prisma/client'
+      - '@tidbcloud/serverless'
+      - '@types/better-sqlite3'
+      - '@types/pg'
+      - '@types/sql.js'
+      - '@upstash/redis'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - better-sqlite3
+      - bufferutil
+      - bun-types
+      - expo-sqlite
+      - gel
+      - knex
+      - kysely
+      - mysql2
+      - pg
+      - postgres
+      - prisma
+      - sql.js
+      - sqlite3
+      - supports-color
+      - utf-8-validate
+
   '@payloadcms/drizzle@3.88.0(@libsql/client@0.14.0)(payload@3.88.0(graphql@16.14.2)(typescript@5.9.3))':
     dependencies:
       console-table-printer: 2.12.1
@@ -4728,11 +4857,62 @@ snapshots:
       - sql.js
       - sqlite3
 
+  '@payloadcms/drizzle@3.90.1(@libsql/client@0.14.0)(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))':
+    dependencies:
+      console-table-printer: 2.12.1
+      dequal: 2.0.3
+      drizzle-orm: 0.45.2(@libsql/client@0.14.0)
+      payload: 3.90.1(graphql@16.14.2)(typescript@5.9.3)
+      prompts: 2.4.2
+      to-snake-case: 1.0.0
+      uuid: 13.0.2
+    transitivePeerDependencies:
+      - '@aws-sdk/client-rds-data'
+      - '@cloudflare/workers-types'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@neondatabase/serverless'
+      - '@op-engineering/op-sqlite'
+      - '@opentelemetry/api'
+      - '@planetscale/database'
+      - '@prisma/client'
+      - '@tidbcloud/serverless'
+      - '@types/better-sqlite3'
+      - '@types/pg'
+      - '@types/sql.js'
+      - '@upstash/redis'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - better-sqlite3
+      - bun-types
+      - expo-sqlite
+      - gel
+      - knex
+      - kysely
+      - mysql2
+      - pg
+      - postgres
+      - prisma
+      - sql.js
+      - sqlite3
+
   '@payloadcms/graphql@3.88.0(graphql@16.14.2)(payload@3.88.0(graphql@16.14.2)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       graphql: 16.14.2
       graphql-scalars: 1.22.2(graphql@16.14.2)
       payload: 3.88.0(graphql@16.14.2)(typescript@5.9.3)
+      pluralize: 8.0.0
+      ts-essentials: 10.0.3(typescript@5.9.3)
+      tsx: 4.22.4
+    transitivePeerDependencies:
+      - typescript
+
+  '@payloadcms/graphql@3.90.1(graphql@16.14.2)(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      graphql: 16.14.2
+      graphql-scalars: 1.22.2(graphql@16.14.2)
+      payload: 3.90.1(graphql@16.14.2)(typescript@5.9.3)
       pluralize: 8.0.0
       ts-essentials: 10.0.3(typescript@5.9.3)
       tsx: 4.22.4
@@ -4811,6 +4991,10 @@ snapshots:
     dependencies:
       date-fns: 4.1.0
 
+  '@payloadcms/translations@3.90.1':
+    dependencies:
+      date-fns: 4.1.0
+
   '@payloadcms/ui@3.88.0(@types/react@19.2.18)(monaco-editor@0.56.0)(next@15.4.11(@playwright/test@1.58.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.77.4))(payload@3.88.0(graphql@16.14.2)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)':
     dependencies:
       '@date-fns/tz': 1.2.0
@@ -4829,6 +5013,42 @@ snapshots:
       next: 15.4.11(@playwright/test@1.58.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.77.4)
       object-to-formdata: 4.5.1
       payload: 3.88.0(graphql@16.14.2)(typescript@5.9.3)
+      qs-esm: 8.0.1
+      react: 19.2.8
+      react-datepicker: 7.6.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react-dom: 19.2.8(react@19.2.8)
+      react-image-crop: 10.1.8(react@19.2.8)
+      react-select: 5.9.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      scheduler: 0.25.0
+      sonner: 1.7.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      ts-essentials: 10.0.3(typescript@5.9.3)
+      use-context-selector: 2.0.0(react@19.2.8)(scheduler@0.25.0)
+      uuid: 13.0.2
+    transitivePeerDependencies:
+      - '@types/react'
+      - monaco-editor
+      - supports-color
+      - typescript
+
+  '@payloadcms/ui@3.90.1(@types/react@19.2.18)(monaco-editor@0.56.0)(next@15.4.11(@playwright/test@1.58.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.77.4))(payload@3.90.1(graphql@16.14.2)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)':
+    dependencies:
+      '@date-fns/tz': 1.2.0
+      '@dnd-kit/core': 6.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@dnd-kit/sortable': 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+      '@dnd-kit/utilities': 3.2.2(react@19.2.8)
+      '@faceless-ui/modal': 3.0.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@faceless-ui/scroll-info': 2.0.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@faceless-ui/window-info': 3.0.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@monaco-editor/react': 4.7.0(monaco-editor@0.56.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@payloadcms/translations': 3.90.1
+      '@swc/helpers': 0.5.24
+      bson-objectid: 2.0.4
+      date-fns: 4.1.0
+      dequal: 2.0.3
+      md5: 2.3.0
+      next: 15.4.11(@playwright/test@1.58.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(sass@1.77.4)
+      object-to-formdata: 4.5.1
+      payload: 3.90.1(graphql@16.14.2)(typescript@5.9.3)
       qs-esm: 8.0.1
       react: 19.2.8
       react-datepicker: 7.6.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -4936,6 +5156,8 @@ snapshots:
   '@swc/helpers@0.5.15':
     dependencies:
       tslib: 2.8.1
+
+  '@swc/helpers@0.5.24': {}
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -5972,6 +6194,47 @@ snapshots:
       - typescript
       - utf-8-validate
 
+  payload@3.90.1(graphql@16.14.2)(typescript@5.9.3):
+    dependencies:
+      '@next/env': 15.5.23
+      '@payloadcms/translations': 3.90.1
+      '@types/busboy': 1.5.4
+      ajv: 8.18.0
+      bson-objectid: 2.0.4
+      busboy: 1.6.0
+      ci-info: 4.4.0
+      console-table-printer: 2.12.1
+      croner: 10.0.1
+      dataloader: 2.2.3
+      deepmerge: 4.3.1
+      file-type: 21.3.4
+      get-tsconfig: 4.8.1
+      graphql: 16.14.2
+      http-status: 2.1.0
+      image-dimensions: 2.5.1
+      ipaddr.js: 2.2.0
+      jose: 5.10.0
+      json-schema-to-typescript: 15.0.3
+      minimist: 1.2.8
+      path-to-regexp: 6.3.0
+      pino: 9.14.0
+      pino-pretty: 13.1.2
+      pluralize: 8.0.0
+      qs-esm: 8.0.1
+      range-parser: 1.2.1
+      sanitize-filename: 1.6.3
+      sax: 1.6.1
+      ts-essentials: 10.0.3(typescript@5.9.3)
+      tsx: 4.22.4
+      undici: 7.29.0
+      uuid: 13.0.2
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - typescript
+      - utf-8-validate
+
   picocolors@1.1.1: {}
 
   picomatch@2.3.2: {}
@@ -6190,6 +6453,8 @@ snapshots:
       chokidar: 3.6.0
       immutable: 4.3.9
       source-map-js: 1.2.1
+
+  sax@1.6.1: {}
 
   saxes@6.0.0:
     dependencies:
