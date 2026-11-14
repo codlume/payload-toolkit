@@ -28,8 +28,10 @@ import {
   decideUserWrite,
   type ForbiddenReason,
   removesSuperAdmin,
+  roleIdsRead,
   sameValue,
   SENSITIVE_KEYS,
+  type StoredUser,
   type UserTarget,
 } from "./guards.ts";
 import { loadRoleGrants, normalizeRoleIds } from "./resolve.ts";
@@ -66,6 +68,12 @@ type Operation = {
   superAdmins: null | Promise<number>;
   /** Active super admins this operation has already let go, so a bulk cannot remove them all. */
   removed: number;
+  /**
+   * Grants of the roles this operation has read, by `String(id)`, so a bulk write reads a role
+   * once however many of its users hold it. A write that no record covers has none and
+   * remembers nothing.
+   */
+  roleGrants?: Map<string, Promise<Grants | undefined>>;
 };
 
 const scope = createOperationScope<Operation>();
@@ -157,7 +165,12 @@ const createRecorder =
         { collection, kind, id: namedId(operation, fields) },
         requestKeyOf(req),
         isTrusted(overrideAccess, req),
-        { raw: redact(pick(fields.data, keys)), superAdmins: null, removed: 0 },
+        {
+          raw: redact(pick(fields.data, keys)),
+          superAdmins: null,
+          removed: 0,
+          roleGrants: new Map(),
+        },
       );
       if (isRecord(source)) {
         Reflect.set(source, SETTLE, settle);
@@ -309,25 +322,62 @@ const uniqueIds = (ids: Iterable<SubjectId>) => {
   return [...seen.values()];
 };
 
-const toTarget = (
-  ctx: GuardContext,
-  row: Record<string, unknown>,
-  roleGrants: ReadonlyMap<string, Grants>,
-): null | UserTarget => {
-  const { rolesField, superAdminField } = ctx.enforcer.options;
-  if (!isId(row.id)) {
-    return null;
+/**
+ * Grants of the given roles, each read once per recorded operation. Ids that name no role are
+ * absent from the result.
+ */
+const roleGrantsOf = async (
+  { enforcer, req }: GuardContext,
+  operation: Operation,
+  ids: readonly SubjectId[],
+): Promise<ReadonlyMap<string, Grants>> => {
+  const read = operation.roleGrants;
+  if (!read) {
+    return loadRoleGrants(enforcer, req.payload, req, ids);
   }
-  const superAdmin = row[superAdminField] === true;
-  const roleIds = normalizeRoleIds(row[rolesField]);
-  const grants = roleIds.map((id) => roleGrants.get(String(id))).filter((g) => g !== undefined);
+  const unread = ids.filter((id) => !read.has(String(id)));
+  if (unread.length > 0) {
+    const loaded = loadRoleGrants(enforcer, req.payload, req, unread);
+    for (const id of unread) {
+      read.set(
+        String(id),
+        loaded.then((grants) => grants.get(String(id))),
+      );
+    }
+  }
+  const found = await Promise.all(
+    ids.map(async (id) => [String(id), await read.get(String(id))] as const),
+  );
+  const grants = new Map<string, Grants>();
+  for (const [key, held] of found) {
+    if (held) {
+      grants.set(key, held);
+    }
+  }
+  return grants;
+};
+
+const storedUser = (options: ResolvedOptions, row: Record<string, unknown>): null | StoredUser =>
+  isId(row.id)
+    ? {
+        id: row.id,
+        superAdmin: row[options.superAdminField] === true,
+        trashed: isTrashed(row),
+        roleIds: normalizeRoleIds(row[options.rolesField]),
+        doc: row,
+      }
+    : null;
+
+/** `roleGrants` must hold every role of `stored` whose grants the decision will read. */
+const toTarget = (stored: StoredUser, roleGrants: ReadonlyMap<string, Grants>): UserTarget => {
+  const grants = stored.roleIds
+    .map((id) => roleGrants.get(String(id)))
+    .filter((held) => held !== undefined);
   return {
-    id: row.id,
-    superAdmin,
-    trashed: isTrashed(row),
-    roleIds,
-    capabilities: superAdmin ? { kind: "all" } : { kind: "grants", grants: unionGrants(grants) },
-    doc: row,
+    ...stored,
+    capabilities: stored.superAdmin
+      ? { kind: "all" }
+      : { kind: "grants", grants: unionGrants(grants) },
   };
 };
 
@@ -360,39 +410,32 @@ const createUsersWriteGuard =
     const { options } = enforcer;
     const ctx = await guardContext(enforcer, req, options.userCollection, operation);
     const written = pick(data, userKeys(options));
-    const bodies = judgedBodies(written, current.raws);
     const row = operation === "update" ? await findRow(ctx, idOf(originalDoc)) : null;
-    const roleGrants = await loadRoleGrants(
-      enforcer,
-      req.payload,
-      req,
-      uniqueIds([
-        ...normalizeRoleIds(row?.[options.rolesField]),
-        ...bodies.flatMap((body) => normalizeRoleIds(body[options.rolesField])),
-      ]),
-    );
-    const target = row ? toTarget(ctx, row, roleGrants) : null;
-    if (operation === "update" && !target) {
+    const stored = row ? storedUser(options, row) : null;
+    if (operation === "update" && !stored) {
       refuse("target-missing", ctx);
     }
+    const requests = judgedBodies(written, current.raws).map((raw) => ({
+      editor: ctx.editor.capabilities,
+      editorId: ctx.editor.id,
+      raw,
+      target: stored,
+      fields: options,
+    }));
+    // Most writes change no role and no credential, and are judged without reading any role.
+    const roleGrants = await roleGrantsOf(
+      ctx,
+      current.tally,
+      uniqueIds(requests.flatMap((request) => roleIdsRead(request))),
+    );
+    const target = stored ? toTarget(stored, roleGrants) : null;
     const removes = (body: Readonly<Record<string, unknown>>) =>
       target !== null && removesSuperAdmin(body, target, options);
-    const superAdminCount = bodies.some(removes)
+    const superAdminCount = requests.some(({ raw }) => removes(raw))
       ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
       : 0;
-    for (const body of bodies) {
-      throwDecision(
-        decideUserWrite({
-          editor: ctx.editor.capabilities,
-          editorId: ctx.editor.id,
-          raw: body,
-          target,
-          roleGrants,
-          superAdminCount,
-          fields: options,
-        }),
-        ctx,
-      );
+    for (const request of requests) {
+      throwDecision(decideUserWrite({ ...request, target, roleGrants, superAdminCount }), ctx);
     }
     if (removes(written)) {
       current.tally.removed += 1;
@@ -420,10 +463,11 @@ const createUsersDeleteGuard =
       req,
       normalizeRoleIds(row?.[options.rolesField]),
     );
-    const target = row ? toTarget(ctx, row, roleGrants) : null;
-    if (!target) {
+    const stored = row ? storedUser(options, row) : null;
+    if (!stored) {
       refuse("target-missing", ctx);
     }
+    const target = toTarget(stored, roleGrants);
     const removal = target.superAdmin && !target.trashed;
     const superAdminCount = removal
       ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
