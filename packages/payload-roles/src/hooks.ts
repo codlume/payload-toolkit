@@ -71,16 +71,29 @@ type Operation = {
 const scope = createOperationScope<Operation>();
 
 /**
+ * The tally for documents no record covers, one per request. Payload runs the documents of a
+ * bulk concurrently, so a tally per document would let one bulk remove every super admin.
+ */
+const unrecorded = new WeakMap<object, Operation>();
+
+const unrecordedTally = (request: object) => {
+  const tally: Operation = unrecorded.get(request) ?? { raw: {}, superAdmins: null, removed: 0 };
+  unrecorded.set(request, tally);
+  return tally;
+};
+
+/**
  * How one document hook judges its write: untrusted with nothing recorded when no record covers
  * it. Each covering record's raw keys are judged separately on top of the final data, so a record
  * can add a refusal but never hide what is written.
  */
 const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
-  const found = scope.lookup(target, requestKeyOf(req));
+  const request = requestKeyOf(req);
+  const found = scope.lookup(target, request);
   return {
     trusted: found?.trusted ?? false,
     raws: found?.all.map(({ raw }) => raw) ?? [],
-    tally: found?.innermost ?? { raw: {}, superAdmins: null, removed: 0 },
+    tally: found?.innermost ?? unrecordedTally(request),
   };
 };
 
