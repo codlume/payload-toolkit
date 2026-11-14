@@ -1,8 +1,17 @@
 import { FieldDescription, FieldLabel, useField } from "@payloadcms/ui";
 import type { JSONFieldClientProps } from "payload";
-import React, { type ChangeEvent, useId, useMemo, useState } from "react";
+import React, {
+  type ChangeEvent,
+  memo,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import type { Grant, MatrixModel, StorageKind } from "../model.ts";
+import type { Grant, MatrixColumn, MatrixModel, MatrixRow, StorageKind } from "../model.ts";
 import {
   applyOp,
   type Cells,
@@ -73,20 +82,22 @@ const Notice = ({ children, error = false }: { children: React.ReactNode; error?
   </div>
 );
 
+const allChecked = (cells: Cells, targets: readonly Grant[]) =>
+  targets.length > 0 && targets.every((cell) => cells.has(cell));
+
 const ToggleButton = ({
-  cells,
+  clears,
   disabled,
   onToggle,
   subject,
   targets,
 }: {
-  cells: Cells;
+  clears: boolean;
   disabled: boolean;
   onToggle: (targets: readonly Grant[]) => void;
   subject: string;
   targets: readonly Grant[];
 }) => {
-  const clears = targets.length > 0 && targets.every((cell) => cells.has(cell));
   const text = clears ? "Clear" : "All";
   return (
     <button
@@ -99,6 +110,72 @@ const ToggleButton = ({
     </button>
   );
 };
+
+/** One resource row. `checked` holds bit `j` for `columns[j]`, so a click re-renders only its row. */
+const Row = memo(
+  ({
+    canEdit,
+    checked,
+    clears,
+    columns,
+    errors,
+    onCell,
+    onToggle,
+    ready,
+    row,
+    targets,
+  }: {
+    canEdit: boolean;
+    checked: number;
+    clears: boolean;
+    columns: readonly MatrixColumn[];
+    errors: readonly string[] | undefined;
+    onCell: (event: ChangeEvent<HTMLInputElement>) => void;
+    onToggle: (targets: readonly Grant[]) => void;
+    ready: boolean;
+    row: MatrixRow;
+    targets: readonly Grant[];
+  }) => (
+    <tr>
+      <th scope="row">
+        {row.label}
+        {keyed(errors ?? []).map(({ key, message }) => (
+          <span className="roles-matrix__error" key={key} role="alert">
+            {message}
+          </span>
+        ))}
+      </th>
+      {columns.map((column, bit) => {
+        const mode = row.cells[column.action];
+        return (
+          <td key={column.action}>
+            {mode === undefined ? (
+              <span className="roles-matrix__sr">Not applicable</span>
+            ) : (
+              <input
+                aria-label={`${row.label}: ${column.label}`}
+                checked={(checked & (1 << bit)) !== 0}
+                disabled={!ready || mode === "fixed"}
+                onChange={onCell}
+                type="checkbox"
+                value={`${row.id}#${column.action}`}
+              />
+            )}
+          </td>
+        );
+      })}
+      <td>
+        <ToggleButton
+          clears={clears}
+          disabled={!canEdit}
+          onToggle={onToggle}
+          subject={`${row.label} permissions`}
+          targets={targets}
+        />
+      </td>
+    </tr>
+  ),
+);
 
 export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps) => {
   const { value, setValue, errorMessage, showError } = useField<unknown>({
@@ -116,53 +193,85 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
   } | null>(null);
   const id = useId();
 
-  const { cellOf, labelOf } = useMemo(() => {
-    const cellsByValue = new Map<string, Grant>();
-    const labels = new Map<Grant, string>();
-    for (const row of model.rows) {
-      for (const column of model.columns) {
-        if (row.cells[column.action] !== undefined) {
-          const cell: Grant = `${row.id}#${column.action}`;
-          cellsByValue.set(cell, cell);
-          labels.set(cell, `${row.label}: ${column.label}`);
+  const layout = useMemo(() => {
+    const actions = model.columns.map((column) => column.action);
+    const cellOf = new Map<string, Grant>();
+    const labelOf = new Map<Grant, string>();
+    const rows = model.rows.map((row) => {
+      const grid = model.columns.map((column): Grant | null => {
+        if (row.cells[column.action] === undefined) {
+          return null;
         }
-      }
-    }
-    return { cellOf: cellsByValue, labelOf: labels };
+        const cell: Grant = `${row.id}#${column.action}`;
+        cellOf.set(cell, cell);
+        labelOf.set(cell, `${row.label}: ${column.label}`);
+        return cell;
+      });
+      return {
+        row,
+        grid,
+        targets: grantableCells(row, actions),
+        label: row.label.toLowerCase(),
+        slug: row.slug.toLowerCase(),
+      };
+    });
+    const grantable = model.rows.some((row) => Object.values(row.cells).includes("grantable"));
+    return { cellOf, labelOf, rows, grantable };
   }, [model]);
+  const { cellOf, labelOf } = layout;
 
   const ready = view.status === "ready";
   const cells = ready ? view.cells : EMPTY;
-  const canEdit = ready && model.rows.some((row) => Object.values(row.cells).includes("grantable"));
+  const canEdit = ready && layout.grantable;
   const needle = filter.trim().toLowerCase();
-  const visible = model.rows.filter(
-    (row) =>
-      needle === "" ||
-      row.label.toLowerCase().includes(needle) ||
-      row.slug.toLowerCase().includes(needle),
+  const visible = useMemo(
+    () =>
+      layout.rows.filter(
+        (entry) => needle === "" || entry.label.includes(needle) || entry.slug.includes(needle),
+      ),
+    [layout, needle],
+  );
+  const columnTargets = useMemo(
+    () =>
+      model.columns.map((column) =>
+        visible.flatMap((entry) => grantableCells(entry.row, [column.action])),
+      ),
+    [model, visible],
   );
   const describe = (list: readonly Grant[]) =>
     list.map((cell) => labelOf.get(cell) ?? cell).join(", ");
 
-  const run = (op: MatrixOp) => {
-    if (view.status !== "ready") {
+  const latest = useRef({ model, view, setValue });
+  useLayoutEffect(() => {
+    latest.current = { model, view, setValue };
+  });
+
+  const run = useCallback((op: MatrixOp) => {
+    const current = latest.current;
+    if (current.view.status !== "ready") {
       return null;
     }
-    const outcome = applyOp(model, view.cells, op);
-    setValue(outcome.value);
+    const outcome = applyOp(current.model, current.view.cells, op);
+    current.setValue(outcome.value);
     return outcome;
-  };
+  }, []);
 
-  const onToggle = (targets: readonly Grant[]) => {
-    run({ type: "toggle", cells: targets });
-  };
+  const onToggle = useCallback(
+    (targets: readonly Grant[]) => {
+      run({ type: "toggle", cells: targets });
+    },
+    [run],
+  );
 
-  const onCell = (event: ChangeEvent<HTMLInputElement>) => {
-    const cell = cellOf.get(event.currentTarget.value);
-    if (cell) {
-      run({ type: "cell", cell, on: event.currentTarget.checked });
-    }
-  };
+  const onCell = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const cell = cellOf.get(event.currentTarget.value);
+      if (cell) {
+        run({ type: "cell", cell, on: event.currentTarget.checked });
+      }
+    },
+    [cellOf, run],
+  );
 
   const source = model.copySources.find((candidate) => candidate.id === sourceId);
   const onCopy = () => {
@@ -305,15 +414,15 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
           <thead>
             <tr>
               <th scope="col">Resource</th>
-              {model.columns.map((column) => (
+              {model.columns.map((column, bit) => (
                 <th key={column.action} scope="col">
                   {column.label}
                   <ToggleButton
-                    cells={cells}
+                    clears={allChecked(cells, columnTargets[bit] ?? [])}
                     disabled={!canEdit}
                     onToggle={onToggle}
                     subject={`${column.label} on shown resources`}
-                    targets={visible.flatMap((row) => grantableCells(row, [column.action]))}
+                    targets={columnTargets[bit] ?? []}
                   />
                 </th>
               ))}
@@ -323,57 +432,32 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
             </tr>
           </thead>
           {GROUPS.map((group) => {
-            const rows = visible.filter((row) => row.kind === group.kind);
-            return rows.length === 0 ? null : (
+            const entries = visible.filter((entry) => entry.row.kind === group.kind);
+            return entries.length === 0 ? null : (
               <tbody key={group.kind}>
                 <tr>
                   <th colSpan={columnCount} scope="rowgroup">
                     {group.label}
                   </th>
                 </tr>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <th scope="row">
-                      {row.label}
-                      {keyed(placed.byRow.get(row.id) ?? []).map(({ key, message }) => (
-                        <span className="roles-matrix__error" key={key} role="alert">
-                          {message}
-                        </span>
-                      ))}
-                    </th>
-                    {model.columns.map((column) => {
-                      const mode = row.cells[column.action];
-                      const cell: Grant = `${row.id}#${column.action}`;
-                      return (
-                        <td key={column.action}>
-                          {mode === undefined ? (
-                            <span className="roles-matrix__sr">Not applicable</span>
-                          ) : (
-                            <input
-                              aria-label={`${row.label}: ${column.label}`}
-                              checked={cells.has(cell)}
-                              disabled={!ready || mode === "fixed"}
-                              onChange={onCell}
-                              type="checkbox"
-                              value={cell}
-                            />
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td>
-                      <ToggleButton
-                        cells={cells}
-                        disabled={!canEdit}
-                        onToggle={onToggle}
-                        subject={`${row.label} permissions`}
-                        targets={grantableCells(
-                          row,
-                          model.columns.map((column) => column.action),
-                        )}
-                      />
-                    </td>
-                  </tr>
+                {entries.map(({ grid, row, targets }) => (
+                  <Row
+                    canEdit={canEdit}
+                    checked={grid.reduce(
+                      (bits, cell, bit) =>
+                        cell !== null && cells.has(cell) ? bits | (1 << bit) : bits,
+                      0,
+                    )}
+                    clears={allChecked(cells, targets)}
+                    columns={model.columns}
+                    errors={placed.byRow.get(row.id)}
+                    key={row.id}
+                    onCell={onCell}
+                    onToggle={onToggle}
+                    ready={ready}
+                    row={row}
+                    targets={targets}
+                  />
                 ))}
               </tbody>
             );
