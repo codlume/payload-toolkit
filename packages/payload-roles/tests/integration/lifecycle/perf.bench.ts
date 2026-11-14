@@ -4,7 +4,8 @@
 // Run from packages/payload-roles after `pnpm build`:
 //   node tests/integration/lifecycle/perf.bench.ts [--out results.json]
 // Env: BENCH_ITERATIONS (200), BENCH_WARMUP (30), BENCH_COUNT_ITERATIONS (5),
-//      BENCH_BASE_PAGES (1000), BENCH_BULK (20), BENCH_OPS (comma-separated op names; all).
+//      BENCH_BASE_PAGES (1000), BENCH_BULK (20), BENCH_OPS (comma-separated op names; all),
+//      BENCH_WIDE (1 gives every seeded page an array of five rows and a text list; off).
 //
 // Two passes over one Payload instance. The timing pass measures each operation with nothing
 // wrapped. The counting pass then wraps every `payload.db` method and `enforcer.subject` and
@@ -15,10 +16,14 @@ import { readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { performance } from "node:perf_hooks";
 
-import type { Payload } from "payload";
+import type { CollectionConfig, Payload } from "payload";
 
 import { type Actor, as, login, rest, seedRole, seedUser } from "../../helpers/actors.ts";
-import { createTestPayload, defaultRolesOptions } from "../../helpers/payload.ts";
+import {
+  createTestPayload,
+  defaultRolesOptions,
+  fixtureCollections,
+} from "../../helpers/payload.ts";
 
 type Id = number | string;
 type Row = Record<string, unknown>;
@@ -34,6 +39,7 @@ const COUNT_ITERATIONS = envInt("BENCH_COUNT_ITERATIONS", 5);
 const BASE_PAGES = envInt("BENCH_BASE_PAGES", 1000);
 const BULK = envInt("BENCH_BULK", 20);
 const ONLY_OPS = process.env.BENCH_OPS?.split(",").filter(Boolean);
+const WIDE = process.env.BENCH_WIDE === "1";
 const outIndex = process.argv.indexOf("--out");
 const OUT = outIndex === -1 ? undefined : process.argv[outIndex + 1];
 
@@ -56,11 +62,41 @@ const packageDir = new URL("../../../", import.meta.url);
 const distFile = new URL("dist/index.mjs", packageDir).pathname;
 const distLines = readFileSync(distFile, "utf8").split("\n");
 
+/** The fixture page has one text field. A real page also has rows in other tables. */
+const widePages = (): CollectionConfig[] => {
+  const collections = fixtureCollections();
+  collections
+    .find((collection) => collection.slug === "pages")
+    ?.fields.push(
+      {
+        name: "sections",
+        type: "array",
+        fields: [
+          { name: "heading", type: "text" },
+          { name: "body", type: "textarea" },
+        ],
+      },
+      { name: "tags", type: "text", hasMany: true },
+    );
+  return collections;
+};
+
 const context = await createTestPayload({
   name: "lifecycle-perf",
   roles: { ...defaultRolesOptions(), debug: false },
+  ...(WIDE && { collections: widePages() }),
 });
 const { payload } = context;
+
+const pageExtras: Row = WIDE
+  ? {
+      sections: Array.from({ length: 5 }, (_unused, index) => ({
+        body: `body ${index} `.repeat(40),
+        heading: `heading ${index}`,
+      })),
+      tags: ["alpha", "beta", "gamma"],
+    }
+  : {};
 
 await seedUser(payload, { email: "bootstrap@example.com" });
 const memberRole = await seedRole(payload, "pages-all", {
@@ -125,7 +161,10 @@ const stored = (id: Id) =>
   payload.db.findOne<Row & { id: Id }>({ collection: "pages", where: { id: { equals: id } } });
 
 const seedPage = async (title: string, status: "draft" | "published" = "published") => {
-  const page = await payload.create({ collection: "pages", data: { _status: status, title } });
+  const page = await payload.create({
+    collection: "pages",
+    data: { ...pageExtras, _status: status, title },
+  });
   return page.id;
 };
 
@@ -773,6 +812,7 @@ const report = {
       countIterations: COUNT_ITERATIONS,
       basePages: BASE_PAGES,
       bulk: BULK,
+      wide: WIDE,
       rolesDebug: false,
     },
     sides: {
