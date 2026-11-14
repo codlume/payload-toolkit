@@ -846,7 +846,6 @@ test("neither the pre-access check nor the access floor refuses a write the stor
   const subsets = Array.from({ length: 2 ** actions.length }, (_unused, mask) =>
     actions.filter((_action, bit) => (mask & (1 << bit)) !== 0),
   );
-  /** `planned` is the request before access; `asked` carries the data Payload asks access with. */
   const admits = (
     res: RulesResource,
     planned: RequestView,

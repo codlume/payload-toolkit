@@ -69,7 +69,6 @@ type Frame = {
   readonly bodyKeys: readonly string[];
   /** The raw `draft` flag. Restore reads it before any hook runs (restoreVersion.js:24). */
   readonly draft: boolean;
-  /** The request the operation began on, before an app hook could hand Payload another one. */
   readonly began: PayloadRequest;
   plan: null | Plan;
 };
@@ -201,7 +200,6 @@ const viewOf = (frame: Frame, source: Record<string, unknown>, files: boolean): 
   data: isRecord(source.data) ? source.data : undefined,
 });
 
-/** The columns `settleBefore` reads, so a row read fetches no other field and joins no table. */
 const stateSelect = (resource: Resource): SelectIncludeType => ({
   ...(resource.drafts && { [STATUS]: true }),
   ...(resource.trash && { deletedAt: true }),
@@ -225,7 +223,6 @@ type PlanArgs = {
   enforcer: Enforcer;
   operation: string;
   args: unknown;
-  /** The request the operation's hooks leave it with; its frame is settled and found under it. */
   req: PayloadRequest;
   files: Files;
 };

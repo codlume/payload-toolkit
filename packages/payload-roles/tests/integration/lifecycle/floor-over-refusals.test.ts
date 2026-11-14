@@ -1,5 +1,3 @@
-// Transitions the v1 table allows that the access floor refuses before the stored row is read.
-// Found by the lifecycle sweep (sweep.test.ts, seeds 1 and 2).
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { type Actor, seedRole, seedUser } from "../../helpers/actors.ts";
@@ -38,7 +36,6 @@ const mainRow = async (id: number | string) => {
   return { [STATUS]: row?.[STATUS], deletedAt: row?.deletedAt ?? null };
 };
 
-/** A draft page whose second version is a trashed published snapshot. */
 const pageWithTrashedSnapshot = async () => {
   const { payload } = context;
   const { id } = await payload.create({
@@ -84,7 +81,6 @@ describe("restoring a trashed published snapshot leaves the page in the trash, n
   });
 });
 
-/** A trashed draft whose latest version a draft save took out of the trash. */
 const trashedBehindUntrashedVersion = async () => {
   const { payload } = context;
   const { id } = await payload.create({
@@ -123,7 +119,6 @@ describe("a live write that takes a trashed page out of the trash through its la
   });
 });
 
-/** An untrashed draft whose latest version a draft save put in the trash. */
 const untrashedBehindTrashedVersion = async () => {
   const { payload } = context;
   const { id } = await payload.create({
@@ -136,8 +131,6 @@ const untrashedBehindTrashedVersion = async () => {
   return id;
 };
 
-// The sweep did not find this one. It is the same fault with `trash: true`, where the access
-// floor refused the write too.
 describe("a status write that moves a page into the trash through its latest version", () => {
   test("a trusted write stores it trashed", async () => {
     const id = await untrashedBehindTrashedVersion();

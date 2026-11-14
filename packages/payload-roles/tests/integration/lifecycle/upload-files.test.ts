@@ -27,7 +27,6 @@ const staticDir = mkdtempSync(path.join(tmpdir(), "roles-lifecycle-upload-files-
 const onDisk = () => readdirSync(staticDir).sort();
 
 let context: TestPayload;
-/** Holds update, publish and unpublish, and no trash. */
 let editor: Actor;
 
 beforeAll(async () => {
@@ -77,14 +76,12 @@ const mediaRow = (id: Id) =>
     where: { id: { equals: id } },
   });
 
-/** The main row and the latest version are both in the trash. */
 const trashed = async (name: string, status: "draft" | "published") => {
   const id = await seedMedia(name, status);
   await context.payload.update({ collection: "media", data: { deletedAt: TRASHED }, id });
   return id;
 };
 
-/** A trashed upload whose latest version the editor's own draft save took out of the trash. */
 const trashedBehindUntrashedVersion = async (name: string) => {
   const id = await trashed(name, "published");
   await context.payload.update({
@@ -99,7 +96,6 @@ const trashedBehindUntrashedVersion = async (name: string) => {
   return id;
 };
 
-/** An untrashed upload whose latest version a trusted draft save put in the trash. */
 const untrashedBehindTrashedVersion = async (name: string) => {
   const id = await seedMedia(name, "published");
   await context.payload.update({
@@ -113,7 +109,6 @@ const untrashedBehindTrashedVersion = async (name: string) => {
 
 type Options = { data?: Record<string, unknown>; draft?: boolean; trash?: boolean };
 
-/** The editor's update with a new file, by id or as a bulk update of that one document. */
 const replaceFile = async (
   id: Id,
   bulk: boolean,

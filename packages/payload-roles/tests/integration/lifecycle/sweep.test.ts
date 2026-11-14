@@ -1,11 +1,6 @@
-// Opt-in seeded invariant sweep of the lifecycle transition table. Random walks of writes on one
-// page and the settings global, each checked against an independent model of the approved v1
-// table and of how Payload moves the stored rows.
-//
-//   LIFECYCLE_SWEEP_SEQUENCES=500 LIFECYCLE_SWEEP_SEED=1 [LIFECYCLE_SWEEP_FROM=0] \
-//     pnpm build && vitest run tests/integration/lifecycle/sweep.test.ts
-//
-// A violation prints the seed, the sequence index and its steps; FROM=<index> SEQUENCES=1 replays it.
+// Opt-in: skipped unless LIFECYCLE_SWEEP_SEQUENCES is set. Build the package first, then run
+//   LIFECYCLE_SWEEP_SEQUENCES=500 LIFECYCLE_SWEEP_SEED=1 vitest run tests/integration/lifecycle/sweep.test.ts
+// A violation prints the line that replays it alone.
 import {
   type CollectionBeforeOperationHook,
   type CollectionConfig,
@@ -133,7 +128,6 @@ const holds = (actor: Actor, scope: keyof Grants, needs: ReadonlySet<Action>) =>
 
 const UNREACHABLE = ["notFound", "forbidden"] as const;
 
-/** What Payload and the table together say a step does to the model. */
 const expected = (model: Model, { actor, op }: Step): Expected => {
   const unreachable = (accept: readonly Observed[] = UNREACHABLE): Expected => ({
     accept: actor.kind === "member" ? accept : accept.filter((outcome) => outcome !== "forbidden"),
@@ -251,7 +245,6 @@ const required = <T>(value: T | undefined, what: string): T => {
   return value;
 };
 
-/** mulberry32 */
 const prng = (seed: number) => {
   let state = seed >>> 0;
   return () => {
@@ -268,7 +261,6 @@ const chance = (random: Random, p: number) => random() < p;
 const oneOf = <T>(random: Random, items: readonly T[]): T =>
   required(items[Math.floor(random() * items.length)], "a random item");
 
-/** A random role cell set that a role save accepts: publish needs update. */
 const grantsOf = (random: Random, actions: readonly Action[]) => {
   const picked = actions.filter(() => chance(random, 0.5));
   return picked.includes("publish") && !picked.includes("update")
@@ -310,8 +302,8 @@ const opOf = (random: Random, model: Model): Op => {
     };
   }
   if (model.page?.main.trashed && chance(random, 0.5)) {
-    // Steer toward the 23617c0 shape: a draft save clears deletedAt on the latest version only,
-    // then a live write reaches the trashed main row through that version.
+    // Random walks rarely reach this shape on their own: a draft save clears deletedAt on the
+    // latest version only, then a live write reaches the trashed main row through that version.
     const viaLatest = !model.page.versions.at(-1)?.trashed;
     return {
       autosave: false,
@@ -371,10 +363,8 @@ const sequenceRandom = (index: number) => prng(SEED * 0x9e3779b1 + index * 0x85e
 
 let context: TestPayload;
 let superAdmin: User;
-/** One user per cast seat; each sequence rewrites the seat's role. */
 let seats: { role: number | string; user: number | string }[] = [];
 
-/** `slug:<handle>` names the page with that handle, as an app's own id alias would. */
 const resolveAlias: CollectionBeforeOperationHook = async ({ args, req }) => {
   const id: unknown = "id" in args ? args.id : undefined;
   if (typeof id === "string" && id.startsWith("slug:")) {
@@ -433,7 +423,6 @@ afterAll(async () => {
   }
 });
 
-/** The cast's users: members get their seat's role rewritten and a fresh user object. */
 const usersOf = (payload: Payload, cast: readonly Actor[]) =>
   Promise.all(
     cast.map(async (actor, index) => {
@@ -479,7 +468,6 @@ const versionOf = (doc: {
   latest: doc.latest === true,
 });
 
-/** The stored rows, read without access control. */
 const readStored = async (
   pageId: null | number | string,
   settingsTail: number,
@@ -674,7 +662,6 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 2));
 
 type Violation = { index: number; steps: Step[]; detail: string };
 
-/** Observed outcomes by operation, so a green run shows what it exercised. */
 const tally = new Map<string, number>();
 const count = (key: string) => tally.set(key, (tally.get(key) ?? 0) + 1);
 

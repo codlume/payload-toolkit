@@ -1,6 +1,3 @@
-// An app `beforeOperation` hook may hand Payload a new request. A write to a collection or a
-// global with drafts is then still judged on the grants of the user Payload acts for, and only a
-// write that set `overrideAccess` is trusted.
 import {
   type CollectionBeforeOperationHook,
   createLocalReq,
@@ -18,11 +15,6 @@ import {
   type TestPayload,
 } from "../../helpers/payload.ts";
 
-/**
- * How the app hook hands over the new request: on a copy of args, on new args, or in place. Both
- * of the last two at once leaves nothing that ties the final args to the request the operation
- * began on.
- */
 const HANDOVERS = ["copy", "rebuilt", "in place", "in place and rebuilt"] as const;
 
 const STATUS = "_status";
@@ -30,7 +22,6 @@ const TRASHED = "2026-01-01T00:00:00.000Z";
 
 const state: {
   handover: (typeof HANDOVERS)[number] | null;
-  /** Whose request the hook hands over; the user of the request it replaces when null. */
   user: Actor | null;
 } = { handover: null, user: null };
 
@@ -53,7 +44,6 @@ const handOver = async <Args extends object>(
   }
   const next = { ...args, req: swapped };
   if (handover !== "copy") {
-    // An app that builds its own args object copies the string keys it knows.
     for (const key of Object.getOwnPropertySymbols(next)) {
       Reflect.deleteProperty(next, key);
     }
@@ -119,7 +109,6 @@ const publishedPage = async (title: string) =>
   (await context.payload.create({ collection: "pages", data: { [STATUS]: "published", title } }))
     .id;
 
-/** A draft page and the id of the published version it was unpublished from. */
 const unpublishedPage = async (title: string) => {
   const { payload } = context;
   const id = await publishedPage(title);
@@ -136,7 +125,6 @@ const unpublishedPage = async (title: string) => {
   return { id, version: docs[0]?.id ?? "missing" };
 };
 
-/** The page as its latest version holds it, trashed or not. */
 const latestPage = async (id: number | string) => {
   const page = await context.payload.findByID({
     collection: "pages",
@@ -151,7 +139,6 @@ const settingsAre = async (data: { [STATUS]: "draft" | "published"; siteName: st
   await context.payload.updateGlobal({ data, slug: "settings" });
 };
 
-/** The settings global as its latest version holds it. */
 const latestSettings = async () => {
   const settings = await context.payload.findGlobal({ draft: true, slug: "settings" });
   return { [STATUS]: settings[STATUS], siteName: settings.siteName };
