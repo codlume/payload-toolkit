@@ -49,12 +49,20 @@ rewritePermissions.order = Number.MAX_SAFE_INTEGER;
 
 let context: TestPayload;
 let superAdmin: Actor;
+let editor: Actor;
 let role: number | string;
 
 beforeAll(async () => {
   context = await createTestPayload({ name: "stale-permissions", plugins: [rewritePermissions] });
   superAdmin = await seedUser(context.payload, { email: "super@example.com" });
   role = await seedRole(context.payload, "seeded", stale);
+  const rolesEditor = await seedRole(context.payload, "roles-editor", {
+    collections: {
+      pages: { actions: ["read", "update", "publish"] },
+      roles: { actions: ["read", "update"] },
+    },
+  });
+  editor = await seedUser(context.payload, { email: "editor@example.com", roles: [rolesEditor] });
 });
 
 afterAll(() => context.destroy());
@@ -83,6 +91,31 @@ test("a role with invalid stored permissions can be renamed and bulk edited, and
     name: "renamed",
     permissions: stale,
   });
+});
+
+test("an editor who holds the role's valid grants can rename it, and it keeps them", async () => {
+  const renamed = await as(context.payload, editor).update({
+    collection: "roles",
+    data: { name: "renamed by editor" },
+    id: role,
+  });
+
+  expect(renamed.name).toBe("renamed by editor");
+  expect(await stored()).toMatchObject({ name: "renamed by editor", permissions: stale });
+});
+
+test("an editor who sends the invalid stored permissions back is refused at the field", async () => {
+  const paths = await validationPaths(
+    as(context.payload, editor).update({
+      collection: "roles",
+      data: { name: "resent by editor", permissions: stale },
+      id: role,
+    }),
+  );
+
+  expect(paths).toEqual(["permissions"]);
+  expect(await stored()).toMatchObject({ permissions: stale });
+  expect(await stored()).not.toMatchObject({ name: "resent by editor" });
 });
 
 test("stored permissions that arrive in another key order still count as unchanged", async () => {

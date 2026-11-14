@@ -49,13 +49,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isId = (value: unknown): value is SubjectId =>
   typeof value === "string" || typeof value === "number";
 
+const isLocal = (req: { payloadAPI?: unknown }) => req.payloadAPI === "local";
+
 /**
  * A write is trusted only when access is overridden on a request that never left the
  * process. Payload's first-register runs `create({ overrideAccess: true })` on the anonymous
  * HTTP request, so `overrideAccess` alone cannot vouch for the body.
  */
 export const isTrusted = (overrideAccess: boolean | undefined, req: { payloadAPI?: unknown }) =>
-  overrideAccess === true && req.payloadAPI === "local";
+  overrideAccess === true && isLocal(req);
 
 /**
  * What `beforeOperation` records for the per-document hooks of one operation. Trust travels
@@ -70,38 +72,25 @@ type Operation = {
   removed: number;
   /**
    * Grants of the roles this operation has read, by `String(id)`, so a bulk write reads a role
-   * once however many of its users hold it. A write that no record covers has none and
-   * remembers nothing.
+   * once however many of its users hold it.
    */
-  roleGrants?: Map<string, Promise<Grants | undefined>>;
+  roleGrants: Map<string, Promise<Grants | undefined>>;
 };
 
 const scope = createOperationScope<Operation>();
 
 /**
- * The tally for documents no record covers, one per request. Payload runs the documents of a
- * bulk concurrently, so a tally per document would let one bulk remove every super admin.
- */
-const unrecorded = new WeakMap<object, Operation>();
-
-const unrecordedTally = (request: object) => {
-  const tally: Operation = unrecorded.get(request) ?? { raw: {}, superAdmins: null, removed: 0 };
-  unrecorded.set(request, tally);
-  return tally;
-};
-
-/**
- * How one document hook judges its write: untrusted and unseen when no record covers it. Each
- * covering record's raw keys are judged separately on top of the final data, so a record can add
- * a refusal but never hide what is written.
+ * How one document hook judges its write: untrusted, unseen and untallied when no record covers
+ * it. Each covering record's raw keys are judged separately on top of the final data, so a
+ * record can add a refusal but never hide what is written.
  */
 const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
-  const request = requestKeyOf(req);
-  const found = scope.lookup(target, request);
+  const found = scope.lookup(target, requestKeyOf(req));
   return {
-    trusted: found?.trusted ?? false,
+    trusted: found?.trusted === true && isLocal(req),
     raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
-    tally: found?.innermost ?? unrecordedTally(request),
+    records: found?.all ?? [],
+    innermost: found?.innermost,
   };
 };
 
@@ -183,28 +172,26 @@ const createRecorder =
  * Runs after the app's `beforeOperation` hooks and records the id and the request Payload will
  * act on, which an app hook may have changed (for example by resolving an alias, or by returning
  * args with a new `req`). It settles the record whose `settle` it finds on args, then moves and
- * widens every unsettled record of this collection and kind under the request, in case that
- * `settle` was not its own. A moved record stays trusted only if the new request is trusted too.
+ * widens every unsettled record of this collection and kind, in case that `settle` was not its
+ * own.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
-  ({ args, operation, overrideAccess, req }) => {
+  ({ args, operation, req }) => {
     const kind = operationKind(operation);
     if (kind !== undefined) {
       const source: unknown = args;
       const id = isRecord(source) ? namedId(operation, source) : undefined;
-      const acting = isRecord(source) && isRecord(source.req) ? source.req : req;
-      const final = { req: requestKeyOf(acting), trusted: isTrusted(overrideAccess, acting) };
+      const final = requestKeyOf(isRecord(source) && isRecord(source.req) ? source.req : req);
       const settle: unknown = isRecord(source) ? Reflect.get(source, SETTLE) : undefined;
       if (typeof settle === "function" && isRecord(source)) {
         Reflect.deleteProperty(source, SETTLE);
         Reflect.apply(settle, undefined, [id, final]);
       }
       // The settle found may be another operation's (app code can share and copy one args
-      // object across operations), so every other unsettled record still moves, and widens when
-      // it names a different document. Neither narrows, so this can only add to a judgement.
-      scope.rekey(collection, kind, requestKeyOf(req), final);
-      scope.widen(collection, kind, requestKeyOf(req), id);
+      // object across operations), or missing (an app hook can return newly built args), so
+      // every other unsettled record still moves, and widens when it names a different document.
+      scope.widen(collection, kind, final, id);
     }
     return undefined;
   };
@@ -314,6 +301,22 @@ const superAdminsBefore = (ctx: GuardContext, operation: Operation): Promise<num
   return operation.superAdmins;
 };
 
+/**
+ * The records that count the super admins a write lets go: every record that covers it, since
+ * each document of a bulk can carry a nested record of its own. A write that no record covers is
+ * refused instead: Payload runs the documents of a bulk concurrently, so a count each document
+ * kept to itself would let one bulk remove every super admin.
+ */
+const removalRecords = (records: readonly Operation[], ctx: GuardContext) =>
+  records.length > 0 ? records : refuse("unrecorded-removal", ctx);
+
+/**
+ * The fewest super admins any of `records` has left. Call it after the last await, in the turn
+ * that decides and adds the removal, so the documents of a bulk see each other's removals.
+ */
+const superAdminsLeft = (records: readonly Operation[], before: readonly number[]) =>
+  Math.min(...records.map((record, index) => (before[index] ?? 0) - record.removed));
+
 const uniqueIds = (ids: Iterable<SubjectId>) => {
   const seen = new Map<string, SubjectId>();
   for (const id of ids) {
@@ -328,10 +331,10 @@ const uniqueIds = (ids: Iterable<SubjectId>) => {
  */
 const roleGrantsOf = async (
   { enforcer, req }: GuardContext,
-  operation: Operation,
+  operation: Operation | undefined,
   ids: readonly SubjectId[],
 ): Promise<ReadonlyMap<string, Grants>> => {
-  const read = operation.roleGrants;
+  const read = operation?.roleGrants;
   if (!read) {
     return loadRoleGrants(enforcer, req.payload, req, ids);
   }
@@ -425,20 +428,24 @@ const createUsersWriteGuard =
     // Most writes change no role and no credential, and are judged without reading any role.
     const roleGrants = await roleGrantsOf(
       ctx,
-      current.tally,
+      current.innermost,
       uniqueIds(requests.flatMap((request) => roleIdsRead(request))),
     );
     const target = stored ? toTarget(stored, roleGrants) : null;
     const removes = (body: Readonly<Record<string, unknown>>) =>
       target !== null && removesSuperAdmin(body, target, options);
-    const superAdminCount = requests.some(({ raw }) => removes(raw))
-      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
-      : 0;
+    const records = requests.some(({ raw }) => removes(raw))
+      ? removalRecords(current.records, ctx)
+      : [];
+    const before = await Promise.all(records.map((record) => superAdminsBefore(ctx, record)));
+    const superAdminCount = records.length > 0 ? superAdminsLeft(records, before) : 0;
     for (const request of requests) {
       throwDecision(decideUserWrite({ ...request, target, roleGrants, superAdminCount }), ctx);
     }
     if (removes(written)) {
-      current.tally.removed += 1;
+      for (const record of records) {
+        record.removed += 1;
+      }
     }
     return data;
   };
@@ -468,16 +475,16 @@ const createUsersDeleteGuard =
       refuse("target-missing", ctx);
     }
     const target = toTarget(stored, roleGrants);
-    const removal = target.superAdmin && !target.trashed;
-    const superAdminCount = removal
-      ? (await superAdminsBefore(ctx, current.tally)) - current.tally.removed
-      : 0;
+    const records =
+      target.superAdmin && !target.trashed ? removalRecords(current.records, ctx) : [];
+    const before = await Promise.all(records.map((record) => superAdminsBefore(ctx, record)));
+    const superAdminCount = records.length > 0 ? superAdminsLeft(records, before) : 0;
     throwDecision(
       decideUserDelete({ editor: ctx.editor.capabilities, target, superAdminCount }),
       ctx,
     );
-    if (removal) {
-      current.tally.removed += 1;
+    for (const record of records) {
+      record.removed += 1;
     }
   };
 

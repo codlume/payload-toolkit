@@ -200,8 +200,9 @@ with `unpublish` alone cannot unpublish. Grant the full set for now.
 
 - Local API calls default to `overrideAccess: true`. They skip access functions and the guards.
   The guards on users and roles treat a write as trusted only when `overrideAccess` is `true`
-  and the request originated in-process (`req.payloadAPI === "local"`). The lifecycle module
-  states its own rule.
+  and the request originated in-process (`req.payloadAPI === "local"`). If an app
+  `beforeOperation` hook gives the write another `req`, that request must be local too. The
+  lifecycle module states its own rule.
 - A Local API call that passes an HTTP request's `req` keeps that request's origin. The guards then
   judge the body by `req.user`, so app code that sets `superAdmin` or `roles` on behalf of an HTTP
   request needs that request's user to be a super admin.
@@ -259,13 +260,24 @@ Set `debug: true` to log `access_denied`, `guard_denied`, `permissions_dropped` 
   without running `onInit`, a process that skips `onInit` never restores them, and app code that
   adds a hook to a live hook list after startup puts it after the plugin's checks. In each case a
   hook added after the plugin's own runs after its checks, and an id it rewrites there is not
-  judged. Register hooks in the Payload config.
+  judged. A `beforeOperation` hook that replaces `args.req` there leaves the write without the
+  plugin's record of it. The guards then treat that write as untrusted, assume that it changes a
+  password, and refuse it when it would demote, trash or delete a super admin. Register hooks in
+  the Payload config.
 - An app hook that starts another write on the same collection under the same request, for
   example an exported operation called with `disableTransaction: true` or a Local API call that
   passes `req`, from any hook including `afterChange`, makes writes that untrusted records cover
   count as untrusted. The guards then judge them with the editor's grants, and the lifecycle
   module refuses them. A trusted write from app code inside an editor's write therefore needs its
   own Local API request without `req`.
+- A request of its own does not keep a nested write trusted in two cases. Both concern a nested
+  write of the same kind on the same collection as the editor's write, such as an update inside
+  an update, and in both the plugin cannot yet tell which request the editor's write ends on. In
+  the first case, an app `beforeOperation` hook of the editor's write starts the nested write.
+  Start it from a later hook, such as `beforeChange`. In the second case, an app
+  `beforeOperation` hook on that collection returns an args object without the symbol keys of the
+  `args` it received, for example one it built key by key. Return `args` or a copy made with
+  `{ ...args }`.
 - Operations started synchronously from app code, without an `await` between them, stack their
   records in one async context. From about the 64th of them (the 63rd on Node 22) every later
   write in that context is untrusted: the guards judge it with the editor's grants and the
