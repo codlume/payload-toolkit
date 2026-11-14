@@ -186,6 +186,33 @@ test("a forged super admin prop on a member shares one lookup and follows the st
   expect(calls).toEqual(["users", "roles"]);
 });
 
+test("an app's own UnpublishButton owns Unpublish, so the control stays out without a query", async () => {
+  const { payload } = context;
+  const { i18n } = await createLocalReq({}, payload);
+  const user = await viewerProp(payload, actors.full);
+  const slots = [
+    payload.collections.pages?.config.admin.components?.edit,
+    payload.config.globals.find(({ slug }) => slug === "settings")?.admin.components?.elements,
+  ];
+  const ours = slots.map((slot) => slot?.UnpublishButton);
+  const controls = async () => [
+    (await UnpublishControl({ i18n, id: pageId, payload, resource: PAGES, user }))?.type,
+    (await UnpublishControl({ i18n, payload, resource: SETTINGS, user }))?.type,
+  ];
+
+  const apps = [{ path: "app#MyUnpublish" }, "app#MyUnpublish"];
+  slots.forEach((slot, index) => Object.assign(slot ?? {}, { UnpublishButton: apps[index] }));
+  try {
+    const { calls } = await queries(payload, async () => {
+      expect(await controls()).toEqual([undefined, undefined]);
+    });
+    expect(calls).toEqual([]);
+  } finally {
+    slots.forEach((slot, index) => Object.assign(slot ?? {}, { UnpublishButton: ours[index] }));
+  }
+  expect(await controls()).toEqual([UnpublishDocument, UnpublishDocument]);
+});
+
 test("a resource the plugin does not manage keeps stock", async () => {
   const { payload } = context;
   const viewer = await viewerProp(payload, actors.full);
