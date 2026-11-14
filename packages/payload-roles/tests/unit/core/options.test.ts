@@ -66,6 +66,14 @@ test("every configuration problem is reported in one pass", () => {
   ]);
 });
 
+test("the field Payload adds for a forgot-password interval is reserved", () => {
+  const { problems } = resolveOptions(config(), {
+    collections: ["posts"],
+    superAdminField: "resetPasswordRequestedAt",
+  });
+  expect(problems).toEqual(['Field "resetPasswordRequestedAt" on "users" is reserved by Payload.']);
+});
+
 test("no managed target and an unsafe field name are rejected", () => {
   const { problems } = resolveOptions(config(), { rolesField: "1-bad" });
   expect(problems).toEqual([
