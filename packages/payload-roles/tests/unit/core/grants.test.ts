@@ -41,6 +41,15 @@ test("valid cells parse into grants and nothing else", () => {
   expect(issues).toEqual([]);
 });
 
+test("a top-level key named like an inherited object member is reported as malformed", () => {
+  const { grants, issues } = parsePermissions({ constructor: {}, toString: {} }, registry);
+  expect([...grants]).toEqual([]);
+  expect(issues.map((issue) => `${issue.path}:${issue.reason}`).toSorted()).toEqual([
+    "permissions.constructor:malformed",
+    "permissions.toString:malformed",
+  ]);
+});
+
 test("malformed, unknown and inapplicable cells are dropped with a path each", () => {
   const { grants, issues } = parsePermissions(
     {

@@ -28,6 +28,7 @@ import {
   decideUserWrite,
   type ForbiddenReason,
   removesSuperAdmin,
+  sameValue,
   SENSITIVE_KEYS,
   type UserTarget,
 } from "./guards.ts";
@@ -51,7 +52,7 @@ const isId = (value: unknown): value is SubjectId =>
  * process. Payload's first-register runs `create({ overrideAccess: true })` on the anonymous
  * HTTP request, so `overrideAccess` alone cannot vouch for the body.
  */
-export const isTrusted = (overrideAccess: boolean | undefined, req: PayloadRequest) =>
+export const isTrusted = (overrideAccess: boolean | undefined, req: { payloadAPI?: unknown }) =>
   overrideAccess === true && req.payloadAPI === "local";
 
 /**
@@ -70,16 +71,29 @@ type Operation = {
 const scope = createOperationScope<Operation>();
 
 /**
- * How one document hook judges its write: untrusted with nothing recorded when no record covers
- * it. Each covering record's raw keys are judged separately on top of the final data, so a record
- * can add a refusal but never hide what is written.
+ * The tally for documents no record covers, one per request. Payload runs the documents of a
+ * bulk concurrently, so a tally per document would let one bulk remove every super admin.
+ */
+const unrecorded = new WeakMap<object, Operation>();
+
+const unrecordedTally = (request: object) => {
+  const tally: Operation = unrecorded.get(request) ?? { raw: {}, superAdmins: null, removed: 0 };
+  unrecorded.set(request, tally);
+  return tally;
+};
+
+/**
+ * How one document hook judges its write: untrusted and unseen when no record covers it. Each
+ * covering record's raw keys are judged separately on top of the final data, so a record can add
+ * a refusal but never hide what is written.
  */
 const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
-  const found = scope.lookup(target, requestKeyOf(req));
+  const request = requestKeyOf(req);
+  const found = scope.lookup(target, request);
   return {
     trusted: found?.trusted ?? false,
-    raws: found?.all.map(({ raw }) => raw) ?? [],
-    tally: found?.innermost ?? { raw: {}, superAdmins: null, removed: 0 },
+    raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
+    tally: found?.innermost ?? unrecordedTally(request),
   };
 };
 
@@ -105,6 +119,12 @@ const redact = (raw: Record<string, unknown>) =>
   typeof raw.password === "string" && raw.password !== ""
     ? { ...raw, password: SENT_PASSWORD }
     : raw;
+
+/**
+ * The body judged for a write that no record covers. The guards did not see what the client
+ * sent, and a sent password is the one thing the final data cannot show, so they assume one.
+ */
+const UNSEEN: Readonly<Record<string, unknown>> = { password: SENT_PASSWORD };
 
 type CollectionOperationArgs = Parameters<CollectionBeforeOperationHook>[0];
 
@@ -147,26 +167,30 @@ const createRecorder =
   };
 
 /**
- * Runs after the app's `beforeOperation` hooks and records the id Payload will act on, which an
- * app hook may have changed (for example by resolving an alias). It settles the record whose
- * `settle` it finds on args, then widens every unsettled record of this collection and kind
- * under the request that names another document, in case that `settle` was not its own.
+ * Runs after the app's `beforeOperation` hooks and records the id and the request Payload will
+ * act on, which an app hook may have changed (for example by resolving an alias, or by returning
+ * args with a new `req`). It settles the record whose `settle` it finds on args, then moves and
+ * widens every unsettled record of this collection and kind under the request, in case that
+ * `settle` was not its own. A moved record stays trusted only if the new request is trusted too.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
-  ({ args, operation, req }) => {
+  ({ args, operation, overrideAccess, req }) => {
     const kind = operationKind(operation);
     if (kind !== undefined) {
       const source: unknown = args;
       const id = isRecord(source) ? namedId(operation, source) : undefined;
+      const acting = isRecord(source) && isRecord(source.req) ? source.req : req;
+      const final = { req: requestKeyOf(acting), trusted: isTrusted(overrideAccess, acting) };
       const settle: unknown = isRecord(source) ? Reflect.get(source, SETTLE) : undefined;
       if (typeof settle === "function" && isRecord(source)) {
         Reflect.deleteProperty(source, SETTLE);
-        Reflect.apply(settle, undefined, [id]);
+        Reflect.apply(settle, undefined, [id, final]);
       }
       // The settle found may be another operation's (app code can share and copy one args
-      // object across operations), so every other unsettled record naming a different document
-      // still widens. Widening never narrows, so this can only add to a judgement.
+      // object across operations), so every other unsettled record still moves, and widens when
+      // it names a different document. Neither narrows, so this can only add to a judgement.
+      scope.rekey(collection, kind, requestKeyOf(req), final);
       scope.widen(collection, kind, requestKeyOf(req), id);
     }
     return undefined;
@@ -436,7 +460,12 @@ const createRolesWriteGuard =
     if (operation === "update" && !row) {
       refuse("target-missing", ctx);
     }
-    const written = pick(data, [permissionsField, "key"]);
+    const sent = current.raws.some((raw) => permissionsField in raw);
+    const final = pick(data, [permissionsField, "key"]);
+    // Payload fills unsent fields from the stored document. Permissions the write leaves as
+    // stored are not judged, so a role stays editable when they are no longer valid.
+    const kept = row !== null && !sent && sameValue(final[permissionsField], row[permissionsField]);
+    const written = kept ? pick(final, ["key"]) : final;
     const decide = (raw: Readonly<Record<string, unknown>>) =>
       decideRoleWrite({
         editor: ctx.editor.capabilities,
@@ -451,7 +480,6 @@ const createRolesWriteGuard =
     }
     const { decision, canonical } = decide(written);
     throwDecision(decision, ctx);
-    const sent = current.raws.some((raw) => permissionsField in raw);
     return canonical && sent && isRecord(data) ? { ...data, [permissionsField]: canonical } : data;
   };
 
