@@ -203,7 +203,8 @@ test("disabled mode keeps stock Unpublish everywhere", async () => {
   const pages = config.collections.find(({ slug }) => slug === "pages");
   const settings = config.globals.find(({ slug }) => slug === "settings");
 
-  expect(pages?.admin.components?.edit?.UnpublishButton).toBeDefined();
+  expect(pages?.admin.components?.edit?.UnpublishButton).toBeUndefined();
+  expect(pages?.admin.components?.edit?.beforeDocumentControls).toBeUndefined();
   expect(settings?.admin.components?.elements?.UnpublishButton).toBeUndefined();
   expect(settings?.admin.components?.elements?.beforeDocumentControls).toBeUndefined();
 
