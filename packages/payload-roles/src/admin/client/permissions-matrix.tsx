@@ -55,6 +55,16 @@ const CSS = `
 .roles-matrix input[type="checkbox"]:disabled { cursor: default; }
 `;
 
+/** Keys a message list so a repeated message still gets a unique React key. */
+const keyed = (messages: readonly string[]) => {
+  const seen = new Map<string, number>();
+  return messages.map((message) => {
+    const count = (seen.get(message) ?? 0) + 1;
+    seen.set(message, count);
+    return { key: `${count}:${message}`, message };
+  });
+};
+
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 const Notice = ({ children, error = false }: { children: React.ReactNode; error?: boolean }) => (
@@ -211,8 +221,8 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
         <Notice error>
           <p>The stored permissions have entries the plugin rejects on save:</p>
           <ul>
-            {model.stored.issues.map((issue) => (
-              <li key={`${issue.row ?? ""}${issue.message}`}>{issue.message}</li>
+            {keyed(model.stored.issues.map((issue) => issue.message)).map(({ key, message }) => (
+              <li key={key}>{message}</li>
             ))}
           </ul>
           {canEdit ? (
@@ -243,8 +253,8 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
       {fieldErrors.length > 0 ? (
         <Notice error>
           <ul role="alert">
-            {fieldErrors.map((message) => (
-              <li key={message}>{message}</li>
+            {keyed(fieldErrors).map(({ key, message }) => (
+              <li key={key}>{message}</li>
             ))}
           </ul>
         </Notice>
@@ -324,8 +334,8 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
                   <tr key={row.id}>
                     <th scope="row">
                       {row.label}
-                      {(placed.byRow.get(row.id) ?? []).map((message) => (
-                        <span className="roles-matrix__error" key={message} role="alert">
+                      {keyed(placed.byRow.get(row.id) ?? []).map(({ key, message }) => (
+                        <span className="roles-matrix__error" key={key} role="alert">
                           {message}
                         </span>
                       ))}
