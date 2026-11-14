@@ -37,9 +37,9 @@ beforeAll(async () => {
     ),
     name: "nested-same-document",
   });
-  for (const email of ["first@example.com", "second@example.com", "third@example.com"]) {
-    await seedUser(context.payload, { email, superAdmin: true });
-  }
+  await seedUser(context.payload, { email: "first@example.com", superAdmin: true });
+  await seedUser(context.payload, { email: "second@example.com", superAdmin: true });
+  await seedUser(context.payload, { email: "third@example.com", superAdmin: true });
 });
 
 afterAll(() => context.destroy());

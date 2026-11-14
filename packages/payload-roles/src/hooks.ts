@@ -89,7 +89,8 @@ const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
   return {
     trusted: found?.trusted === true && isLocal(req),
     raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
-    tally: found?.innermost,
+    records: found?.all ?? [],
+    innermost: found?.innermost,
   };
 };
 
@@ -301,12 +302,20 @@ const superAdminsBefore = (ctx: GuardContext, operation: Operation): Promise<num
 };
 
 /**
- * The record that counts the super admins a write's operation lets go. A write that no record
- * covers is refused instead: Payload runs the documents of a bulk concurrently, so a count each
- * document kept to itself would let one bulk remove every super admin.
+ * The records that count the super admins a write lets go: every record that covers it, since
+ * each document of a bulk can carry a nested record of its own. A write that no record covers is
+ * refused instead: Payload runs the documents of a bulk concurrently, so a count each document
+ * kept to itself would let one bulk remove every super admin.
  */
-const removalTally = (tally: Operation | undefined, ctx: GuardContext) =>
-  tally ?? refuse("unrecorded-removal", ctx);
+const removalRecords = (records: readonly Operation[], ctx: GuardContext) =>
+  records.length > 0 ? records : refuse("unrecorded-removal", ctx);
+
+/**
+ * The fewest super admins any of `records` has left. Call it after the last await, in the turn
+ * that decides and adds the removal, so the documents of a bulk see each other's removals.
+ */
+const superAdminsLeft = (records: readonly Operation[], before: readonly number[]) =>
+  Math.min(...records.map((record, index) => (before[index] ?? 0) - record.removed));
 
 const uniqueIds = (ids: Iterable<SubjectId>) => {
   const seen = new Map<string, SubjectId>();
@@ -419,21 +428,24 @@ const createUsersWriteGuard =
     // Most writes change no role and no credential, and are judged without reading any role.
     const roleGrants = await roleGrantsOf(
       ctx,
-      current.tally,
+      current.innermost,
       uniqueIds(requests.flatMap((request) => roleIdsRead(request))),
     );
     const target = stored ? toTarget(stored, roleGrants) : null;
     const removes = (body: Readonly<Record<string, unknown>>) =>
       target !== null && removesSuperAdmin(body, target, options);
-    const tally = requests.some(({ raw }) => removes(raw))
-      ? removalTally(current.tally, ctx)
-      : undefined;
-    const superAdminCount = tally ? (await superAdminsBefore(ctx, tally)) - tally.removed : 0;
+    const records = requests.some(({ raw }) => removes(raw))
+      ? removalRecords(current.records, ctx)
+      : [];
+    const before = await Promise.all(records.map((record) => superAdminsBefore(ctx, record)));
+    const superAdminCount = records.length > 0 ? superAdminsLeft(records, before) : 0;
     for (const request of requests) {
       throwDecision(decideUserWrite({ ...request, target, roleGrants, superAdminCount }), ctx);
     }
-    if (tally && removes(written)) {
-      tally.removed += 1;
+    if (removes(written)) {
+      for (const record of records) {
+        record.removed += 1;
+      }
     }
     return data;
   };
@@ -463,15 +475,16 @@ const createUsersDeleteGuard =
       refuse("target-missing", ctx);
     }
     const target = toTarget(stored, roleGrants);
-    const tally =
-      target.superAdmin && !target.trashed ? removalTally(current.tally, ctx) : undefined;
-    const superAdminCount = tally ? (await superAdminsBefore(ctx, tally)) - tally.removed : 0;
+    const records =
+      target.superAdmin && !target.trashed ? removalRecords(current.records, ctx) : [];
+    const before = await Promise.all(records.map((record) => superAdminsBefore(ctx, record)));
+    const superAdminCount = records.length > 0 ? superAdminsLeft(records, before) : 0;
     throwDecision(
       decideUserDelete({ editor: ctx.editor.capabilities, target, superAdminCount }),
       ctx,
     );
-    if (tally) {
-      tally.removed += 1;
+    for (const record of records) {
+      record.removed += 1;
     }
   };
 
