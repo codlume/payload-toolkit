@@ -2,7 +2,7 @@ import { FieldDescription, FieldLabel, useField } from "@payloadcms/ui";
 import type { JSONFieldClientProps } from "payload";
 import React, { type ChangeEvent, useId, useMemo, useState } from "react";
 
-import type { Grant, MatrixModel, ResourceId, StorageKind } from "../model.ts";
+import type { Grant, MatrixModel, StorageKind } from "../model.ts";
 import {
   applyOp,
   type Cells,
@@ -82,7 +82,7 @@ const ToggleButton = ({
 }: {
   cells: Cells;
   disabled: boolean;
-  onToggle: () => void;
+  onToggle: (targets: readonly Grant[]) => void;
   subject: string;
   targets: readonly Grant[];
 }) => {
@@ -92,7 +92,7 @@ const ToggleButton = ({
     <button
       aria-label={`${text} ${subject}`}
       disabled={disabled || targets.length === 0}
-      onClick={onToggle}
+      onClick={() => onToggle(targets)}
       type="button"
     >
       {text}
@@ -141,7 +141,6 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
       row.label.toLowerCase().includes(needle) ||
       row.slug.toLowerCase().includes(needle),
   );
-  const visibleIds: readonly ResourceId[] = visible.map((row) => row.id);
   const describe = (list: readonly Grant[]) =>
     list.map((cell) => labelOf.get(cell) ?? cell).join(", ");
 
@@ -152,6 +151,10 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
     const outcome = applyOp(model, view.cells, op);
     setValue(outcome.value);
     return outcome;
+  };
+
+  const onToggle = (targets: readonly Grant[]) => {
+    run({ type: "toggle", cells: targets });
   };
 
   const onCell = (event: ChangeEvent<HTMLInputElement>) => {
@@ -308,9 +311,7 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
                   <ToggleButton
                     cells={cells}
                     disabled={!canEdit}
-                    onToggle={() =>
-                      run({ type: "column", action: column.action, rows: visibleIds })
-                    }
+                    onToggle={onToggle}
                     subject={`${column.label} on shown resources`}
                     targets={visible.flatMap((row) => grantableCells(row, [column.action]))}
                   />
@@ -364,7 +365,7 @@ export const PermissionsMatrix = ({ field, path, model }: PermissionsMatrixProps
                       <ToggleButton
                         cells={cells}
                         disabled={!canEdit}
-                        onToggle={() => run({ type: "row", row: row.id })}
+                        onToggle={onToggle}
                         subject={`${row.label} permissions`}
                         targets={grantableCells(
                           row,

@@ -5,13 +5,14 @@ import { grantsOf, parsePermissions, serializePermissions } from "../../../src/g
 import {
   applyOp,
   type Cells,
+  grantableCells,
   type MatrixOp,
   type MatrixView,
   pickerWarning,
   placeFieldErrors,
   readMatrix,
 } from "../../../src/admin/client/matrix.ts";
-import type { CellMode, MatrixModel } from "../../../src/admin/model.ts";
+import type { ActionId, CellMode, MatrixModel, ResourceId } from "../../../src/admin/model.ts";
 import { holding, modelOf, registry } from "./fixture.ts";
 
 const cellsOf = (view: MatrixView): Grant[] => {
@@ -33,6 +34,32 @@ const applicableCells = (model: MatrixModel) => cellsWhere(model, () => true);
 
 const publishWithoutUpdate = (model: MatrixModel, cells: Cells) =>
   model.rows.filter((row) => cells.has(`${row.id}#publish`) && !cells.has(`${row.id}#update`));
+
+const rowOf = (model: MatrixModel, id: ResourceId) => {
+  const row = model.rows.find((candidate) => candidate.id === id);
+  if (!row) {
+    throw new Error(`no row ${id}`);
+  }
+  return row;
+};
+
+/** The cells the UI's row and column All/Clear buttons hand to a toggle. */
+const rowToggle = (model: MatrixModel, id: ResourceId): MatrixOp => ({
+  type: "toggle",
+  cells: grantableCells(
+    rowOf(model, id),
+    model.columns.map(({ action }) => action),
+  ),
+});
+
+const columnToggle = (
+  model: MatrixModel,
+  action: ActionId,
+  rows: readonly ResourceId[],
+): MatrixOp => ({
+  type: "toggle",
+  cells: rows.flatMap((id) => grantableCells(rowOf(model, id), [action])),
+});
 
 const run = (model: MatrixModel, cells: Iterable<Grant>, ...ops: MatrixOp[]) => {
   let current: Cells = new Set(cells);
@@ -204,7 +231,7 @@ describe("writing cells", () => {
   });
 
   test("row and column toggles turn everything on, then off once all are on", () => {
-    const row: MatrixOp = { type: "row", row: "globals:settings" };
+    const row = rowToggle(admin, "globals:settings");
     expect(run(admin, ["globals:settings#read"], row).cells).toEqual([
       "globals:settings#publish",
       "globals:settings#read",
@@ -214,11 +241,7 @@ describe("writing cells", () => {
     ]);
     expect(run(admin, ["globals:settings#read"], row, row).cells).toEqual([]);
 
-    const column: MatrixOp = {
-      type: "column",
-      action: "publish",
-      rows: ["collections:pages", "collections:posts"],
-    };
+    const column = columnToggle(admin, "publish", ["collections:pages", "collections:posts"]);
     expect(run(admin, [], column).cells).toEqual([
       "collections:pages#publish",
       "collections:pages#update",
@@ -226,13 +249,9 @@ describe("writing cells", () => {
     expect(run(admin, [], column, column).cells).toEqual(["collections:pages#update"]);
   });
 
-  test("a column toggle changes only the rows it is given", () => {
+  test("a toggle changes only the cells it is given", () => {
     expect(
-      run(admin, [], {
-        type: "column",
-        action: "read",
-        rows: ["collections:posts", "globals:settings"],
-      }).cells,
+      run(admin, [], columnToggle(admin, "read", ["collections:posts", "globals:settings"])).cells,
     ).toEqual(["collections:posts#read", "globals:settings#read"]);
   });
 
@@ -297,7 +316,7 @@ describe("cells the editor cannot change", () => {
         "globals:settings#read",
       ].toSorted(),
     });
-    expect(run(member, start, { type: "row", row: "collections:posts" }).cells).toEqual(
+    expect(run(member, start, rowToggle(member, "collections:posts")).cells).toEqual(
       ["collections:posts#read", "collections:posts#update", "globals:settings#read"].toSorted(),
     );
     expect(run(member, start, { type: "cell", cell: "globals:settings#read", on: false })).toEqual({
@@ -352,19 +371,21 @@ describe("cells the editor cannot change", () => {
           kind < 0.5
             ? { type: "cell", cell: pick(all), on: next() < 0.5 }
             : kind < 0.65
-              ? { type: "row", row: pick(model.rows).id }
-              : kind < 0.8
-                ? {
-                    type: "column",
-                    action: pick(model.columns).action,
-                    rows: model.rows.filter(() => next() < 0.6).map(({ id }) => id),
-                  }
-                : kind < 0.95
-                  ? {
-                      type: "copy",
-                      source: { id: "s", name: "s", granted: all.filter(() => next() < 0.4) },
-                    }
-                  : { type: "clean" };
+              ? rowToggle(model, pick(model.rows).id)
+              : kind < 0.72
+                ? columnToggle(
+                    model,
+                    pick(model.columns).action,
+                    model.rows.filter(() => next() < 0.6).map(({ id }) => id),
+                  )
+                : kind < 0.8
+                  ? { type: "toggle", cells: all.filter(() => next() < 0.3) }
+                  : kind < 0.95
+                    ? {
+                        type: "copy",
+                        source: { id: "s", name: "s", granted: all.filter(() => next() < 0.4) },
+                      }
+                    : { type: "clean" };
         cells = applyOp(model, cells, op).cells;
         expect(publishWithoutUpdate(model, cells)).toEqual([]);
         for (const [cell, on] of fixed) {
