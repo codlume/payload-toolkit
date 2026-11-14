@@ -28,9 +28,11 @@ export const NO_CAPABILITIES: Capabilities = { kind: "grants", grants: EMPTY_GRA
 export const grantId = (resource: ResourceId, action: ActionId): Grant => `${resource}#${action}`;
 
 export const unionGrants = (all: Iterable<Grants>): Grants => {
-  const cells: Grant[] = [];
+  const cells = new Set<Grant>();
   for (const grants of all) {
-    cells.push(...grants);
+    for (const cell of grants) {
+      cells.add(cell);
+    }
   }
   return grantsOf(cells);
 };
@@ -52,28 +54,57 @@ const KINDS = { collections: "collections", globals: "globals" } as const;
 
 type KindKey = keyof typeof KINDS;
 
+type CellTable = Record<KindKey, Map<string, ReadonlyMap<string, Grant>>>;
+
+const cellTables = new WeakMap<Registry, CellTable>();
+
+/**
+ * Every cell a registry can grant, by kind, slug and action. Built once per registry, so parsing
+ * a role looks each grant id up instead of building its string.
+ */
+const cellTableOf = (registry: Registry): CellTable => {
+  const built = cellTables.get(registry);
+  if (built) {
+    return built;
+  }
+  const table: CellTable = { collections: new Map(), globals: new Map() };
+  for (const [id, resource] of registry) {
+    table[kindKeyOf(id)].set(
+      slugOf(id),
+      new Map([...resource.actions].map((action) => [action, grantId(id, action)])),
+    );
+  }
+  cellTables.set(registry, table);
+  return table;
+};
+
 const parseActions = (
   actions: unknown,
-  resourceId: ResourceId,
-  path: string,
-  registry: Registry,
+  kind: KindKey,
+  slug: string,
+  known: ReadonlyMap<string, Grant> | undefined,
   cells: Grant[],
   issues: CellIssue[],
 ) => {
+  const issue = (action: ActionId | null, reason: CellIssue["reason"]) =>
+    issues.push({
+      path: `permissions.${kind}.${slug}.actions`,
+      resource: `${kind}:${slug}`,
+      action,
+      reason,
+    });
   if (!Array.isArray(actions)) {
-    issues.push({ path, resource: resourceId, action: null, reason: "malformed" });
+    issue(null, "malformed");
     return;
   }
-  const resource = registry.get(resourceId);
   for (const action of actions) {
-    if (typeof action !== "string" || !isActionId(action)) {
-      issues.push({ path, resource: resourceId, action: null, reason: "unknown-action" });
-    } else if (!resource) {
-      issues.push({ path, resource: resourceId, action, reason: "unknown-resource" });
-    } else if (!resource.actions.has(action)) {
-      issues.push({ path, resource: resourceId, action, reason: "inapplicable" });
+    const cell = typeof action === "string" ? known?.get(action) : undefined;
+    if (cell !== undefined) {
+      cells.push(cell);
+    } else if (typeof action !== "string" || !isActionId(action)) {
+      issue(null, "unknown-action");
     } else {
-      cells.push(grantId(resourceId, action));
+      issue(action, known ? "inapplicable" : "unknown-resource");
     }
   }
 };
@@ -102,6 +133,7 @@ export const parsePermissions = (raw: unknown, registry: Registry): Parsed => {
       });
     }
   }
+  const table = cellTableOf(registry);
   for (const kind of Object.values(KINDS)) {
     const entries = raw[kind];
     if (entries === undefined) {
@@ -116,14 +148,18 @@ export const parsePermissions = (raw: unknown, registry: Registry): Parsed => {
       });
       continue;
     }
+    const resources = table[kind];
     for (const [slug, entry] of Object.entries(entries)) {
-      const resourceId: ResourceId = `${kind}:${slug}`;
-      const path = `permissions.${kind}.${slug}`;
       if (!isRecord(entry) || Object.keys(entry).some((key) => key !== "actions")) {
-        issues.push({ path, resource: resourceId, action: null, reason: "malformed" });
+        issues.push({
+          path: `permissions.${kind}.${slug}`,
+          resource: `${kind}:${slug}`,
+          action: null,
+          reason: "malformed",
+        });
         continue;
       }
-      parseActions(entry.actions, resourceId, `${path}.actions`, registry, cells, issues);
+      parseActions(entry.actions, kind, slug, resources.get(slug), cells, issues);
     }
   }
   return { grants: grantsOf(cells), issues };
