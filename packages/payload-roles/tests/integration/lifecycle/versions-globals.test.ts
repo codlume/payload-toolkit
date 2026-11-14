@@ -11,6 +11,7 @@ import {
   seedRole,
   seedUser,
 } from "../../helpers/actors.ts";
+import { rejectsWith } from "../../helpers/expect.ts";
 import { createTestPayload, type TestPayload } from "../../helpers/payload.ts";
 
 const pages = (actions: string[]): Permissions => ({ collections: { pages: { actions } } });
@@ -567,6 +568,38 @@ describe("the settings drafts global", () => {
       stored: storedSettings,
     });
   });
+
+  // settingsFull holds every action a restore can need, so the lifecycle settles it without a
+  // read; settingsPublisherVersions needs the stored state, so the lifecycle reads the version.
+  test.each(["settingsFull", "settingsPublisherVersions"] satisfies ActorName[])(
+    "restoring a missing version id as %s answers not found and writes nothing",
+    async (actor) => {
+      const [versionId] = await seedSettings([published({ siteName: "kept" })]);
+      if (typeof versionId !== "number") {
+        throw new Error("settings versions have numeric ids on SQLite");
+      }
+      const missingId = versionId + 1000;
+      const before = await storedSettings();
+      const { actor: user, token } = actorFor(actor);
+
+      await rejectsWith(
+        context.payload.restoreGlobalVersion({
+          id: String(missingId),
+          overrideAccess: false,
+          slug: "settings",
+          user,
+        }),
+        "NotFound",
+      );
+      const response = await rest(context, token)(
+        "POST",
+        `/globals/settings/versions/${missingId}`,
+      );
+
+      expect(response.status).toBe(404);
+      expect(await storedSettings(), "a missing version writes nothing").toEqual(before);
+    },
+  );
 
   test.each(ALL)(
     "restore over %s without readVersions answers alike for a published, a draft and a missing version id",
