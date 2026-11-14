@@ -196,6 +196,23 @@ const viewOf = (frame: Frame, source: Record<string, unknown>, files: boolean): 
   data: isRecord(source.data) ? source.data : undefined,
 });
 
+/** The columns `settleBefore` reads, so a row read fetches no other field and joins no table. */
+const stateSelect = (resource: Resource): SelectIncludeType => ({
+  ...(resource.drafts && { [STATUS]: true }),
+  ...(resource.trash && { deletedAt: true }),
+});
+
+/** A collection document's stored state, from the main table only, trashed rows included. */
+const readState = async (resource: Resource, req: PayloadRequest, id: DefaultDocumentIDType) => {
+  const row: unknown = await req.payload.db.findOne({
+    collection: resource.slug,
+    req,
+    select: stateSelect(resource),
+    where: { id: { equals: id } },
+  });
+  return isRecord(row) ? row : null;
+};
+
 type Files = () => boolean;
 
 type PlanArgs = {
@@ -240,19 +257,25 @@ const plan = async ({ resource, enforcer, operation, args, req, files }: PlanArg
       (action === "update" && self && isId(documentId) && sameId(documentId, subjectId));
   const source = isRecord(args) ? args : {};
   const view = viewOf(frame, source, frame.kind === "update" && files());
-  const facts = requestFacts(resource, view);
-  // Payload deletes and writes an upload's files before beforeChange (G18), so such an update
-  // must hold every possibility of the request as sent. The wider view would ask every file
-  // replacement on a drafts collection with trash for `trash`.
-  const verdict = judge(
-    resource,
-    view.files ? facts : viaLatestVersion(resource, facts),
-    // A restore's `args.id` is the version id, so its parent is unknown here; assume it may be
-    // the member's own user and let beforeChange judge the real target.
-    holdsFor(
-      frame.kind === "update" ? source.id : frame.kind === "restore" ? subjectId : undefined,
-    ),
+  // A restore's `args.id` is the version id, so its parent is unknown here; assume it may be
+  // the member's own user and let beforeChange judge the real target.
+  const holds = holdsFor(
+    frame.kind === "update" ? source.id : frame.kind === "restore" ? subjectId : undefined,
   );
+  const sent = requestFacts(resource, view);
+  // Payload deletes and writes an upload's files before beforeChange (G18), so an update that
+  // changes them must hold every outcome here. A bulk one that saves no draft reads main rows,
+  // which the request as sent describes, or sets `deletedAt` and needs trash for any row
+  // (operations/update.js:155-188). An update by id is settled on its stored row.
+  const facts =
+    view.files && target.id === undefined && !view.draft ? sent : viaLatestVersion(resource, sent);
+  let verdict = judge(resource, facts, holds);
+  if (view.files && verdict.kind === "depends" && target.id !== undefined) {
+    const row = await readState(resource, req, target.id);
+    // Without a stored row Payload finds no document, and answers that itself.
+    verdict =
+      row === null ? { kind: "allow" } : judge(resource, settleBefore(resource, facts, row), holds);
+  }
   if (verdict.kind === "deny" || (view.files && verdict.kind !== "allow")) {
     refuse(enforcer, req, resource, "denied", verdict.kind === "deny" ? verdict.missing : []);
   }
@@ -324,12 +347,6 @@ const check = async ({ resource, enforcer, document, data, req, readRow }: Check
     }
   }
 };
-
-/** The columns `settleBefore` reads, so a row read fetches no other field and joins no table. */
-const stateSelect = (resource: Resource): SelectIncludeType => ({
-  ...(resource.drafts && { [STATUS]: true }),
-  ...(resource.trash && { deletedAt: true }),
-});
 
 type GlobalRestoreArgs = {
   resource: Resource;
@@ -448,7 +465,6 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
   if (!governs(resource)) {
     return {};
   }
-  const select = stateSelect(resource);
   const trailing: CollectionBeforeOperationHook = async ({ args, collection, operation, req }) => {
     await plan({
       resource,
@@ -472,19 +488,7 @@ const collectionHooks: LifecycleModule["collectionHooks"] = (resource, enforcer)
       document: { collection: resource.id, id: id ?? undefined, kind: operation },
       data,
       req,
-      // The main table only, trashed rows included.
-      readRow: async () => {
-        if (id === null) {
-          return null;
-        }
-        const row: unknown = await req.payload.db.findOne({
-          collection: resource.slug,
-          req,
-          select,
-          where: { id: { equals: id } },
-        });
-        return isRecord(row) ? row : null;
-      },
+      readRow: async () => (id === null ? null : readState(resource, req, id)),
     });
     return data;
   };
