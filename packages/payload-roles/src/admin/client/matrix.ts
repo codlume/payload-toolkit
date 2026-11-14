@@ -124,6 +124,20 @@ export const readMatrix = (model: MatrixModel, value: unknown): MatrixView => {
     : { status: "unreadable" };
 };
 
+/** The cells a copy source grants, decoded from its row-aligned bits. */
+export const sourceCells = (model: MatrixModel, source: CopySource): Cells => {
+  const cells = new Set<Grant>();
+  model.rows.forEach((row, index) => {
+    const bits = source.granted[index] ?? 0;
+    model.columns.forEach(({ action }, bit) => {
+      if (row.cells[action] !== undefined && (bits & (1 << bit)) !== 0) {
+        cells.add(grantOf(row.id, action));
+      }
+    });
+  });
+  return cells;
+};
+
 export const grantableCells = (row: MatrixRow, actions: readonly ActionId[]): Grant[] =>
   actions.filter((action) => row.cells[action] === "grantable").map((a) => grantOf(row.id, a));
 
@@ -137,7 +151,7 @@ const intentOf = (model: MatrixModel, cells: Cells, op: MatrixOp): Map<Grant, bo
       return new Map(op.cells.map((cell) => [cell, on]));
     }
     case "copy": {
-      const source = new Set(op.source.granted);
+      const source = sourceCells(model, op.source);
       return new Map(
         model.rows.flatMap((row) =>
           applicable(model, row).map((action): [Grant, boolean] => {

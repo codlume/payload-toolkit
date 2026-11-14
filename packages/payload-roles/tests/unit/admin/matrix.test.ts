@@ -11,6 +11,7 @@ import {
   pickerWarning,
   placeFieldErrors,
   readMatrix,
+  sourceCells,
 } from "../../../src/admin/client/matrix.ts";
 import type { ActionId, CellMode, MatrixModel, ResourceId } from "../../../src/admin/model.ts";
 import { holding, modelOf, registry } from "./fixture.ts";
@@ -60,6 +61,15 @@ const columnToggle = (
   type: "toggle",
   cells: rows.flatMap((id) => grantableCells(rowOf(model, id), [action])),
 });
+
+/** A copy op for a role granting `granted`, encoded the way the server sends it. */
+const copyOf = (granted: readonly Grant[]): MatrixOp => {
+  const [source] = modelOf({ copySources: [{ id: "2", name: "Source", granted }] }).copySources;
+  if (!source) {
+    throw new Error("no copy source");
+  }
+  return { type: "copy", source };
+};
 
 const run = (model: MatrixModel, cells: Iterable<Grant>, ...ops: MatrixOp[]) => {
   let current: Cells = new Set(cells);
@@ -255,25 +265,29 @@ describe("writing cells", () => {
     ).toEqual(["collections:posts#read", "globals:settings#read"]);
   });
 
+  test("a copy source decodes to exactly the grants the server encoded", () => {
+    const granted: Grant[] = [
+      "collections:users#read",
+      "collections:pages#publish",
+      "collections:pages#trash",
+      "globals:settings#readVersions",
+    ];
+    const op = copyOf(granted);
+    expect(op.type === "copy" && [...sourceCells(admin, op.source)].toSorted()).toEqual(
+      granted.toSorted(),
+    );
+  });
+
   test("copy replaces every grantable cell with the source's", () => {
-    const source = {
-      id: "2",
-      name: "Editor",
-      granted: ["collections:posts#read", "collections:posts#update"] satisfies Grant[],
-    };
-    expect(run(admin, ["collections:pages#read"], { type: "copy", source })).toEqual({
+    const copy = copyOf(["collections:posts#read", "collections:posts#update"]);
+    expect(run(admin, ["collections:pages#read"], copy)).toEqual({
       cells: ["collections:posts#read", "collections:posts#update"],
       skipped: [],
     });
   });
 
   test("copying publish without update lands neither and reports publish as skipped", () => {
-    const source = {
-      id: "2",
-      name: "Broken",
-      granted: ["collections:pages#publish"] satisfies Grant[],
-    };
-    expect(run(admin, [], { type: "copy", source })).toEqual({
+    expect(run(admin, [], copyOf(["collections:pages#publish"]))).toEqual({
       cells: [],
       skipped: ["collections:pages#publish"],
     });
@@ -299,12 +313,8 @@ describe("cells the editor cannot change", () => {
 
   test("no op changes a fixed cell, and copy reports the cells it could not set", () => {
     const start: Grant[] = ["collections:posts#update", "globals:settings#read"];
-    const source = {
-      id: "3",
-      name: "Other",
-      granted: ["collections:pages#read", "collections:posts#delete"] satisfies Grant[],
-    };
-    expect(run(member, start, { type: "copy", source })).toEqual({
+    const copy = copyOf(["collections:pages#read", "collections:posts#delete"]);
+    expect(run(member, start, copy)).toEqual({
       cells: [
         "collections:pages#read",
         "collections:posts#update",
@@ -383,7 +393,11 @@ describe("cells the editor cannot change", () => {
                   : kind < 0.95
                     ? {
                         type: "copy",
-                        source: { id: "s", name: "s", granted: all.filter(() => next() < 0.4) },
+                        source: {
+                          id: "s",
+                          name: "s",
+                          granted: model.rows.map(() => Math.floor(next() * 512)),
+                        },
                       }
                     : { type: "clean" };
         cells = applyOp(model, cells, op).cells;
