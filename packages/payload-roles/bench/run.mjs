@@ -351,8 +351,14 @@ const cell = (op, variant, actor, run, share = 1) => {
 };
 
 const docAt = (i) => docIds[i % docIds.length];
-// A roles update that always changes the stored set: all held roles, then all but the last.
-const rolesAt = (i) => (i % 2 === 0 ? heldRoles.slice(0, -1) : heldRoles);
+// A roles update that always changes the stored set: all but the last held role, then all of
+// them. Cells that write the same users share one sequence, so no cell repeats the last write.
+const alternatingRoles = () => {
+  let writes = 0;
+  return () => ((writes += 1) % 2 === 0 ? heldRoles : heldRoles.slice(0, -1));
+};
+const targetRoles = alternatingRoles();
+const bulkRoles = alternatingRoles();
 let unique = 0;
 
 const TRUSTED = { "local-trusted": () => ({}) };
@@ -402,8 +408,8 @@ for (const [actorName, actor] of Object.entries(actors)) {
       });
       assert(doc.name === name, "users update wrote the name");
     });
-    cell("users.update-roles", variant, actorName, async (i) => {
-      const roles = rolesAt(i);
+    cell("users.update-roles", variant, actorName, async () => {
+      const roles = targetRoles();
       const doc = await payload.update({
         collection: "users",
         data: { roles },
@@ -419,10 +425,10 @@ for (const [actorName, actor] of Object.entries(actors)) {
           `users.bulk-update-${label}[${size.bulk}]`,
           variant,
           actorName,
-          async (i) => {
+          async () => {
             const result = await payload.update({
               collection: "users",
-              data: dataAt(i),
+              data: dataAt(),
               depth: 0,
               where: { id: { in: bulkIds } },
               ...access(),
@@ -435,8 +441,7 @@ for (const [actorName, actor] of Object.entries(actors)) {
           0.1,
         );
       bulk("name", () => ({ name: `b${(unique += 1)}` }));
-      // Rounds run every tenth `i`, so alternate on the tens digit to change the roles each time.
-      bulk("roles", (i) => ({ roles: rolesAt(Math.floor(i / 10)) }));
+      bulk("roles", () => ({ roles: bulkRoles() }));
     }
   }
 
@@ -458,8 +463,8 @@ for (const [actorName, actor] of Object.entries(actors)) {
     const json = await okRest(actor.token, "PATCH", `/users/${targetId}?depth=0`, { name });
     assert(json.doc.name === name, "REST users update wrote the name");
   });
-  cell("users.update-roles", "rest", actorName, async (i) => {
-    const roles = rolesAt(i);
+  cell("users.update-roles", "rest", actorName, async () => {
+    const roles = targetRoles();
     const json = await okRest(actor.token, "PATCH", `/users/${targetId}?depth=0`, { roles });
     assert(json.doc.roles.length === roles.length, "REST users update wrote the roles");
   });
@@ -547,8 +552,7 @@ for (const current of cells) {
   const seen = new Map();
   for (let run = 0; run < COUNT_RUNS; run += 1) {
     counting = { sql: 0, pluginSql: 0, db: {}, pluginDb: {} };
-    // Steps of 11 keep both alternations going: `rolesAt(i)` and `rolesAt(Math.floor(i / 10))`.
-    await current.run(1000 + run * 11);
+    await current.run(1000 + run);
     const text = JSON.stringify(counting);
     seen.set(text, { count: (seen.get(text)?.count ?? 0) + 1, queries: counting });
     counting = null;
