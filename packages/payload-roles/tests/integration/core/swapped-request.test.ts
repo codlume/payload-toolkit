@@ -1,13 +1,12 @@
 // An app `beforeOperation` hook may hand Payload a new request. The last-super-admin rule must
-// hold across the documents of one bulk, both when the plugin can follow the operation to that
-// request and when the hook leaves nothing to follow.
+// hold across the documents of one bulk and across writes that share a request, both when the
+// plugin can follow the operation to that request and when it cannot.
 import { createLocalReq, type CollectionBeforeOperationHook, type PayloadRequest } from "payload";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { type Actor, login, rest, seedUser } from "../../helpers/actors.ts";
 import { createTestPayload, fixtureCollections, type TestPayload } from "../../helpers/payload.ts";
 
-/** A copy of args keeps the plugin's record. A swap in place on rebuilt args loses it. */
 const HANDOVERS = ["copy", "in place and rebuilt"] as const;
 
 const state: {

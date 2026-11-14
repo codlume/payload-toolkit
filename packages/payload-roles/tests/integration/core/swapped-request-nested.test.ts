@@ -16,11 +16,20 @@ import { type Actor, as, login, PASSWORD, rest, seedRole, seedUser } from "../..
 import { rejectsWith } from "../../helpers/expect.ts";
 import { createTestPayload, fixtureCollections, type TestPayload } from "../../helpers/payload.ts";
 
-const state = { nest: false };
+const state = { nest: false, sweepFirst: false };
 
 const swapInPlaceAndRebuild: CollectionBeforeOperationHook = async ({ args, operation, req }) => {
   if ((operation !== "update" && operation !== "delete") || req.context.swapped) {
     return args;
+  }
+  if (state.sweepFirst) {
+    state.sweepFirst = false;
+    await req.payload.update({
+      collection: "users",
+      context: { swapped: true },
+      data: {},
+      where: { email: { equals: "nobody@example.com" } },
+    });
   }
   const swapped = await createLocalReq(
     { context: { swapped: true }, ...(req.user && { user: req.user }) },
@@ -105,6 +114,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   state.nest = false;
+  state.sweepFirst = false;
 });
 
 afterAll(() => context.destroy());
@@ -125,6 +135,18 @@ test("an editor cannot change a super admin's password over REST", async () => {
   const response = await call("PATCH", `/users/${target.id}`, { password: "rest attacker" });
 
   expect(await logsIn(target.email, "rest attacker")).toBe(false);
+  expect(await logsIn(target.email, PASSWORD)).toBe(true);
+  expect(response.status).toBe(403);
+});
+
+test("an editor cannot change a super admin's password when the hook first runs a bulk update of its own", async () => {
+  const call = rest(context, await login(context.payload, editor.email));
+  state.nest = true;
+  state.sweepFirst = true;
+
+  const response = await call("PATCH", `/users/${target.id}`, { password: "swept attacker" });
+
+  expect(await logsIn(target.email, "swept attacker")).toBe(false);
   expect(await logsIn(target.email, PASSWORD)).toBe(true);
   expect(response.status).toBe(403);
 });

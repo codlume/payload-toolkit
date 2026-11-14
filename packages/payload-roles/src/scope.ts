@@ -16,28 +16,12 @@ export type OperationTarget = {
 
 type Entry<Data> = {
   target: OperationTarget;
-  /** Set once the id Payload acts on is known, after the app's `beforeOperation` hooks. */
   settled: boolean;
-  /** The request the entry was opened for, then any request an app hook moved its operation to. */
-  requests: object[];
+  requests: WeakSet<object>;
   trusted: boolean;
   data: Data;
   depth: number;
   parent: Entry<Data> | undefined;
-};
-
-/** The request Payload acts on after the app's `beforeOperation` hooks, and whether it is trusted. */
-type FinalRequest = { req: object; trusted: boolean };
-
-/**
- * Makes an entry also answer to the request its operation was moved to. The entry keeps every
- * request it already answers to, so no lookup loses it, and its trust can only go down.
- */
-const follow = (entry: Entry<unknown>, { req, trusted }: FinalRequest) => {
-  if (!entry.requests.includes(req)) {
-    entry.requests.push(req);
-    entry.trusted &&= trusted;
-  }
 };
 
 /** Deeper chains come only from operations started synchronously in one turn; judge them untrusted. */
@@ -121,7 +105,7 @@ export const createOperationScope = <Data>() => {
       const entry: Entry<Data> = {
         target,
         settled: false,
-        requests: [req],
+        requests: new WeakSet([req]),
         trusted,
         data,
         depth: (parent?.depth ?? 0) + 1,
@@ -130,35 +114,18 @@ export const createOperationScope = <Data>() => {
       storage.enterWith(entry);
       // An entry opened without an id names every document; nothing an app hook does to
       // `args.id` afterwards narrows it, since Payload's bulk and restore paths ignore that id.
-      return (id: DefaultDocumentIDType | undefined, final?: FinalRequest) => {
+      return (id: DefaultDocumentIDType | undefined, final = req) => {
         entry.target = { ...entry.target, id: target.id === undefined ? undefined : id };
         entry.settled = true;
-        if (final) {
-          follow(entry, final);
-        }
+        entry.requests.add(final);
       };
     },
     /**
-     * When an operation's own `settle` cannot be found, makes every unsettled entry of that
-     * collection and kind under the request `from` also answer to the request the operation was
-     * moved to. Call it before `widen`, which settles the entries it widens.
-     */
-    rekey: (collection: string, kind: OperationKind, from: object, final: FinalRequest) => {
-      for (let entry = storage.getStore(); entry !== undefined; entry = entry.parent) {
-        if (
-          !entry.settled &&
-          entry.requests.includes(from) &&
-          entry.target.collection === collection &&
-          entry.target.kind === kind
-        ) {
-          follow(entry, final);
-        }
-      }
-    },
-    /**
-     * When an operation's own `settle` cannot be found, makes every unsettled entry of that
-     * collection and kind under the request that names a document other than `id` name every
-     * document, so its data is judged on all of them.
+     * When an operation's own `settle` cannot be found, any unsettled entry of that collection
+     * and kind may be its record, whatever request the entry answers to: an app hook can swap
+     * `args.req` in place, and then nothing ties the operation to the request its entry was
+     * opened for. Makes each of them also answer to `req`, the request the operation ends on,
+     * and name every document unless it names `id`, so its data is judged on all of them.
      */
     widen: (
       collection: string,
@@ -168,16 +135,11 @@ export const createOperationScope = <Data>() => {
     ) => {
       for (let entry = storage.getStore(); entry !== undefined; entry = entry.parent) {
         const { target } = entry;
-        if (
-          !entry.settled &&
-          entry.requests.includes(req) &&
-          target.collection === collection &&
-          target.kind === kind &&
-          target.id !== undefined &&
-          (id === undefined || !maybeSameId(target.id, id))
-        ) {
-          entry.target = { ...target, id: undefined };
-          entry.settled = true;
+        if (!entry.settled && target.collection === collection && target.kind === kind) {
+          entry.requests.add(req);
+          if (target.id !== undefined && (id === undefined || !maybeSameId(target.id, id))) {
+            entry.target = { ...target, id: undefined };
+          }
         }
       }
     },
@@ -186,7 +148,7 @@ export const createOperationScope = <Data>() => {
       const store = storage.getStore();
       const matches: Entry<Data>[] = [];
       for (let entry = store; entry !== undefined; entry = entry.parent) {
-        if (entry.requests.includes(req) && covers(entry, document)) {
+        if (entry.requests.has(req) && covers(entry, document)) {
           matches.push(entry);
         }
       }

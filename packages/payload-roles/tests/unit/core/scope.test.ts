@@ -102,7 +102,7 @@ test("settle makes an entry answer to the request an app hook swapped in, and to
   const swapped = {};
   const settle = scope.open(page(5), request, false, "own");
   expect(scope.lookup(page(5), swapped)).toBeUndefined();
-  settle(5, { req: swapped, trusted: true });
+  settle(5, swapped);
   expect(scope.lookup(page(5), swapped)).toEqual({
     all: ["own"],
     innermost: "own",
@@ -115,21 +115,16 @@ test("settle makes an entry answer to the request an app hook swapped in, and to
   });
 });
 
-describe.each([
-  { expected: true, swappedIs: "trusted", trusted: true },
-  { expected: false, swappedIs: "untrusted", trusted: false },
-])("a trusted entry moved to a request that is $swappedIs", ({ expected, trusted }) => {
-  test(`is ${expected ? "still" : "no longer"} trusted under either request`, () => {
-    const scope = createOperationScope<string>();
-    const swapped = {};
-    const settle = scope.open(page(5), request, true, "own");
-    settle(5, { req: swapped, trusted });
-    expect(scope.lookup(page(5), swapped)?.trusted).toBe(expected);
-    expect(scope.lookup(page(5), request)?.trusted).toBe(expected);
-  });
+test("a moved entry keeps the trust it was opened with, so callers judge the request themselves", () => {
+  const scope = createOperationScope<string>();
+  const swapped = {};
+  const settle = scope.open(page(5), request, true, "own");
+  settle(5, swapped);
+  expect(scope.lookup(page(5), swapped)?.trusted).toBe(true);
+  expect(scope.lookup(page(5), request)?.trusted).toBe(true);
 });
 
-test("rekey moves unsettled entries of the collection and kind, and leaves the others", () => {
+test("widen moves unsettled entries of the collection and kind, whatever request they answer to", () => {
   const scope = createOperationScope<string>();
   const swapped = {};
   scope.open({ collection: "posts", kind: "update", id: 5 }, request, false, "posts");
@@ -137,13 +132,28 @@ test("rekey moves unsettled entries of the collection and kind, and leaves the o
   scope.open(page(5), request, true, "unsettled");
   const settle = scope.open(page(5), request, false, "settled");
   settle(5);
-  scope.rekey("pages", "update", request, { req: swapped, trusted: false });
+  scope.widen("pages", "update", swapped, 5);
   expect(scope.lookup(page(5), swapped)).toEqual({
-    all: ["unsettled"],
+    all: ["unsettled", "other request"],
     innermost: "unsettled",
     trusted: false,
   });
   expect(scope.lookup(page(5), request)?.all).toEqual(["settled", "unsettled"]);
+});
+
+test("an entry that a nested operation widened still follows its own operation to a new request", () => {
+  const scope = createOperationScope<string>();
+  const swapped = {};
+  scope.open(page(5), request, false, "outer");
+  const settleNested = scope.open(page(9), request, true, "nested");
+  settleNested(9);
+  scope.widen("pages", "update", request, 9);
+  scope.widen("pages", "update", swapped, 5);
+  expect(scope.lookup(page(5), swapped)).toEqual({
+    all: ["outer"],
+    innermost: "outer",
+    trusted: false,
+  });
 });
 
 test("widen makes unsettled entries of the collection name every document", () => {
@@ -157,9 +167,8 @@ test("widen makes unsettled entries of the collection name every document", () =
   });
 });
 
-test("widen leaves settled entries and other requests alone", () => {
+test("widen leaves settled entries alone", () => {
   const scope = createOperationScope<string>();
-  scope.open(page(7), {}, false, "other request");
   const settle = scope.open(page(7), request, false, "settled");
   settle(7);
   scope.open(page(5), request, true, "nested");

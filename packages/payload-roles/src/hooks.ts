@@ -49,13 +49,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isId = (value: unknown): value is SubjectId =>
   typeof value === "string" || typeof value === "number";
 
+const isLocal = (req: { payloadAPI?: unknown }) => req.payloadAPI === "local";
+
 /**
  * A write is trusted only when access is overridden on a request that never left the
  * process. Payload's first-register runs `create({ overrideAccess: true })` on the anonymous
  * HTTP request, so `overrideAccess` alone cannot vouch for the body.
  */
 export const isTrusted = (overrideAccess: boolean | undefined, req: { payloadAPI?: unknown }) =>
-  overrideAccess === true && req.payloadAPI === "local";
+  overrideAccess === true && isLocal(req);
 
 /**
  * What `beforeOperation` records for the per-document hooks of one operation. Trust travels
@@ -99,7 +101,7 @@ const judgedOperation = (target: OperationTarget, req: PayloadRequest) => {
   const request = requestKeyOf(req);
   const found = scope.lookup(target, request);
   return {
-    trusted: found?.trusted ?? false,
+    trusted: found?.trusted === true && isLocal(req),
     raws: found?.all.map(({ raw }) => raw) ?? [UNSEEN],
     tally: found?.innermost ?? unrecordedTally(request),
   };
@@ -183,28 +185,26 @@ const createRecorder =
  * Runs after the app's `beforeOperation` hooks and records the id and the request Payload will
  * act on, which an app hook may have changed (for example by resolving an alias, or by returning
  * args with a new `req`). It settles the record whose `settle` it finds on args, then moves and
- * widens every unsettled record of this collection and kind under the request, in case that
- * `settle` was not its own. A moved record stays trusted only if the new request is trusted too.
+ * widens every unsettled record of this collection and kind, in case that `settle` was not its
+ * own.
  */
 const createSettler =
   (collection: string): CollectionBeforeOperationHook =>
-  ({ args, operation, overrideAccess, req }) => {
+  ({ args, operation, req }) => {
     const kind = operationKind(operation);
     if (kind !== undefined) {
       const source: unknown = args;
       const id = isRecord(source) ? namedId(operation, source) : undefined;
-      const acting = isRecord(source) && isRecord(source.req) ? source.req : req;
-      const final = { req: requestKeyOf(acting), trusted: isTrusted(overrideAccess, acting) };
+      const final = requestKeyOf(isRecord(source) && isRecord(source.req) ? source.req : req);
       const settle: unknown = isRecord(source) ? Reflect.get(source, SETTLE) : undefined;
       if (typeof settle === "function" && isRecord(source)) {
         Reflect.deleteProperty(source, SETTLE);
         Reflect.apply(settle, undefined, [id, final]);
       }
       // The settle found may be another operation's (app code can share and copy one args
-      // object across operations), so every other unsettled record still moves, and widens when
-      // it names a different document. Neither narrows, so this can only add to a judgement.
-      scope.rekey(collection, kind, requestKeyOf(req), final);
-      scope.widen(collection, kind, requestKeyOf(req), id);
+      // object across operations), or missing (an app hook can return newly built args), so
+      // every other unsettled record still moves, and widens when it names a different document.
+      scope.widen(collection, kind, final, id);
     }
     return undefined;
   };
