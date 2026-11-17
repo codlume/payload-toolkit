@@ -134,8 +134,9 @@ YouFocusAdminField(b) ==
 
 YouClickPreviewBlock(b) ==
   /\ pPhase = "linked"
+  /\ pFind' = {} /\ pLit' = None
   /\ toA' = Append(toA, b)
-  /\ UNCHANGED <<aLinked, aAwaitsLoad, aSel, aFind, aLit, pPhase, pFind, pLit, toP>>
+  /\ UNCHANGED <<aLinked, aAwaitsLoad, aSel, aFind, aLit, pPhase, toP>>
   /\ pFindStale' = (pFind' # {} /\ pFind' # {b})
   /\ KeepAdminFlags
 
