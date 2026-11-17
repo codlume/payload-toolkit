@@ -469,7 +469,9 @@ export const createBlurHashGeneration = ({
 
       if (!args.req.file) {
         if (Reflect.get(args.context, RESTORING_VERSION) === true) {
-          return args.value ?? null;
+          const versionValue: unknown =
+            args.field.name && args.siblingDocWithLocales?.[args.field.name];
+          return typeof versionValue === "string" ? versionValue : null;
         }
 
         return args.previousValue ?? null;
