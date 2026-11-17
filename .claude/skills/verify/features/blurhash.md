@@ -38,6 +38,6 @@ Preconditions:
 ## Gotchas
 
 - An empty value hides the whole panel, so `No BlurHash is available for this image.` is rare in practice. A failed generation never fails the upload; it stores `null` and logs a warning.
-- `bh-restore` works only for trusted Local API restores (`tests/integration/restore-blurhash.test.ts`). An editor's restore through Admin or REST stores `blurHash: null`, tracked in [#133](https://github.com/codlume/payload-toolkit/issues/133). Until it is fixed, report this journey as failing with that issue and do not weaken the check.
+- `bh-restore` brings back the version's `blurHash` for an editor's restore through Admin or REST and for a trusted Local API restore. `tests/integration/restore-blurhash.test.ts` covers both.
 - Uploads go to localstack under the run's `tests/verify-*` prefix. `verify stop` deletes that prefix.
 - The state model is in `docs/statecharts/media-placeholder.md`.

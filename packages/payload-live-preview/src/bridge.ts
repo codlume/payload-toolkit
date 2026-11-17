@@ -33,7 +33,10 @@ export const createPreviewBridge = ({ serverURL, debug = false }: BridgeOptions)
       const ids = markedAncestors(event.target)
         .map((element) => element.dataset.payloadBlock!)
         .filter(Boolean);
-      if (ids.length) channel.locate(ids);
+      if (!ids.length) return;
+      work.cancel();
+      visuals?.cancelReveal();
+      channel.locate(ids);
     };
     const pointerover = (event: PointerEvent) =>
       visuals?.hover(markedAncestors(event.target)[0] ?? null);

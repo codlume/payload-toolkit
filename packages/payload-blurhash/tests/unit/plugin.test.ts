@@ -267,6 +267,7 @@ describe("blurHashPlugin", () => {
     })(sourceConfig);
     const hooks = [getBlurHashHook(transformed, "media"), getBlurHashHook(transformed, "assets")];
     const args = {
+      context: {},
       data: { mimeType: "image/jpeg" },
       req: { file: { data: input }, payload: { config: { sharp } } },
     };
@@ -292,6 +293,7 @@ describe("blurHashPlugin", () => {
     const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
     const hook = getBlurHashHook(transformed, "media");
     const args = {
+      context: {},
       data: { mimeType: "image/jpeg" },
       req: { file: { data: input }, payload: { config: { sharp } } },
     };
@@ -318,6 +320,7 @@ describe("blurHashPlugin", () => {
     const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
     const outcome = await Reflect.apply(getBlurHashHook(transformed, "media"), undefined, [
       {
+        context: {},
         data: { mimeType: "image/jpeg" },
         req: {
           file: { data: Buffer.alloc(25 * 1024 * 1024 + 1) },
@@ -347,6 +350,7 @@ describe("blurHashPlugin", () => {
     const transformed = await blurHashPlugin({ collections: ["media"] })(sourceConfig);
     const outcome = await Reflect.apply(getBlurHashHook(transformed, "media"), undefined, [
       {
+        context: {},
         data: { mimeType: "image/jpeg" },
         req: { file: { data: input }, payload: { config: { sharp } } },
       },
@@ -370,6 +374,7 @@ describe("blurHashPlugin", () => {
 
     void Reflect.apply(getBlurHashHook(transformed, "media"), undefined, [
       {
+        context: {},
         data: { mimeType: "image/jpeg" },
         req: { file: { data: input }, payload: { config: { sharp } } },
       },

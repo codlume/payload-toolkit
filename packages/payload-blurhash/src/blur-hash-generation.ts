@@ -463,15 +463,17 @@ export const createBlurHashGeneration = ({
 
   return (collectionSlug: string): FieldHook =>
     async (args) => {
+      if (Reflect.get(args.context, RESTORING_VERSION) === true) {
+        const versionValue: unknown =
+          args.field.name && args.siblingDocWithLocales?.[args.field.name];
+        return typeof versionValue === "string" ? versionValue : null;
+      }
+
       if (isFileRemoval(args.data)) {
         return null;
       }
 
       if (!args.req.file) {
-        if (Reflect.get(args.context, RESTORING_VERSION) === true) {
-          return args.value ?? null;
-        }
-
         return args.previousValue ?? null;
       }
 

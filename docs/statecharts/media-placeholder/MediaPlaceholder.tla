@@ -11,12 +11,12 @@ OlderVersion == [image |-> "red", placeholder |-> "red"]
 VARIABLES image, placeholder, lastModifiedBy, blurHashOn, restored, lastEditor
 vars == <<image, placeholder, lastModifiedBy, blurHashOn, restored, lastEditor>>
 
+\* value is what the caller sent. A restore reads the stored version instead,
+\* and ignores any file or removal sent with it.
 BlurHashHook(removal, hasFile, restoring, value, previous, newImage) ==
-  IF removal THEN "none"
-  ELSE IF ~hasFile
-    THEN IF restoring
-           THEN (IF value = "undefined" THEN "none" ELSE value)
-           ELSE previous
+  IF restoring THEN OlderVersion.placeholder
+  ELSE IF removal THEN "none"
+  ELSE IF ~hasFile THEN previous
   ELSE IF ~blurHashOn THEN "none"
   ELSE newImage
 
@@ -61,7 +61,7 @@ AnaRemovesFile ==
   /\ lastEditor' = "ana"
   /\ UNCHANGED blurHashOn
 
-\* Field access strips the version's placeholder before the restore branch reads it.
+\* Field access strips the version's placeholder from Ana's data.
 AnaRestoresVersion ==
   /\ image' = OlderVersion.image
   /\ placeholder' = BlurHashHook(FALSE, FALSE, TRUE, "undefined", placeholder, "none")

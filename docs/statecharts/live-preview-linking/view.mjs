@@ -41,8 +41,6 @@ const isDuplicateArrow = (action, from) => {
       return fading;
     case "PreviewGetsLocate":
       return p === "Highlighting the block in the preview";
-    case "YouClickPreviewBlock":
-      return p === "Still finding the Admin block after your click";
   }
   return false;
 };
