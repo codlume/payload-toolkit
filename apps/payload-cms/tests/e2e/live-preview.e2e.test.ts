@@ -82,6 +82,31 @@ for (const route of previewRoutes) {
     expect(sent()).toBe(beforeClick + 1);
   });
 
+  test(`${route} a preview click stops the preview's scroll to an earlier Admin pick`, async ({
+    page,
+  }) => {
+    await login(page);
+    const preview = await openLinkedPreview(page, seededPage.id, route);
+    const first = preview.locator(`[data-payload-block="${seededPage.layout![0]!.id}"]`);
+    const last = preview.locator(`[data-payload-block="${seededPage.layout![5]!.id}"]`);
+    // A pointer click can miss while the blocks move, so the page clicks the first block as the scroll starts.
+    await first.evaluate((block) =>
+      window.addEventListener(
+        "scroll",
+        () => block.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+        { once: true },
+      ),
+    );
+    await page.locator("#field-layout__5__content").focus();
+    await expect(page.locator("#layout-row-0 .blocks-field__row")).toHaveAttribute(
+      "data-payload-block-highlight",
+      "",
+    );
+    // A smooth scroll takes up to 1.5 s, so an unstopped one has brought the last block into view by now.
+    await page.waitForTimeout(2000);
+    await expect(last).not.toBeInViewport();
+  });
+
   test(`${route} public pages omit markers and an unauthenticated preview entry rejects access`, async ({
     page,
     request,
