@@ -11,11 +11,12 @@ OlderVersion == [image |-> "red", placeholder |-> "red"]
 VARIABLES image, placeholder, lastModifiedBy, blurHashOn, restored, lastEditor
 vars == <<image, placeholder, lastModifiedBy, blurHashOn, restored, lastEditor>>
 
-\* value is what the caller sent. A restore reads the stored version instead.
+\* value is what the caller sent. A restore reads the stored version instead,
+\* and ignores any file or removal sent with it.
 BlurHashHook(removal, hasFile, restoring, value, previous, newImage) ==
-  IF removal THEN "none"
-  ELSE IF ~hasFile
-    THEN IF restoring THEN OlderVersion.placeholder ELSE previous
+  IF restoring THEN OlderVersion.placeholder
+  ELSE IF removal THEN "none"
+  ELSE IF ~hasFile THEN previous
   ELSE IF ~blurHashOn THEN "none"
   ELSE newImage
 
