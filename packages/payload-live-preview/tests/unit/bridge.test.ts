@@ -166,6 +166,49 @@ test("a renewed Admin handshake cancels pending preview locates before new local
   expect(translated.hasAttribute("data-payload-block-highlight")).toBe(true);
 });
 
+test("a preview click cancels the pending find for an earlier Admin pick", async () => {
+  vi.useFakeTimers();
+  const { message, parent, element } = setupPeer();
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["earlier"] });
+  parent.postMessage.mockClear();
+  element.click();
+  expect(parent.postMessage.mock.calls).toEqual([
+    [{ ...ready, event: "locate", ids: ["one"] }, "https://admin.example"],
+  ]);
+  document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="earlier">Earlier</p>');
+  await vi.advanceTimersByTimeAsync(500);
+  expect(document.querySelector("[data-payload-block-highlight]")).toBeNull();
+});
+
+test("a preview click cancels the scroll to an earlier Admin pick", async () => {
+  vi.useFakeTimers();
+  const { message, element } = setupPeer();
+  document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="below">Below</p>');
+  const below = document.querySelector<HTMLElement>('[data-payload-block="below"]')!;
+  // jsdom has no layout or scrolling; place this block under the viewport.
+  vi.spyOn(below, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 5000, 100, 100));
+  const scrollIntoView = vi.fn();
+  below.scrollIntoView = scrollIntoView;
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["below"] });
+  expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  element.click();
+  await vi.advanceTimersByTimeAsync(700);
+  expect(below.hasAttribute("data-payload-block-highlight")).toBe(false);
+});
+
+test("a preview click clears the highlight of an earlier Admin pick", () => {
+  const { message, element } = setupPeer();
+  document.body.insertAdjacentHTML("beforeend", '<p data-payload-block="shown">Shown</p>');
+  const shown = document.querySelector<HTMLElement>('[data-payload-block="shown"]')!;
+  message(ready);
+  message({ ...ready, event: "locate", ids: ["shown"] });
+  expect(shown.hasAttribute("data-payload-block-highlight")).toBe(true);
+  element.click();
+  expect(shown.hasAttribute("data-payload-block-highlight")).toBe(false);
+});
+
 test("missing targets expire after two seconds instead of locating a later rendering", async () => {
   vi.useFakeTimers();
   const log = vi.spyOn(console, "debug");
