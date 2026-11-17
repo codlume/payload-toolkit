@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.4...payload-blurhash-v0.1.5) (2026-11-17)
+
+
+### Bug Fixes
+
+* restore the BlurHash on editor restores and stop the preview's scroll on a preview click ([#136](https://github.com/codlume/payload-toolkit/issues/136)) ([e88c11a](https://github.com/codlume/payload-toolkit/commit/e88c11a402872b023737d4913c832214ebd8f84f)), closes [#133](https://github.com/codlume/payload-toolkit/issues/133) [#134](https://github.com/codlume/payload-toolkit/issues/134)
+
 ## [0.1.4](https://github.com/codlume/payload-toolkit/compare/payload-blurhash-v0.1.3...payload-blurhash-v0.1.4) (2026-09-27)
 
 
