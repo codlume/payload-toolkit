@@ -94,19 +94,28 @@ export const createVisuals = () => {
         flash(element);
         return;
       }
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        cancelScroll();
+      let flashed = false;
+      const show = () => {
+        if (flashed) return;
+        flashed = true;
         flash(element);
       };
-      const fallback = setTimeout(finish, 700);
-      document.addEventListener("scrollend", finish, true);
-      cancelScroll = () => {
+      // A long smooth scroll outlasts this wait, so the reveal stays cancellable until the scroll ends.
+      const fallback = setTimeout(show, 700);
+      const settle = () => {
         clearTimeout(fallback);
-        document.removeEventListener("scrollend", finish, true);
+        document.removeEventListener("scrollend", end, true);
         cancelScroll = noop;
+      };
+      const end = () => {
+        settle();
+        show();
+      };
+      document.addEventListener("scrollend", end, true);
+      cancelScroll = () => {
+        settle();
+        // A scroll to the current position aborts the smooth scroll still in flight.
+        window.scrollTo({ left: window.scrollX, top: window.scrollY, behavior: "instant" });
       };
       scroll(element);
     },
