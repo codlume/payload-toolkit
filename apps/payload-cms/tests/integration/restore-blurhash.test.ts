@@ -168,75 +168,81 @@ describe("restored upload BlurHash", () => {
     },
   );
 
-  test("an editor's REST restore brings back the version's BlurHash", async () => {
-    await payload.create({
-      collection: "users",
-      data: {
-        email: "restore-editor@example.com",
-        name: "Restore Editor",
-        password: "restore-editor-password",
-      },
-    });
-    const login = await payload.login({
-      collection: "users",
-      data: { email: "restore-editor@example.com", password: "restore-editor-password" },
-    });
-
-    if (!login.token) {
-      throw new Error("Expected the restore fixture user to receive a token.");
-    }
-
-    const asEditor = (pathname: string, init: RequestInit = {}) =>
-      handleEndpoints({
-        config: payload.config,
-        request: new Request(`http://localhost/api/media${pathname}`, {
-          ...init,
-          headers: { authorization: `JWT ${login.token}` },
-        }),
+  test.each([
+    { attachment: undefined, editor: "plain", label: "without a file" },
+    { attachment: "editor-attached-green.jpg", editor: "attached", label: "with an attached file" },
+  ])(
+    "an editor's REST restore $label brings back the version's BlurHash",
+    async ({ attachment, editor }) => {
+      const email = `restore-${editor}@example.com`;
+      await payload.create({
+        collection: "users",
+        data: { email, name: "Restore Editor", password: "restore-editor-password" },
+      });
+      const login = await payload.login({
+        collection: "users",
+        data: { email, password: "restore-editor-password" },
       });
 
-    const uploaded = await readCreatedMedia(
-      await asEditor("", {
-        body: await createJpegUpload("editor-red.jpg", { b: 0, g: 0, r: 220 }),
+      if (!login.token) {
+        throw new Error("Expected the restore fixture user to receive a token.");
+      }
+
+      const asEditor = (pathname: string, init: RequestInit = {}) =>
+        handleEndpoints({
+          config: payload.config,
+          request: new Request(`http://localhost/api/media${pathname}`, {
+            ...init,
+            headers: { authorization: `JWT ${login.token}` },
+          }),
+        });
+
+      const uploaded = await readCreatedMedia(
+        await asEditor("", {
+          body: await createJpegUpload(`${editor}-red.jpg`, { b: 0, g: 0, r: 220 }),
+          method: "POST",
+        }),
+      );
+
+      expect(uploaded).toMatchObject({ filename: `${editor}-red.jpg`, status: 201 });
+      expect(uploaded.blurHash).toHaveLength(28);
+
+      const {
+        docs: [version],
+      } = await payload.findVersions({
+        collection: "media",
+        depth: 0,
+        where: { "version.filename": { equals: `${editor}-red.jpg` } },
+      });
+
+      if (!version) {
+        throw new Error("Expected an upload version to restore.");
+      }
+
+      const replaced = await readCreatedMedia(
+        await asEditor(`/${version.parent}`, {
+          body: await createJpegUpload(`${editor}-blue.jpg`, { b: 220, g: 0, r: 0 }),
+          method: "PATCH",
+        }),
+      );
+
+      expect(replaced).toMatchObject({ filename: `${editor}-blue.jpg`, status: 200 });
+      expect(replaced.blurHash).not.toBe(uploaded.blurHash);
+
+      const restoreResponse = await asEditor(`/versions/${version.id}`, {
+        ...(attachment && { body: await createJpegUpload(attachment, { b: 0, g: 220, r: 0 }) }),
         method: "POST",
-      }),
-    );
+      });
+      const storedResponse = await asEditor(`/${version.parent}`);
+      const expected = {
+        body: { blurHash: uploaded.blurHash, filename: `${editor}-red.jpg` },
+        status: 200,
+      };
 
-    expect(uploaded).toMatchObject({ filename: "editor-red.jpg", status: 201 });
-    expect(uploaded.blurHash).toHaveLength(28);
-
-    const {
-      docs: [version],
-    } = await payload.findVersions({
-      collection: "media",
-      depth: 0,
-      where: { "version.filename": { equals: "editor-red.jpg" } },
-    });
-
-    if (!version) {
-      throw new Error("Expected an upload version to restore.");
-    }
-
-    const replaced = await readCreatedMedia(
-      await asEditor(`/${version.parent}`, {
-        body: await createJpegUpload("editor-blue.jpg", { b: 220, g: 0, r: 0 }),
-        method: "PATCH",
-      }),
-    );
-
-    expect(replaced).toMatchObject({ filename: "editor-blue.jpg", status: 200 });
-    expect(replaced.blurHash).not.toBe(uploaded.blurHash);
-
-    const restoreResponse = await asEditor(`/versions/${version.id}`, { method: "POST" });
-    const storedResponse = await asEditor(`/${version.parent}`);
-    const expected = {
-      body: { blurHash: uploaded.blurHash, filename: "editor-red.jpg" },
-      status: 200,
-    };
-
-    expect({
-      restored: { body: await restoreResponse.json(), status: restoreResponse.status },
-      stored: { body: await storedResponse.json(), status: storedResponse.status },
-    }).toMatchObject({ restored: expected, stored: expected });
-  });
+      expect({
+        restored: { body: await restoreResponse.json(), status: restoreResponse.status },
+        stored: { body: await storedResponse.json(), status: storedResponse.status },
+      }).toMatchObject({ restored: expected, stored: expected });
+    },
+  );
 });
