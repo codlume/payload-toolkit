@@ -1,6 +1,6 @@
 # Live preview linking
 
-The Admin form and the Live Preview iframe each start unlinked, link after the ready and ack handshake, and then find and highlight blocks. Nothing happens on either side before both have linked. A reload sends both back to unlinked and clears the Admin selection and any pending find, so no stale timeout fires later. Focusing a field in Admin cancels Admin's own pending find, and a click reported from the preview makes Admin forget its selection. A click in the preview cancels the preview's own pending find and any highlight, so the preview never jumps to an older block than the one you clicked. All rules hold.
+The Admin form and the Live Preview iframe each start unlinked, link after the ready and ack handshake, and then find and highlight blocks. Nothing happens on either side before both have linked. A reload sends both back to unlinked and clears the Admin selection and any pending find, so no stale timeout fires later. Focusing a field in Admin cancels Admin's own pending find, and a click reported from the preview makes Admin forget its selection. A click in the preview cancels the preview's own pending find, scroll, and highlight, so the preview ends on the block you clicked, not an earlier Admin pick. All rules hold.
 
 ```mermaid
 ---
@@ -60,7 +60,7 @@ stateDiagram-v2
 
 The chart config uses two blocks, at most one message in flight each way, and block symmetry (306 states). `PreviewLinkingDeep.cfg` allows three messages each way with no symmetry (64,893 states) and gives the same results. Breaking the model one guard at a time made each holding rule fail on its own change, so no rule holds vacuously.
 
-The `click` handler in `packages/payload-live-preview/src/bridge.ts` calls `work.cancel()` and `visuals.cancelReveal()` before it sends `locate`, as the Admin `select` in `src/client.tsx` does. Before [#134](https://github.com/codlume/payload-toolkit/issues/134), it sent only `locate`, and for up to 2 seconds the preview could jump to an earlier Admin pick.
+The `click` handler in `packages/payload-live-preview/src/bridge.ts` calls `work.cancel()` and `visuals.cancelReveal()` before it sends `locate`, as the Admin `select` in `src/client.tsx` does. `cancelReveal()` also stops a smooth scroll still in flight. Before [#134](https://github.com/codlume/payload-toolkit/issues/134), the click sent only `locate`, and for up to 2 seconds the preview could scroll to and highlight an earlier Admin pick.
 
 ## What the model leaves out
 
