@@ -23,7 +23,7 @@ Preconditions:
 
 - **Sign in.** Open `<origin>/admin/login`, fill `#field-email` with `verify@example.com` and `#field-password` with `verify-password`, and press Enter. The URL becomes `<origin>/admin` and the links `Media`, `Users`, `Pages`, and `Site Settings` appear.
 - **First-user form.** To prove the form itself, run `verify launch --no-seed` and open `<origin>/admin`. It redirects to `/admin/create-first-user`, with `Email`, `Password`, `Confirm Password`, and `Name` fields. `Name` is required by the demo Users collection. With `--no-seed`, `verify api` cannot log in until you create `verify@example.com` / `verify-password` in that form.
-- **Modes.** Run `verify launch --mode disabled-in-memory`. Admin loads and the media edit view has no BlurHash panel. An invalid mode makes `next dev` throw `Invalid PAYLOAD_APP_MODE` into `server.log`.
+- **Modes.** Run `verify launch --mode disabled-in-memory`. Admin loads and the media edit view has no BlurHash panel. `verify launch` rejects an unknown `--mode` before it starts anything.
 - **Proof.** Screenshot the dashboard after sign-in.
 
 ## Gotchas

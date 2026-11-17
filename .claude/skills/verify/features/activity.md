@@ -7,15 +7,14 @@
 - `act-create` records the admin who creates a document, including duplicates.
 - `act-update` records the admin who saves, saves a draft, or autosaves.
 - `act-clear` clears the value when a write has no admin user, such as a script without `user`.
-- `act-global-restore` records the admin who restores a global version, without rewriting older versions.
+- `act-global-restore` records the admin who restores a global version, without rewriting older versions. The demo Site Settings global has no versions, so only the package integration suite covers this.
 - `act-read-only` ignores any value a caller sends for `lastModifiedBy`.
-- `act-disabled` hides the field and keeps the stored value on update when the plugin is disabled.
+- `act-disabled` hides the field and keeps the stored value on update when the plugin is disabled. The demo app always installs the plugin, so only the package tests cover this.
 
 ## How to get to it (user POV)
 
 - Upload or edit media at `<origin>/admin/collections/media/<id>` and read the sidebar.
 - Save `Site Name` at `<origin>/admin/globals/site-settings`.
-- Restore a version from `<origin>/admin/globals/site-settings/versions`.
 - Read `lastModifiedBy` from `GET /api/media/<id>?depth=0` or `GET /api/globals/site-settings?depth=0`.
 
 ## Driving it with the browser tool and verify.mjs
@@ -28,9 +27,9 @@ Preconditions:
 - **Stored value.** `verify api GET '/api/globals/site-settings?depth=0'` returns `lastModifiedBy: 1`.
 - **Media.** Upload a file as in [blurhash.md](./blurhash.md). `verify api GET '/api/media/<id>?depth=0'` returns `lastModifiedBy: 1`.
 - **Read-only.** `verify api PATCH '/api/media/<id>' '{"lastModifiedBy":999}'` returns 200 and the stored value stays `1`.
-- **Global restore.** Save `Site Name` twice, open the `Versions` tab, restore the first version, and confirm `lastModifiedBy: 1` on the current global.
+- **Global restore.** No app surface. Run `pnpm --filter @codlume/payload-activity exec vitest run tests/integration/global-restore.test.ts --maxWorkers=1` after `pnpm build:packages`. The test turns on versions for its own global.
 - **Proof.** Screenshot the sidebar field and save the API reads.
-- **Automated cover.** Unit: `pnpm --filter @codlume/payload-activity test:unit`. Package integration (restore, disabled duplicates, admin collection default): `pnpm --filter @codlume/payload-activity test:integration`. App integration: `pnpm --filter @codlume/payload-cms exec vitest run tests/integration/activity-attribution.test.ts --maxWorkers=1`.
+- **Automated cover.** Unit: `pnpm --filter @codlume/payload-activity test:unit`. Package integration (restore, disabled duplicates, admin collection default): `pnpm --filter @codlume/payload-activity test:integration`. App integration: `pnpm --filter @codlume/payload-cms exec vitest run tests/integration/activity-attribution.test.ts --maxWorkers=1` after `pnpm build:packages`, with localstack up.
 
 ## Gotchas
 

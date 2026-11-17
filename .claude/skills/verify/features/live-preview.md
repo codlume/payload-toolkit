@@ -25,7 +25,7 @@
 Preconditions:
 
 - A fresh `verify launch` and a signed-in browser tab at `<origin>`.
-- `launch` sets `PAYLOAD_LIVE_PREVIEW_DEBUG=true`, so both sides log `[@codlume/payload-live-preview:admin]` and `[...:preview]` lines to the browser console.
+- `launch` sets `PAYLOAD_LIVE_PREVIEW_DEBUG=true`, so both sides log `[@codlume/payload-live-preview:admin]` and `[...:preview]` lines to the browser console with `console.debug`. Turn on verbose or debug levels to see them. `html[data-payload-linking]` is the reliable connect signal.
 
 - **Start recording.** Linking is an interaction, so record a video.
 - **Connect.** Open the seeded page and choose `Live Preview`. Wait for `html[data-payload-linking]` on the Admin page. The console shows `admin] connected` and `preview] connected`.
@@ -58,7 +58,7 @@ Preconditions:
 - The first Live Preview open compiles the frontend route and can take 15 s or more before `connected` appears.
 - Reading the iframe: `document.querySelector("iframe").contentDocument` works because the preview is same-origin. Blocks carry `data-payload-block=<row id>` only in draft renders.
 - Typing in a field that is already selected sends no new locate. A preview click clears the Admin selection, so focusing the same field again does send.
-- The preview pane is 768 px wide at the default `Responsive` size. Each demo text block is 65vh tall, so only one or two blocks are visible at a time.
-- No test asserts `lp-disabled`. Check it by hand with `verify launch --mode disabled-in-memory`: the Admin `html` never gets `data-payload-linking`.
+- Each demo text block has a `min-height` of 65vh, so only one or two blocks are visible in the preview pane at a time.
+- Only the unit test `tests/unit/plugin.test.ts` asserts `lp-disabled`, and no e2e test does. Check it in the app with `verify launch --mode disabled-in-memory`: the Admin `html` never gets `data-payload-linking`.
 - A preview click within 2 s of an Admin pick whose block has not rendered yet can highlight the older block in the preview ([#134](https://github.com/codlume/payload-toolkit/issues/134)). Wait for the first highlight to fade before the preview click, and report the journey as failing with that issue if you hit it.
 - The state model is in `docs/statecharts/live-preview-linking.md`.

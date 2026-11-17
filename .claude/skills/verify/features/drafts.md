@@ -30,7 +30,7 @@ Preconditions:
 - **Autosave.** Type into `#field-layout__0__content`. Within about 1 s, `verify api GET '/api/pages/<id>?draft=true&depth=0'` returns the new text, and the public page is unchanged.
 - **Publish.** Choose `Publish changes` and wait for the text `Published`. `curl -s <origin>/pages/verify` now contains `Draft block 1..3`, and `verify api GET '/api/pages/<id>?depth=0'` shows `_status: published`.
 - **Preview route guard.** `curl -s -o /dev/null -w '%{http_code}' '<origin>/preview?slug=verify'` prints `401`. Signed in, the same URL redirects to `/pages/verify` and renders the draft.
-- **Client route.** `<origin>/pages-client/verify` renders the same published content through the client renderer.
+- **Client route.** Signed in, open `<origin>/preview?slug=verify&mode=client`. It redirects to `/pages-client/verify` and renders the draft through the client renderer. An anonymous `/pages-client/verify` renders the same server output as `/pages/verify`, so it proves nothing about the client renderer.
 - **Proof.** Screenshot the status line before and after publishing, and save both `curl` bodies.
 - **Automated cover.** `pnpm --filter @codlume/payload-cms exec vitest run tests/integration/pages-preview.test.ts --maxWorkers=1` after `pnpm build:packages`.
 

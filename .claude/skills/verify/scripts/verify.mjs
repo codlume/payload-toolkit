@@ -291,10 +291,13 @@ const doctor = async (args) => {
   if (checks.some(({ ok }) => !ok)) process.exit(1);
 };
 
+const withoutRun = (args) =>
+  args.filter((arg, index) => arg !== "--run" && args[index - 1] !== "--run");
+
 const api = async (args) => {
-  const [method, route, body] = args;
-  if (!method || !route) fail("usage: api <METHOD> <path> [json-body]");
-  const run = loadRun(undefined);
+  const [method, route, body] = withoutRun(args);
+  if (!method || !route) fail("usage: api <METHOD> <path> [json-body] [--run <run>]");
+  const run = loadRun(readOption(args, "--run"));
   const token = await login(run);
   const { json, status } = await request(
     run,
@@ -306,6 +309,8 @@ const api = async (args) => {
   console.log(JSON.stringify({ json, status }, null, 2));
   if (status >= 400) process.exit(1);
 };
+
+const token = async (args) => console.log(await login(loadRun(readOption(args, "--run"))));
 
 const deleteS3Prefix = async (prefix) => {
   const requireFromApp = createRequire(path.join(appDir, "package.json"));
@@ -347,11 +352,17 @@ const stop = async (args) => {
   await Promise.all(runs.map((run) => stopRun(run)));
 };
 
-const commands = { api, doctor, launch, stop };
+const commands = { api, doctor, launch, stop, token };
 const [command, ...rest] = process.argv.slice(2);
 const handler = command ? commands[command] : undefined;
 if (!handler)
   fail(
-    "usage: verify.mjs launch [--mode <mode>] [--test-context] [--port <n>] [--no-seed] | doctor [run] | api <METHOD> <path> [json] | stop [run|--all]",
+    "usage: verify.mjs launch [--mode <mode>] [--test-context] [--port <n>] [--no-seed] | doctor [run] | api <METHOD> <path> [json] [--run <run>] | token [--run <run>] | stop [run|--all]",
   );
-await handler(rest);
+await handler(rest).catch((error) =>
+  fail(
+    error.cause?.code === "ECONNREFUSED"
+      ? "the server is not reachable. Run `doctor`, or `launch` a new run."
+      : (error.stack ?? String(error)),
+  ),
+);

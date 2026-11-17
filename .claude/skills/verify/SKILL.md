@@ -58,7 +58,15 @@ node .claude/skills/verify/scripts/verify.mjs api PATCH '/api/pages/<id>?draft=t
 curl -s http://127.0.0.1:<port>/pages/verify
 ```
 
-`api` logs in as the seeded admin and prints `{status, json}`. It exits 1 on a 4xx or 5xx response. Use `curl` without a token for what an anonymous visitor sees.
+`api` logs in as the seeded admin and prints `{status, json}`. It exits 1 on a 4xx or 5xx response. It targets the latest run. Add `--run <run>` when several instances run. Use `curl` without a token for what an anonymous visitor sees.
+
+`api` sends only JSON. For a file upload, use `token`, which prints the seeded admin's JWT:
+
+```sh
+curl -s -H "Authorization: JWT $(node .claude/skills/verify/scripts/verify.mjs token)" \
+  -F "file=@apps/payload-cms/tests/fixtures/images/jpeg-baseline.jpg" -F '_payload={}' \
+  http://127.0.0.1:<port>/api/media
+```
 
 ## Evidence
 

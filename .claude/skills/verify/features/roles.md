@@ -29,7 +29,7 @@ Preconditions:
 - **Whole package.** `pnpm --filter @codlume/payload-roles test:unit` and `pnpm --filter @codlume/payload-roles test:integration`. The integration suite runs serially and takes several minutes.
 - **One area.** `pnpm --filter @codlume/payload-roles exec vitest run tests/integration/core/escalation.test.ts`. Areas: `tests/integration/core` (access, guards, bootstrap, trash), `tests/integration/lifecycle` (publish, unpublish, trash, restore), `tests/integration/admin` (matrix field, unpublish control), `tests/unit/lifecycle/rules.test.ts` (the transition table).
 - **Randomized lifecycle sweep.** `LIFECYCLE_SWEEP_SEQUENCES=500 LIFECYCLE_SWEEP_SEED=1 pnpm --filter @codlume/payload-roles exec vitest run tests/integration/lifecycle/sweep.test.ts`. It prints a replay line for each violation.
-- **Admin matrix and unpublish UI.** `pnpm --filter @codlume/payload-roles exec vitest run tests/unit/admin`. These are jsdom tests. No browser surface exists until an app installs the plugin.
+- **Admin matrix and unpublish UI.** `pnpm --filter @codlume/payload-roles exec vitest run tests/unit/admin`. `permissions-matrix.dom.test.tsx` runs under jsdom. No browser surface exists until an app installs the plugin.
 - **Proof.** Save the vitest summary lines (`Test Files`, `Tests`) for each suite the change touches.
 
 ## Gotchas

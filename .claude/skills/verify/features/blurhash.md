@@ -25,7 +25,7 @@
 Preconditions:
 
 - A fresh `verify launch`. The default mode generates placeholders.
-- Test images live in `apps/payload-cms/tests/fixtures/images/`. Use `jpeg-baseline.jpg` for the happy path.
+- Test images live in `apps/payload-cms/tests/fixtures/images/`. Use `jpeg-baseline.jpg` for the happy path. Without a browser, upload with the `curl` example in [SKILL.md](../SKILL.md#drive).
 
 - **Upload.** Open `<origin>/admin/collections/media/create`, set the file input `input[type="file"]` to the fixture, and choose `Publish changes`. The URL becomes `/admin/collections/media/<id>`.
 - **Panel.** `[data-blurhash-panel]` appears with `canvas[data-blurhash-preview]` and the text `Generated automatically from the current image.`
@@ -33,7 +33,7 @@ Preconditions:
 - **Read-only.** `verify api PATCH '/api/media/<id>' '{"blurHash":"LKO2?U%2Tw=w]~RBVZRi};RPxuwH"}'` returns 200 and the stored `blurHash` is unchanged.
 - **Disabled mode.** With `verify launch --mode disabled-in-memory`, the create view has no `[data-blurhash-panel]` and an upload stores `blurHash: null`.
 - **Proof.** Screenshot the panel and save the API read.
-- **Automated cover.** Unit: `pnpm --filter @codlume/payload-blurhash test:unit`. Integration: `pnpm --filter @codlume/payload-cms test:integration`, or one file with `pnpm --filter @codlume/payload-cms exec vitest run tests/integration/<file>.test.ts --maxWorkers=1` after `pnpm build:packages`. Admin panel and S3 upload: `pnpm --filter @codlume/payload-cms test:e2e preview.e2e.test.ts disabled-preview.e2e.test.ts`. Size and time limits: `pnpm test:limits` (Docker).
+- **Automated cover.** Unit: `pnpm --filter @codlume/payload-blurhash test:unit`. Integration (needs localstack): `pnpm --filter @codlume/payload-cms test:integration`, or one file with `pnpm --filter @codlume/payload-cms exec vitest run tests/integration/<file>.test.ts --maxWorkers=1` after `pnpm build:packages`. Admin panel and S3 upload: `pnpm --filter @codlume/payload-cms test:e2e /preview.e2e.test.ts /disabled-preview.e2e.test.ts`. Playwright reads each file argument as an unanchored regex, so the leading `/` keeps `live-preview.e2e.test.ts` out. Size and time limits: `pnpm test:limits` (Docker).
 
 ## Gotchas
 
