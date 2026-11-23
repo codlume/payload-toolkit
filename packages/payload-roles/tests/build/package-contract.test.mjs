@@ -26,10 +26,10 @@ test("package exposes exactly the server and client ESM entries", async () => {
   );
 });
 
-test("package stays private at 0.0.0 until final integration", () => {
+test("package is publishable to the public npm registry", () => {
   assert.deepEqual(
-    { private: manifest.private, version: manifest.version, publishConfig: manifest.publishConfig },
-    { private: true, version: "0.0.0", publishConfig: undefined },
+    { private: "private" in manifest, publishConfig: manifest.publishConfig },
+    { private: false, publishConfig: { access: "public", registry: "https://registry.npmjs.org/" } },
   );
 });
 

@@ -18,6 +18,10 @@ development and testing.
   Preview. Click a preview component to reveal its Admin row, or focus an Admin
   field to reveal its component.
   [Documentation](packages/payload-live-preview/)
+- [`@codlume/payload-roles`](https://www.npmjs.com/package/@codlume/payload-roles)
+  adds database-backed roles that editors manage in Payload Admin. Role grants
+  narrow the access functions an app already has and never widen them.
+  [Documentation](packages/payload-roles/)
 
 ## Contributing
 

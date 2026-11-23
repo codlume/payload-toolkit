@@ -4,8 +4,6 @@ Database-backed roles for Payload CMS. Editors manage roles in the admin panel. 
 actions on the collections and globals you list. The plugin intersects those grants with the access
 functions your app already has, so a role can narrow access and never widen it.
 
-This package is in development. It is private, unpublished, and its API can change.
-
 ## Installation
 
 ```sh

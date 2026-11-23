@@ -1,7 +1,6 @@
 {
   "name": "@codlume/payload-roles",
   "version": "0.0.0",
-  "private": true,
   "description": "Database-backed roles for Payload CMS, intersected with the access functions an app already has.",
   "keywords": [
     "access-control",
@@ -39,6 +38,10 @@
       "types": "./dist/client.d.mts",
       "import": "./dist/client.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "vp pack",
